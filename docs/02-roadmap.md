@@ -11,7 +11,7 @@
 | 3 | AI Engine | OpenAI integration, Content Generator, prompt templates, usage/quota | ✅ เสร็จ |
 | 4 | Marketing Modules | Products, Campaigns, Promotions, scheduling | ✅ เสร็จ |
 | 5 | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ✅ เสร็จ |
-| 6 | Analytics | Dashboards, sales metrics, reports, export | ⏳ |
+| 6 | Analytics | Dashboards, sales metrics, reports, export | ✅ เสร็จ |
 | 7 | Billing & Plans | Plans, subscriptions, usage limits, invoices | ⏳ |
 | 8 | Hardening & Deploy | Security, tests, Nginx/PM2 บน AlmaLinux, monitoring, backups | ⏳ |
 
@@ -64,10 +64,13 @@
 - [x] โมดูล `chat` (threads + messages, tenant/user-scoped) + OpenAI streaming ผ่าน event `chat:send`/`chat:chunk`/`chat:done`
 - [x] Frontend: socket client + กระดิ่งแจ้งเตือนบน Topbar (badge + dropdown) + หน้า Chat สตรีมเรียลไทม์
 
-### Phase 6 — Analytics
-- บันทึก sales_records + สรุป metrics_daily
-- Dashboard กราฟ (ยอดขาย, แคมเปญ, AI usage)
-- Export รายงาน
+### Phase 6 — Analytics ✅
+- [x] `SalesRecord` entity + ตาราง `sales_records` (tenant-scoped) เป็นแหล่งข้อมูลยอดขาย
+- [x] โมดูล `analytics` (REST): summary / sales-series / top-products / campaign-status / sales (export) + บันทึกยอดขาย + สร้างข้อมูลตัวอย่าง
+- [x] สรุปเมตริกแบบ on-demand จาก `sales_records` (รวมยอด/ออเดอร์/เฉลี่ย) + โทเค็น AI เดือนนี้จาก `ai_usage`
+- [x] Frontend: หน้า Analytics — การ์ดสรุป + กราฟแท่งแนวโน้มยอดขาย + สินค้าขายดี + สถานะแคมเปญ + เลือกช่วง 7/30/90 วัน
+- [x] Export รายงานยอดขายเป็น CSV (รองรับภาษาไทยด้วย BOM)
+- [x] Dashboard เชื่อมตัวเลขจริง (ยอดขาย, แคมเปญที่ใช้งาน, สินค้า, โทเค็น AI)
 
 ### Phase 7 — Billing & Plans
 - Plans (free/pro/business)

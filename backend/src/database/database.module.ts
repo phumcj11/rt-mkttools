@@ -17,6 +17,7 @@ import {
   Promotion,
   RefreshToken,
   Role,
+  SalesRecord,
   Tenant,
   User,
 } from './entities';
@@ -54,6 +55,7 @@ import {
             Notification,
             ChatThread,
             ChatMessage,
+            SalesRecord,
           ],
           synchronize: db.synchronize,
           logging: db.logging,

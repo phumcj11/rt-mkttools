@@ -1,7 +1,7 @@
 import { setRequestLocale } from 'next-intl/server';
-import { ComingSoon } from '@/components/coming-soon';
+import { AnalyticsView } from '@/features/analytics/analytics-view';
 
 export default function AnalyticsPage({ params: { locale } }: { params: { locale: string } }) {
   setRequestLocale(locale);
-  return <ComingSoon titleKey="analytics" />;
+  return <AnalyticsView />;
 }

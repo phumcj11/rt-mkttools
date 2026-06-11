@@ -17,6 +17,7 @@ import {
   Promotion,
   RefreshToken,
   Role,
+  SalesRecord,
   Tenant,
   User,
 } from './entities';
@@ -51,6 +52,7 @@ export const dataSourceOptions: DataSourceOptions = {
     Notification,
     ChatThread,
     ChatMessage,
+    SalesRecord,
   ],
   migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
   synchronize: false,

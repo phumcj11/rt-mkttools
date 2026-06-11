@@ -11,6 +11,7 @@ import { validationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { I18nModule } from './i18n/i18n.module';
 import { AiModule } from './modules/ai/ai.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -42,6 +43,7 @@ import { UsersModule } from './modules/users/users.module';
     NotificationsModule,
     ChatModule,
     RealtimeModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [

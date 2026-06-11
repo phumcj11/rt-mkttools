@@ -199,3 +199,44 @@ export interface ChatDonePayload {
   content: string;
   tokens: { prompt: number; completion: number; total: number };
 }
+
+// ---------- Phase 6: analytics ----------
+
+export interface AnalyticsSummary {
+  totalSales: number;
+  totalOrders: number;
+  totalQuantity: number;
+  avgOrderValue: number;
+  aiTokens: number;
+  activeCampaigns: number;
+  totalProducts: number;
+  periodDays: number;
+}
+
+export interface SalesPoint {
+  date: string;
+  total: number;
+  orders: number;
+}
+
+export interface TopProduct {
+  productId: number;
+  name: string;
+  total: number;
+  quantity: number;
+}
+
+export interface CampaignStatusCount {
+  status: string;
+  count: number;
+}
+
+export interface SalesRecordItem {
+  id: number;
+  productId: number | null;
+  campaignId: number | null;
+  amount: number;
+  quantity: number;
+  soldAt: string;
+  createdAt: string;
+}

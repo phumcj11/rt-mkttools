@@ -66,8 +66,25 @@
     "activeCampaigns": "แคมเปญที่ใช้งาน",
     "aiUsage": "การใช้งาน AI",
     "totalProducts": "สินค้าทั้งหมด",
-    "thisMonth": "เดือนนี้",
-    "placeholderNote": "ข้อมูลตัวอย่าง — จะเชื่อมต่อข้อมูลจริงในเฟสถัดไป"
+    "thisMonth": "30 วันล่าสุด",
+    "placeholderNote": "ดูรายงานยอดขายและกราฟแบบละเอียดได้ที่เมนู “วิเคราะห์ข้อมูล”"
+  },
+  "analyticsPage": {
+    "title": "วิเคราะห์ข้อมูล",
+    "subtitle": "ยอดขาย แคมเปญ และการใช้งาน AI",
+    "lastDays": "{days} วันล่าสุด",
+    "exportCsv": "ส่งออก CSV",
+    "totalSales": "ยอดขายรวม",
+    "totalOrders": "จำนวนออเดอร์",
+    "avgOrderValue": "ยอดเฉลี่ย/ออเดอร์",
+    "aiTokens": "โทเค็น AI (เดือนนี้)",
+    "salesTrend": "แนวโน้มยอดขาย",
+    "topProducts": "สินค้าขายดี",
+    "campaignStatus": "สถานะแคมเปญ",
+    "noProducts": "ยังไม่มีข้อมูลสินค้าขายดี",
+    "noCampaigns": "ยังไม่มีแคมเปญ",
+    "emptyData": "ยังไม่มีข้อมูลยอดขายในช่วงนี้ ลองสร้างข้อมูลตัวอย่างเพื่อดูการทำงาน",
+    "generateSample": "สร้างข้อมูลตัวอย่าง"
   },
   "locale": {
     "label": "ภาษา",

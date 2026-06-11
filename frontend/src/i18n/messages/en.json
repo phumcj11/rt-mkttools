@@ -66,8 +66,25 @@
     "activeCampaigns": "Active Campaigns",
     "aiUsage": "AI Usage",
     "totalProducts": "Total Products",
-    "thisMonth": "This month",
-    "placeholderNote": "Sample data — real data will be connected in the next phase"
+    "thisMonth": "Last 30 days",
+    "placeholderNote": "See detailed sales reports and charts in the “Analytics” menu"
+  },
+  "analyticsPage": {
+    "title": "Analytics",
+    "subtitle": "Sales, campaigns and AI usage",
+    "lastDays": "Last {days} days",
+    "exportCsv": "Export CSV",
+    "totalSales": "Total Sales",
+    "totalOrders": "Orders",
+    "avgOrderValue": "Avg / Order",
+    "aiTokens": "AI Tokens (this month)",
+    "salesTrend": "Sales Trend",
+    "topProducts": "Top Products",
+    "campaignStatus": "Campaign Status",
+    "noProducts": "No top product data yet",
+    "noCampaigns": "No campaigns yet",
+    "emptyData": "No sales data in this period. Generate sample data to see it in action.",
+    "generateSample": "Generate Sample Data"
   },
   "locale": {
     "label": "Language",

@@ -14,3 +14,4 @@ export * from './promotion.entity';
 export * from './notification.entity';
 export * from './chat-thread.entity';
 export * from './chat-message.entity';
+export * from './sales-record.entity';
