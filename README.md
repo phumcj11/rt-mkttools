@@ -3,7 +3,7 @@
 > แพลตฟอร์ม AI การตลาดสำหรับร้าน 100 บาท (100 Baht Shop Thailand)
 > Modern SaaS Dashboard · Mobile First · Thai-first (i18n ready for English)
 
-[![Status](https://img.shields.io/badge/status-scaffold-blue)]()
+[![Status](https://img.shields.io/badge/status-active%20development-brightgreen)]()
 [![License](https://img.shields.io/badge/license-Proprietary-red)]()
 
 แพลตฟอร์มช่วยให้ร้านค้าสร้างคอนเทนต์การตลาด วางแผนแคมเปญ และวิเคราะห์ยอดขายด้วย AI
@@ -134,15 +134,20 @@ rt_mkttools/                      # Monorepo root
 
 | Phase | ชื่อ | สิ่งที่ส่งมอบ | สถานะ |
 | --- | --- | --- | --- |
-| **0** | Foundation / Scaffold | Monorepo, โครงสร้างโฟลเดอร์, เอกสาร, env, CI base | ✅ ปัจจุบัน |
-| **1** | Core Backend | NestJS base, MySQL, Auth (JWT), Users, Tenants | ⏳ |
-| **2** | Core Frontend | Next.js base, i18n (th/en), Shadcn theme, Auth UI, Dashboard shell | ⏳ |
-| **3** | AI Engine | OpenAI integration, Content Generator, Prompt templates | ⏳ |
-| **4** | Marketing Modules | Campaigns, Products, Promotions, Scheduling | ⏳ |
-| **5** | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ⏳ |
-| **6** | Analytics | Dashboards, reports, export | ⏳ |
-| **7** | Billing & Plans | Subscription tiers, usage limits | ⏳ |
-| **8** | Hardening & Deploy | Security, tests, Nginx/PM2 on AlmaLinux, monitoring | ⏳ |
+| **0** | Foundation / Scaffold | Monorepo, โครงสร้างโฟลเดอร์, เอกสาร, env, CI base | ✅ เสร็จ |
+| **1** | Core Backend | NestJS base, MySQL, Auth (JWT), Users, Tenants, RBAC | ✅ เสร็จ |
+| **2** | Core Frontend | Next.js base, i18n (th/en), Shadcn theme, Auth UI, Dashboard shell | ✅ เสร็จ |
+| **3** | AI Engine | OpenAI integration, Content Generator, Prompt templates | ✅ เสร็จ |
+| **4** | Marketing Modules | Campaigns, Products, Promotions, Scheduling | ✅ เสร็จ |
+| **5** | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ✅ เสร็จ |
+| **6** | Analytics | Dashboards, reports, export | ✅ เสร็จ |
+| **7** | Billing + Executive Dashboard + Branch | Billing จริง, branch model, executive dashboard v2, audit logs | ⏳ กำลังทำ |
+| **8** | AI POSM Generator + Content Factory Expansion | POSM studio (export PNG/JPG/PDF), content types/languages เพิ่ม | ⏳ |
+| **9** | Google Review Center + Omnichannel Chat | review + reward, shared inbox + channel connectors | ⏳ |
+| **10** | Social Listening + AI Agent Center + Hardening | mentions/competitors, agent center, tests/monitoring | ⏳ |
+
+> Auto-deploy พร้อมแล้ว: push `main` → GitHub CI → SSH deploy ขึ้น VPS (`rt.k-mkt.com`)
+> เฟส 7-10 จัดใหม่ให้ตรงกับ product spec ใน `Marketing AI Platform.pdf`
 
 ---
 
@@ -179,26 +184,26 @@ rt_mkttools/                      # Monorepo root
 
 ## 🚀 การติดตั้ง (Getting Started)
 
-> ℹ️ ขณะนี้เป็นเฟส Scaffold — ยังไม่มี application code
-> ขั้นตอนด้านล่างคือแนวทางสำหรับเฟสถัดไป
-
 ```bash
 # 1. clone
-git clone <github-repo-url> rt_mkttools
-cd rt_mkttools
+git clone https://github.com/phumcj11/rt-mkttools.git mkttools
+cd mkttools
 
-# 2. คัดลอกไฟล์ env
+# 2. คัดลอกไฟล์ env แล้วแก้ค่า (DB, JWT, OPENAI_API_KEY)
 cp .env.example .env
 
-# 3. ติดตั้ง dependencies (เมื่อมี workspace)
+# 3. ติดตั้ง dependencies (npm workspaces)
 npm install
 
 # 4. เตรียม database (MySQL)
-#    สร้าง schema จาก database/schema/ และ seed จาก database/seeds/
+mysql -u root -e "CREATE DATABASE rt_mkttools CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u root rt_mkttools < database/schema/schema.sql
+mysql -u root rt_mkttools < database/seeds/seed.sql
+npm --workspace backend run seed   # seed roles ผ่าน ORM
 
 # 5. รัน dev
-npm run dev:backend     # NestJS
-npm run dev:frontend    # Next.js
+npm run dev:backend     # NestJS  → http://localhost:4000/api
+npm run dev:frontend    # Next.js → http://localhost:3000/th
 ```
 
 ---
