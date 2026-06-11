@@ -73,5 +73,32 @@
     "label": "ภาษา",
     "th": "ไทย",
     "en": "English"
+  },
+  "studio": {
+    "title": "สตูดิโอคอนเทนต์",
+    "subtitle": "สร้างคอนเทนต์การตลาดด้วย AI",
+    "contentType": "ประเภทคอนเทนต์",
+    "productName": "ชื่อสินค้า",
+    "productNamePlaceholder": "เช่น แก้วน้ำเก็บความเย็น",
+    "price": "ราคา (บาท)",
+    "pricePlaceholder": "เช่น 100",
+    "details": "รายละเอียดเพิ่มเติม",
+    "detailsPlaceholder": "จุดเด่น โปรโมชั่น หรือกลุ่มลูกค้า (ไม่บังคับ)",
+    "tone": "โทนการเขียน",
+    "generate": "สร้างคอนเทนต์",
+    "generating": "AI กำลังเขียน...",
+    "result": "ผลลัพธ์",
+    "resultPlaceholder": "คอนเทนต์ที่สร้างจะแสดงที่นี่",
+    "copy": "คัดลอก",
+    "copied": "คัดลอกแล้ว",
+    "save": "บันทึกเป็นแบบร่าง",
+    "saved": "บันทึกแล้ว",
+    "tokensUsed": "ใช้ไป {used} จาก {limit} โทเค็นในเดือนนี้",
+    "tones": {
+      "friendly": "เป็นกันเอง",
+      "fun": "สนุกสนาน",
+      "professional": "มืออาชีพ",
+      "urgent": "เร่งด่วน"
+    }
   }
 }

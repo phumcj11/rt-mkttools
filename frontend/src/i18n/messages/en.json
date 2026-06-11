@@ -73,5 +73,32 @@
     "label": "Language",
     "th": "ไทย",
     "en": "English"
+  },
+  "studio": {
+    "title": "Content Studio",
+    "subtitle": "Generate marketing content with AI",
+    "contentType": "Content type",
+    "productName": "Product name",
+    "productNamePlaceholder": "e.g. Insulated water bottle",
+    "price": "Price (THB)",
+    "pricePlaceholder": "e.g. 100",
+    "details": "Additional details",
+    "detailsPlaceholder": "Selling points, promotion or target audience (optional)",
+    "tone": "Tone",
+    "generate": "Generate",
+    "generating": "AI is writing...",
+    "result": "Result",
+    "resultPlaceholder": "Generated content will appear here",
+    "copy": "Copy",
+    "copied": "Copied",
+    "save": "Save as draft",
+    "saved": "Saved",
+    "tokensUsed": "Used {used} of {limit} tokens this month",
+    "tones": {
+      "friendly": "Friendly",
+      "fun": "Fun",
+      "professional": "Professional",
+      "urgent": "Urgent"
+    }
   }
 }

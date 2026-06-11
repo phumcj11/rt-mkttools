@@ -3,3 +3,7 @@ export * from './user.entity';
 export * from './role.entity';
 export * from './refresh-token.entity';
 export * from './password-reset.entity';
+export * from './ai-template.entity';
+export * from './ai-request.entity';
+export * from './ai-usage.entity';
+export * from './content-item.entity';

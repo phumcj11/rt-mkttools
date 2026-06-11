@@ -3,6 +3,10 @@ import { config as loadEnv } from 'dotenv';
 import { join } from 'path';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import {
+  AiRequest,
+  AiTemplate,
+  AiUsage,
+  ContentItem,
   PasswordReset,
   RefreshToken,
   Role,
@@ -23,7 +27,17 @@ export const dataSourceOptions: DataSourceOptions = {
   database: process.env.DB_DATABASE ?? 'rt_mkttools',
   charset: 'utf8mb4_unicode_ci',
   timezone: 'Z',
-  entities: [Tenant, User, Role, RefreshToken, PasswordReset],
+  entities: [
+    Tenant,
+    User,
+    Role,
+    RefreshToken,
+    PasswordReset,
+    AiTemplate,
+    AiRequest,
+    AiUsage,
+    ContentItem,
+  ],
   migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

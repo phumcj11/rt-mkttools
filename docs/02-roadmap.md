@@ -8,7 +8,7 @@
 | 0 | Foundation / Scaffold | โครงสร้าง monorepo, เอกสาร, env, .gitignore | ✅ เสร็จ |
 | 1 | Core Backend | NestJS base, MySQL, Auth (JWT), Users, Tenants, RBAC | ✅ เสร็จ |
 | 2 | Core Frontend | Next.js base, i18n th/en, Shadcn theme (Kanit/#E60012), Auth UI, Dashboard shell | ✅ เสร็จ |
-| 3 | AI Engine | OpenAI integration, Content Generator, prompt templates, usage/quota | ⏳ |
+| 3 | AI Engine | OpenAI integration, Content Generator, prompt templates, usage/quota | ✅ เสร็จ |
 | 4 | Marketing Modules | Products, Campaigns, Promotions, scheduling | ⏳ |
 | 5 | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ⏳ |
 | 6 | Analytics | Dashboards, sales metrics, reports, export | ⏳ |
@@ -42,12 +42,12 @@
 - [x] AppShell: Sidebar + Topbar + Dashboard (การ์ดสถิติ) + protected route
 - [x] หน้า placeholder สำหรับ content/campaigns/products/analytics/chat/settings
 
-### Phase 3 — AI Engine
-- โมดูล `ai` ห่อ OpenAI API
-- Content generator (caption/post/ad/line broadcast)
-- ระบบ prompt template (th/en)
-- บันทึก `ai_requests`, สรุป `ai_usage`, บังคับ quota
-- Content Studio UI
+### Phase 3 — AI Engine ✅
+- [x] โมดูล `ai` ห่อ OpenAI API (`openai` SDK) + config (model/maxTokens/temperature)
+- [x] Content generator (caption/post/ad/line_broadcast) + prompt template (th/en) + tone
+- [x] บันทึก `ai_requests`, สรุป `ai_usage` รายเดือน, บังคับ quota (token limit)
+- [x] โมดูล `content` (บันทึก/ดู/ลบ content_items เป็นแบบร่าง)
+- [x] Content Studio UI: ฟอร์มสร้าง + แก้ไข + คัดลอก + บันทึก + แสดงโควต้า
 
 ### Phase 4 — Marketing Modules
 - CRUD: products, categories

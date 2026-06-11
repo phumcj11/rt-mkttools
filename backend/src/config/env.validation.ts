@@ -23,4 +23,10 @@ export const validationSchema = Joi.object({
   JWT_REFRESH_SECRET: Joi.string().min(8).required(),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
   BCRYPT_SALT_ROUNDS: Joi.number().default(10),
+
+  OPENAI_API_KEY: Joi.string().allow('').default(''),
+  OPENAI_MODEL: Joi.string().default('gpt-4o-mini'),
+  OPENAI_MAX_TOKENS: Joi.number().default(1024),
+  OPENAI_TEMPERATURE: Joi.number().default(0.7),
+  AI_MONTHLY_TOKEN_LIMIT: Joi.number().default(1000000),
 }).unknown(true);

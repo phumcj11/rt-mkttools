@@ -2,7 +2,17 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DatabaseConfig } from '../config/configuration';
-import { PasswordReset, RefreshToken, Role, Tenant, User } from './entities';
+import {
+  AiRequest,
+  AiTemplate,
+  AiUsage,
+  ContentItem,
+  PasswordReset,
+  RefreshToken,
+  Role,
+  Tenant,
+  User,
+} from './entities';
 
 @Module({
   imports: [
@@ -20,7 +30,17 @@ import { PasswordReset, RefreshToken, Role, Tenant, User } from './entities';
           database: db.database,
           charset: 'utf8mb4_unicode_ci',
           timezone: 'Z',
-          entities: [Tenant, User, Role, RefreshToken, PasswordReset],
+          entities: [
+            Tenant,
+            User,
+            Role,
+            RefreshToken,
+            PasswordReset,
+            AiTemplate,
+            AiRequest,
+            AiUsage,
+            ContentItem,
+          ],
           synchronize: db.synchronize,
           logging: db.logging,
           extra: { connectionLimit: db.connectionLimit },

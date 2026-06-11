@@ -27,10 +27,19 @@ export interface JwtConfig {
   bcryptSaltRounds: number;
 }
 
+export interface AiConfig {
+  apiKey: string;
+  model: string;
+  maxTokens: number;
+  temperature: number;
+  monthlyTokenLimit: number;
+}
+
 export interface RootConfig {
   app: AppConfig;
   database: DatabaseConfig;
   jwt: JwtConfig;
+  ai: AiConfig;
 }
 
 const toBool = (value: string | undefined, fallback = false): boolean => {
@@ -72,5 +81,12 @@ export default (): RootConfig => ({
     refreshSecret: process.env.JWT_REFRESH_SECRET ?? 'change_me_refresh_secret',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
     bcryptSaltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS ?? '10', 10),
+  },
+  ai: {
+    apiKey: process.env.OPENAI_API_KEY ?? '',
+    model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+    maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS ?? '1024', 10),
+    temperature: parseFloat(process.env.OPENAI_TEMPERATURE ?? '0.7'),
+    monthlyTokenLimit: parseInt(process.env.AI_MONTHLY_TOKEN_LIMIT ?? '1000000', 10),
   },
 });

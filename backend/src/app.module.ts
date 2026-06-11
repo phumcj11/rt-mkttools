@@ -10,7 +10,9 @@ import configuration from './config/configuration';
 import { validationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { I18nModule } from './i18n/i18n.module';
+import { AiModule } from './modules/ai/ai.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ContentModule } from './modules/content/content.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -28,6 +30,8 @@ import { UsersModule } from './modules/users/users.module';
     AuthModule,
     UsersModule,
     TenantsModule,
+    AiModule,
+    ContentModule,
   ],
   controllers: [AppController],
   providers: [

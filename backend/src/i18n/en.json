@@ -13,6 +13,7 @@
   },
   "ai": {
     "quotaExceeded": "Monthly AI quota for your plan has been exceeded",
-    "generationFailed": "Content generation failed, please try again"
+    "generationFailed": "Content generation failed, please try again",
+    "notConfigured": "AI is not configured, please contact your administrator"
   }
 }
