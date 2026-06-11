@@ -12,7 +12,9 @@ import { DatabaseModule } from './database/database.module';
 import { I18nModule } from './i18n/i18n.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { ContentModule } from './modules/content/content.module';
+import { ProductsModule } from './modules/products/products.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -32,6 +34,8 @@ import { UsersModule } from './modules/users/users.module';
     TenantsModule,
     AiModule,
     ContentModule,
+    ProductsModule,
+    CampaignsModule,
   ],
   controllers: [AppController],
   providers: [

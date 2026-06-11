@@ -49,10 +49,12 @@
 - [x] โมดูล `content` (บันทึก/ดู/ลบ content_items เป็นแบบร่าง)
 - [x] Content Studio UI: ฟอร์มสร้าง + แก้ไข + คัดลอก + บันทึก + แสดงโควต้า
 
-### Phase 4 — Marketing Modules
-- CRUD: products, categories
-- CRUD: campaigns, promotions
-- จัดตารางเผยแพร่คอนเทนต์ (scheduled_at)
+### Phase 4 — Marketing Modules ✅
+- [x] โมดูล `products` (CRUD สินค้า + จัดการ `categories`) แบบ tenant-scoped
+- [x] โมดูล `campaigns` (CRUD แคมเปญ + สถานะ draft/scheduled/running/completed/archived + วันเริ่ม/สิ้นสุด)
+- [x] โมดูล `promotions` (CRUD โปรโมชั่นภายใต้แคมเปญ: percent/amount/bundle)
+- [x] Products UI: ตาราง + ฟอร์มเพิ่ม/แก้ไข/ลบ + แผงจัดการหมวดหมู่
+- [x] Campaigns UI: ตาราง + ฟอร์มเพิ่ม/แก้ไข/ลบ + แผงจัดการโปรโมชั่นต่อแคมเปญ
 
 ### Phase 5 — Realtime & Notifications
 - Socket.io gateway (auth ด้วย JWT)

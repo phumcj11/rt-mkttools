@@ -81,3 +81,82 @@ export interface ContentItem {
   aiRequestId: number | null;
   createdAt: string;
 }
+
+// ---------- Phase 4: marketing modules ----------
+
+export type ProductStatus = 'active' | 'archived';
+
+export interface Category {
+  id: number;
+  name: string;
+  createdAt: string;
+}
+
+export interface Product {
+  id: number;
+  categoryId: number | null;
+  sku: string | null;
+  name: string;
+  description: string | null;
+  price: number;
+  imageUrl: string | null;
+  status: ProductStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductInput {
+  name: string;
+  price: number;
+  categoryId?: number | null;
+  sku?: string;
+  description?: string;
+  imageUrl?: string;
+  status?: ProductStatus;
+}
+
+export type CampaignStatus = 'draft' | 'scheduled' | 'running' | 'completed' | 'archived';
+
+export interface Campaign {
+  id: number;
+  name: string;
+  objective: string | null;
+  channel: string | null;
+  status: CampaignStatus;
+  startDate: string | null;
+  endDate: string | null;
+  createdBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignInput {
+  name: string;
+  objective?: string;
+  channel?: string;
+  status?: CampaignStatus;
+  startDate?: string;
+  endDate?: string;
+}
+
+export type DiscountType = 'percent' | 'amount' | 'bundle';
+
+export interface Promotion {
+  id: number;
+  campaignId: number | null;
+  title: string;
+  discountType: DiscountType;
+  discountValue: number;
+  startDate: string | null;
+  endDate: string | null;
+  createdAt: string;
+}
+
+export interface PromotionInput {
+  title: string;
+  campaignId?: number;
+  discountType?: DiscountType;
+  discountValue?: number;
+  startDate?: string;
+  endDate?: string;
+}

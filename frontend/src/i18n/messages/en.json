@@ -100,5 +100,82 @@
       "professional": "Professional",
       "urgent": "Urgent"
     }
+  },
+  "products": {
+    "title": "Products",
+    "subtitle": "Manage your products and categories",
+    "addProduct": "Add product",
+    "editProduct": "Edit product",
+    "newProduct": "New product",
+    "name": "Product name",
+    "namePlaceholder": "e.g. Insulated water bottle",
+    "price": "Price (THB)",
+    "sku": "SKU",
+    "skuPlaceholder": "Optional",
+    "category": "Category",
+    "noCategory": "None",
+    "description": "Description",
+    "descriptionPlaceholder": "Product description (optional)",
+    "imageUrl": "Image URL",
+    "imageUrlPlaceholder": "https://...",
+    "status": "Status",
+    "createdAt": "Created",
+    "actions": "Actions",
+    "empty": "No products yet. Add your first product.",
+    "deleteConfirm": "Delete this product?",
+    "statusValues": {
+      "active": "Active",
+      "archived": "Archived"
+    },
+    "categories": {
+      "title": "Categories",
+      "add": "Add category",
+      "namePlaceholder": "New category name",
+      "empty": "No categories yet",
+      "deleteConfirm": "Delete this category?"
+    }
+  },
+  "campaigns": {
+    "title": "Campaigns",
+    "subtitle": "Plan marketing campaigns and promotions",
+    "addCampaign": "Create campaign",
+    "editCampaign": "Edit campaign",
+    "newCampaign": "New campaign",
+    "name": "Campaign name",
+    "namePlaceholder": "e.g. Songkran sale campaign",
+    "objective": "Objective",
+    "objectivePlaceholder": "e.g. Increase sales",
+    "channel": "Channel",
+    "channelPlaceholder": "e.g. Facebook, LINE",
+    "status": "Status",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "actions": "Actions",
+    "empty": "No campaigns yet. Create your first campaign.",
+    "deleteConfirm": "Delete this campaign?",
+    "statusValues": {
+      "draft": "Draft",
+      "scheduled": "Scheduled",
+      "running": "Running",
+      "completed": "Completed",
+      "archived": "Archived"
+    },
+    "promotions": {
+      "title": "Promotions",
+      "subtitle": "Promotions in this campaign",
+      "add": "Add promotion",
+      "promoTitle": "Promotion title",
+      "promoTitlePlaceholder": "e.g. 20% off when you spend 500 THB",
+      "discountType": "Discount type",
+      "discountValue": "Discount value",
+      "empty": "No promotions in this campaign yet",
+      "selectCampaign": "Select a campaign to manage promotions",
+      "deleteConfirm": "Delete this promotion?",
+      "types": {
+        "percent": "Percent (%)",
+        "amount": "Amount (THB)",
+        "bundle": "Bundle/package"
+      }
+    }
   }
 }

@@ -1,7 +1,7 @@
 import { setRequestLocale } from 'next-intl/server';
-import { ComingSoon } from '@/components/coming-soon';
+import { ProductsView } from '@/features/products/products-view';
 
 export default function ProductsPage({ params: { locale } }: { params: { locale: string } }) {
   setRequestLocale(locale);
-  return <ComingSoon titleKey="products" />;
+  return <ProductsView />;
 }

@@ -100,5 +100,82 @@
       "professional": "มืออาชีพ",
       "urgent": "เร่งด่วน"
     }
+  },
+  "products": {
+    "title": "สินค้า",
+    "subtitle": "จัดการรายการสินค้าและหมวดหมู่",
+    "addProduct": "เพิ่มสินค้า",
+    "editProduct": "แก้ไขสินค้า",
+    "newProduct": "สินค้าใหม่",
+    "name": "ชื่อสินค้า",
+    "namePlaceholder": "เช่น แก้วน้ำเก็บความเย็น",
+    "price": "ราคา (บาท)",
+    "sku": "รหัสสินค้า (SKU)",
+    "skuPlaceholder": "ไม่บังคับ",
+    "category": "หมวดหมู่",
+    "noCategory": "ไม่ระบุ",
+    "description": "รายละเอียด",
+    "descriptionPlaceholder": "รายละเอียดสินค้า (ไม่บังคับ)",
+    "imageUrl": "ลิงก์รูปภาพ",
+    "imageUrlPlaceholder": "https://...",
+    "status": "สถานะ",
+    "createdAt": "วันที่สร้าง",
+    "actions": "จัดการ",
+    "empty": "ยังไม่มีสินค้า เริ่มเพิ่มสินค้าแรกของคุณได้เลย",
+    "deleteConfirm": "ต้องการลบสินค้านี้หรือไม่?",
+    "statusValues": {
+      "active": "เปิดขาย",
+      "archived": "เก็บเข้าคลัง"
+    },
+    "categories": {
+      "title": "หมวดหมู่",
+      "add": "เพิ่มหมวดหมู่",
+      "namePlaceholder": "ชื่อหมวดหมู่ใหม่",
+      "empty": "ยังไม่มีหมวดหมู่",
+      "deleteConfirm": "ต้องการลบหมวดหมู่นี้หรือไม่?"
+    }
+  },
+  "campaigns": {
+    "title": "แคมเปญ",
+    "subtitle": "วางแผนแคมเปญการตลาดและโปรโมชั่น",
+    "addCampaign": "สร้างแคมเปญ",
+    "editCampaign": "แก้ไขแคมเปญ",
+    "newCampaign": "แคมเปญใหม่",
+    "name": "ชื่อแคมเปญ",
+    "namePlaceholder": "เช่น แคมเปญลดราคาสงกรานต์",
+    "objective": "เป้าหมาย",
+    "objectivePlaceholder": "เช่น เพิ่มยอดขาย",
+    "channel": "ช่องทาง",
+    "channelPlaceholder": "เช่น Facebook, LINE",
+    "status": "สถานะ",
+    "startDate": "วันเริ่ม",
+    "endDate": "วันสิ้นสุด",
+    "actions": "จัดการ",
+    "empty": "ยังไม่มีแคมเปญ เริ่มสร้างแคมเปญแรกของคุณได้เลย",
+    "deleteConfirm": "ต้องการลบแคมเปญนี้หรือไม่?",
+    "statusValues": {
+      "draft": "ฉบับร่าง",
+      "scheduled": "ตั้งเวลา",
+      "running": "กำลังทำงาน",
+      "completed": "เสร็จสิ้น",
+      "archived": "เก็บเข้าคลัง"
+    },
+    "promotions": {
+      "title": "โปรโมชั่น",
+      "subtitle": "โปรโมชั่นในแคมเปญนี้",
+      "add": "เพิ่มโปรโมชั่น",
+      "promoTitle": "ชื่อโปรโมชั่น",
+      "promoTitlePlaceholder": "เช่น ลด 20% เมื่อซื้อครบ 500 บาท",
+      "discountType": "ประเภทส่วนลด",
+      "discountValue": "มูลค่าส่วนลด",
+      "empty": "ยังไม่มีโปรโมชั่นในแคมเปญนี้",
+      "selectCampaign": "เลือกแคมเปญเพื่อจัดการโปรโมชั่น",
+      "deleteConfirm": "ต้องการลบโปรโมชั่นนี้หรือไม่?",
+      "types": {
+        "percent": "เปอร์เซ็นต์ (%)",
+        "amount": "จำนวนเงิน (บาท)",
+        "bundle": "จัดชุด/แพ็กเกจ"
+      }
+    }
   }
 }

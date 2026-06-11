@@ -1,7 +1,7 @@
 import { setRequestLocale } from 'next-intl/server';
-import { ComingSoon } from '@/components/coming-soon';
+import { CampaignsView } from '@/features/campaigns/campaigns-view';
 
 export default function CampaignsPage({ params: { locale } }: { params: { locale: string } }) {
   setRequestLocale(locale);
-  return <ComingSoon titleKey="campaigns" />;
+  return <CampaignsView />;
 }
