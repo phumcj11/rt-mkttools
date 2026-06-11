@@ -24,8 +24,10 @@ module.exports = {
     {
       name: 'mkttools-frontend',
       cwd: './frontend',
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3000',
+      // ใช้ npm start เพื่อให้ทำงานได้ทั้งกรณี next ถูก hoist ขึ้น root (npm workspaces)
+      // และกรณีติดตั้งแยกใน frontend/node_modules
+      script: 'npm',
+      args: 'start',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
