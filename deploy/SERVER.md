@@ -1,4 +1,4 @@
-# ข้อมูลเซิร์ฟเวอร์ (Server / VPS)
+# ข้อมูลเซิร์ฟเวอร์ (Server / VPS) — 100 Baht Shop Thailand Marketing AI
 
 > ⚠️ **ห้ามเก็บรหัสผ่าน/secret ในไฟล์นี้หรือใน repo** — เก็บไว้ใน password manager เท่านั้น
 > รหัสผ่าน root ที่เคยส่งผ่านแชตควร **เปลี่ยนทันที** และเปลี่ยนไปใช้ SSH key
@@ -6,10 +6,10 @@
 ## โดเมน
 | รายการ | ค่า |
 | --- | --- |
-| โดเมนหลัก (production) | `rt.k-mkt.com` |
-| Frontend URL | `https://rt.k-mkt.com` |
-| API URL | `https://rt.k-mkt.com/api` |
-| Socket.io URL | `https://rt.k-mkt.com` (path `/socket.io`) |
+| โดเมนหลัก (production) | `marketing.100bahtshopthailand.com` |
+| Frontend URL | `https://marketing.100bahtshopthailand.com` |
+| API URL | `https://marketing.100bahtshopthailand.com/api` |
+| Socket.io URL | `https://marketing.100bahtshopthailand.com` (path `/socket.io`) |
 
 ## VPS / SSH
 | รายการ | ค่า |
@@ -41,6 +41,15 @@ ssh root@119.59.102.235
 | Backend (NestJS) | port `4000` (proxy `/api`, `/socket.io`) |
 | ไฟล์ env production | `/var/www/rt_mkttools/.env` (จาก `.env.example`) |
 
+## ฐานข้อมูล (MySQL)
+| รายการ | ค่า |
+| --- | --- |
+| ชื่อ DB | `marketing_ai_100baht` (เปลี่ยนจาก `rt_mkttools` ใน Phase 8) |
+| Charset | `utf8mb4_unicode_ci` |
+| Migration ล่าสุด | `2026_06_phase8_new_modules.sql` |
+
+> หมายเหตุ: ถ้า DB ยังชื่อ `rt_mkttools` อยู่ให้เปลี่ยน `DB_DATABASE` ใน `.env` production หลัง rename DB
+
 > หมายเหตุ: เครื่องนี้ดูเหมือนใช้ control panel (DirectAdmin) ที่มี docroot
 > `/domains/rt.k-mkt.com/public_html` — ถ้าใช้ Apache/LiteSpeed ของ panel ร่วมด้วย
 > ต้องตั้ง reverse proxy ไปยังพอร์ต Node (3000/4000) หรือปิด vhost ของ panel
@@ -58,6 +67,7 @@ ssh root@119.59.102.235
 | `VPS_SSH_KEY` | private key (SSH key สำหรับ deploy — **ไม่ใช่** password) |
 | `VPS_PORT` | `22` (optional) |
 | `VPS_APP_DIR` | `/var/www/rt_mkttools` (optional) |
+| `VPS_SSH_PASSWORD` | *(สำรอง — ใช้ SSH key แทน)* |
 
 สร้าง SSH key: `bash deploy/scripts/setup-github-actions-ssh.sh`  
 คู่มือเต็ม: [`GITHUB-ACTIONS-DEPLOY.md`](GITHUB-ACTIONS-DEPLOY.md)
