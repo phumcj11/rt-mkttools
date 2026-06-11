@@ -210,5 +210,38 @@
     "title": "การแจ้งเตือน",
     "markAllRead": "อ่านทั้งหมด",
     "empty": "ยังไม่มีการแจ้งเตือน"
+  },
+  "settingsPage": {
+    "title": "ตั้งค่าและแพ็กเกจ",
+    "subtitle": "จัดการแพ็กเกจ โควต้า AI และใบแจ้งหนี้",
+    "currentPlan": "แพ็กเกจปัจจุบัน",
+    "perMonth": "เดือน",
+    "aiQuota": "โควต้า AI",
+    "tokensThisMonth": "โทเค็นในเดือนนี้",
+    "users": "ผู้ใช้",
+    "usersInPlan": "ผู้ใช้ในแพ็กเกจ",
+    "comparePlans": "เปรียบเทียบแพ็กเกจ",
+    "current": "ใช้อยู่",
+    "selectPlan": "เลือกแพ็กเกจ",
+    "planChanged": "เปลี่ยนแพ็กเกจเรียบร้อย",
+    "planAiTokens": "AI {count} โทเค็น/เดือน",
+    "planUsers": "ผู้ใช้ได้สูงสุด {count} คน",
+    "paymentNote": "การชำระเงินจริงจะเชื่อมต่อในเฟสถัดไป — ตอนนี้เป็นการเปลี่ยนแพ็กเกจแบบ mock",
+    "invoices": "ใบแจ้งหนี้",
+    "noInvoices": "ยังไม่มีใบแจ้งหนี้",
+    "invoiceDate": "วันที่",
+    "invoiceAmount": "จำนวนเงิน",
+    "invoiceStatus": "สถานะ",
+    "invoiceStatuses": {
+      "open": "รอชำระ",
+      "paid": "ชำระแล้ว",
+      "void": "ยกเลิก"
+    },
+    "status": {
+      "trialing": "ทดลองใช้",
+      "active": "ใช้งาน",
+      "past_due": "ค้างชำระ",
+      "canceled": "ยกเลิก"
+    }
   }
 }

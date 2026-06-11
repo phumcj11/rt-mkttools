@@ -13,6 +13,7 @@ import { I18nModule } from './i18n/i18n.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { ContentModule } from './modules/content/content.module';
@@ -40,6 +41,7 @@ import { UsersModule } from './modules/users/users.module';
     ContentModule,
     ProductsModule,
     CampaignsModule,
+    BillingModule,
     NotificationsModule,
     ChatModule,
     RealtimeModule,

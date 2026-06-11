@@ -12,7 +12,7 @@
 | 4 | Marketing Modules | Products, Campaigns, Promotions, scheduling | ✅ เสร็จ |
 | 5 | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ✅ เสร็จ |
 | 6 | Analytics | Dashboards, sales metrics, reports, export | ✅ เสร็จ |
-| 7 | Billing & Plans | Plans, subscriptions, usage limits, invoices | ⏳ |
+| 7 | Billing & Plans | Plans, subscriptions, usage limits, invoices | ⏳ กำลังทำ |
 | 8 | Hardening & Deploy | Security, tests, Nginx/PM2 บน AlmaLinux, monitoring, backups | ⏳ |
 
 ---
@@ -72,10 +72,12 @@
 - [x] Export รายงานยอดขายเป็น CSV (รองรับภาษาไทยด้วย BOM)
 - [x] Dashboard เชื่อมตัวเลขจริง (ยอดขาย, แคมเปญที่ใช้งาน, สินค้า, โทเค็น AI)
 
-### Phase 7 — Billing & Plans
-- Plans (free/pro/business)
-- Subscriptions + บังคับ limit (users, AI tokens)
-- Invoices
+### Phase 7 — Billing & Plans ⏳
+- [x] Entities: `plans`, `subscriptions`, `invoices` + BillingModule (REST API)
+- [x] สมัครสมาชิก → สร้าง subscription แพ็ก `free` อัตโนมัติ
+- [x] บังคับ AI quota / user limit ตามแพ็กเกจ
+- [x] Frontend: หน้า Settings/Billing (เปรียบเทียบแพ็ก, upgrade mock, invoices)
+- [ ] Payment gateway จริง (Phase 7 ต่อ)
 
 ### Phase 8 — Hardening & Deploy
 - Security review, rate limiting, audit logs

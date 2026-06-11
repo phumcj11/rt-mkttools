@@ -11,6 +11,7 @@ import {
 } from '../../common/exceptions/app.exception';
 import { JwtConfig } from '../../config/configuration';
 import { RefreshToken, Role, RoleName, Tenant, User } from '../../database/entities';
+import { BillingService } from '../billing/billing.service';
 import { JwtPayload } from '../../common/interfaces/auth-user.interface';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -33,6 +34,7 @@ export class AuthService {
     @InjectRepository(RefreshToken) private readonly refreshRepo: Repository<RefreshToken>,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly billingService: BillingService,
   ) {
     this.jwtConfig = this.config.getOrThrow<JwtConfig>('jwt');
   }
@@ -54,6 +56,8 @@ export class AuthService {
         locale: defaultLocale,
       }),
     );
+
+    await this.billingService.createDefaultSubscription(tenant.id);
 
     const ownerRole = await this.getOrCreateRole('owner');
     const passwordHash = await bcrypt.hash(dto.password, this.jwtConfig.bcryptSaltRounds);

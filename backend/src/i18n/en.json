@@ -20,5 +20,10 @@
     "threadNotFound": "Conversation not found",
     "replyFailed": "The AI assistant failed to reply, please try again",
     "emptyMessage": "Please type a message before sending"
+  },
+  "billing": {
+    "noSubscription": "No subscription found for this shop",
+    "planNotFound": "Selected plan was not found",
+    "userLimitExceeded": "User limit for your plan has been exceeded"
   }
 }

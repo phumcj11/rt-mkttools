@@ -240,3 +240,39 @@ export interface SalesRecordItem {
   soldAt: string;
   createdAt: string;
 }
+
+export type PlanCode = 'free' | 'pro' | 'business';
+
+export interface PlanSummary {
+  id: number;
+  code: PlanCode;
+  name: string;
+  priceMonthly: number;
+  aiTokenLimit: number;
+  userLimit: number;
+}
+
+export interface SubscriptionSummary {
+  id: number;
+  status: string;
+  startedAt: string;
+  currentPeriodEnd: string | null;
+  plan: PlanSummary;
+  usage: {
+    userCount: number;
+    userLimit: number;
+    aiTokensUsed: number;
+    aiTokenLimit: number;
+    aiRequests: number;
+    periodMonth: string;
+  };
+}
+
+export interface InvoiceItem {
+  id: number;
+  amount: number;
+  currency: string;
+  status: 'open' | 'paid' | 'void';
+  issuedAt: string;
+  paidAt: string | null;
+}

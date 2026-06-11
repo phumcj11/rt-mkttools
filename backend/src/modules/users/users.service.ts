@@ -8,6 +8,7 @@ import {
   NotFoundAppException,
 } from '../../common/exceptions/app.exception';
 import { Role, RoleName, User } from '../../database/entities';
+import { BillingService } from '../billing/billing.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -17,6 +18,7 @@ export class UsersService {
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(Role) private readonly roleRepo: Repository<Role>,
     private readonly config: ConfigService,
+    private readonly billingService: BillingService,
   ) {}
 
   async findAll(tenantId: number) {
@@ -38,6 +40,8 @@ export class UsersService {
     if (existing) {
       throw new ConflictAppException('auth.emailTaken');
     }
+
+    await this.billingService.assertUserLimit(tenantId);
 
     const saltRounds = this.config.get<number>('jwt.bcryptSaltRounds') ?? 10;
     const passwordHash = await bcrypt.hash(dto.password, saltRounds);

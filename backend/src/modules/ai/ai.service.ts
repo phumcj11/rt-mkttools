@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { AppException } from '../../common/exceptions/app.exception';
 import { AiConfig } from '../../config/configuration';
 import { AiRequest, AiUsage } from '../../database/entities';
+import { BillingService } from '../billing/billing.service';
 import { GenerateContentDto } from './dto/generate-content.dto';
 import { OpenAiService } from './openai.service';
 import {
@@ -37,6 +38,7 @@ export class AiService {
     @InjectRepository(AiRequest) private readonly requestRepo: Repository<AiRequest>,
     @InjectRepository(AiUsage) private readonly usageRepo: Repository<AiUsage>,
     private readonly openai: OpenAiService,
+    private readonly billingService: BillingService,
     config: ConfigService,
   ) {
     this.aiConfig = config.getOrThrow<AiConfig>('ai');
@@ -50,12 +52,13 @@ export class AiService {
     const periodMonth = this.currentPeriod();
     const usage = await this.usageRepo.findOne({ where: { tenantId, periodMonth } });
     const totalTokens = usage?.totalTokens ?? 0;
+    const limit = await this.billingService.getTenantAiTokenLimit(tenantId);
     return {
       periodMonth,
       totalTokens,
       totalRequests: usage?.totalRequests ?? 0,
-      limit: this.aiConfig.monthlyTokenLimit,
-      remaining: Math.max(0, this.aiConfig.monthlyTokenLimit - totalTokens),
+      limit,
+      remaining: Math.max(0, limit - totalTokens),
     };
   }
 

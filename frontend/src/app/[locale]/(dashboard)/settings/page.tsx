@@ -1,7 +1,7 @@
 import { setRequestLocale } from 'next-intl/server';
-import { ComingSoon } from '@/components/coming-soon';
+import { SettingsView } from '@/features/settings/settings-view';
 
 export default function SettingsPage({ params: { locale } }: { params: { locale: string } }) {
   setRequestLocale(locale);
-  return <ComingSoon titleKey="settings" />;
+  return <SettingsView />;
 }

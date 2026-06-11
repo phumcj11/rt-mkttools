@@ -210,5 +210,38 @@
     "title": "Notifications",
     "markAllRead": "Mark all read",
     "empty": "No notifications yet"
+  },
+  "settingsPage": {
+    "title": "Settings & billing",
+    "subtitle": "Manage your plan, AI quota, and invoices",
+    "currentPlan": "Current plan",
+    "perMonth": "month",
+    "aiQuota": "AI quota",
+    "tokensThisMonth": "Tokens this month",
+    "users": "Users",
+    "usersInPlan": "Users on plan",
+    "comparePlans": "Compare plans",
+    "current": "Current",
+    "selectPlan": "Select plan",
+    "planChanged": "Plan updated successfully",
+    "planAiTokens": "{count} AI tokens/month",
+    "planUsers": "Up to {count} users",
+    "paymentNote": "Real payments will be integrated later — plan changes are mock for now",
+    "invoices": "Invoices",
+    "noInvoices": "No invoices yet",
+    "invoiceDate": "Date",
+    "invoiceAmount": "Amount",
+    "invoiceStatus": "Status",
+    "invoiceStatuses": {
+      "open": "Open",
+      "paid": "Paid",
+      "void": "Void"
+    },
+    "status": {
+      "trialing": "Trial",
+      "active": "Active",
+      "past_due": "Past due",
+      "canceled": "Canceled"
+    }
   }
 }
