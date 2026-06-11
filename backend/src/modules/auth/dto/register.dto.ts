@@ -2,11 +2,6 @@ import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-valid
 
 export class RegisterDto {
   @IsString()
-  @MinLength(2)
-  @MaxLength(150)
-  shopName: string;
-
-  @IsString()
   @IsOptional()
   @MaxLength(150)
   fullName?: string;

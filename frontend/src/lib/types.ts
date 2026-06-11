@@ -35,7 +35,23 @@ export interface ApiErrorBody {
   details?: unknown;
 }
 
-export type GenerateContentType = 'caption' | 'post' | 'ad' | 'line_broadcast';
+export type GenerateContentType =
+  | 'caption'
+  | 'post'
+  | 'ad'
+  | 'line_broadcast'
+  | 'fb_post'
+  | 'tiktok_caption'
+  | 'tiktok_script'
+  | 'instagram'
+  | 'gbp_post'
+  | 'seo_article'
+  | 'product_desc'
+  | 'ugc_script'
+  | 'rewrite'
+  | 'translate'
+  | 'hashtag';
+
 export type ContentTone = 'friendly' | 'fun' | 'professional' | 'urgent';
 
 export interface ContentTemplate {
@@ -44,6 +60,7 @@ export interface ContentTemplate {
   labelEn: string;
   descriptionTh: string;
   descriptionEn: string;
+  group?: 'social' | 'platform' | 'seo' | 'tools';
 }
 
 export interface GenerateInput {

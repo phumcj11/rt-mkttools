@@ -1,7 +1,13 @@
 import { Column, Entity, ManyToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { User } from './user.entity';
 
-export type RoleName = 'owner' | 'admin' | 'editor' | 'viewer';
+export type RoleName =
+  | 'super_admin'
+  | 'admin'
+  | 'marketing_manager'
+  | 'marketing_staff'
+  | 'branch_manager'
+  | 'customer_service';
 
 @Entity('roles')
 export class Role {

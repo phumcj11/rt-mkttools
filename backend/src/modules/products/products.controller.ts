@@ -32,13 +32,13 @@ export class ProductsController {
   }
 
   @Post()
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateProductDto) {
     return this.productsService.create(user.tenantId, dto);
   }
 
   @Patch(':id')
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   update(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
@@ -48,7 +48,7 @@ export class ProductsController {
   }
 
   @Delete(':id')
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager')
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     await this.productsService.remove(user.tenantId, id);

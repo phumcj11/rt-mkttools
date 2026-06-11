@@ -30,13 +30,13 @@ export class PromotionsController {
   }
 
   @Post()
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreatePromotionDto) {
     return this.campaignsService.createPromotion(user.tenantId, dto);
   }
 
   @Delete(':id')
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     await this.campaignsService.removePromotion(user.tenantId, id);

@@ -4,7 +4,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtConfig } from '../../config/configuration';
-import { BillingModule } from '../billing/billing.module';
 import { PasswordReset, RefreshToken, Role, Tenant, User } from '../../database/entities';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -13,7 +12,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Tenant, Role, RefreshToken, PasswordReset]),
-    BillingModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

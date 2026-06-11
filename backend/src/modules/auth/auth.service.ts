@@ -12,17 +12,20 @@ import {
 import { JwtConfig } from '../../config/configuration';
 import { PasswordReset, RefreshToken, Role, RoleName, Tenant, User } from '../../database/entities';
 import { AuditService } from '../audit/audit.service';
-import { BillingService } from '../billing/billing.service';
 import { JwtPayload } from '../../common/interfaces/auth-user.interface';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 const DEFAULT_ROLES: { name: RoleName; description: string }[] = [
-  { name: 'owner', description: 'เจ้าของร้าน — สิทธิ์เต็ม' },
-  { name: 'admin', description: 'ผู้ดูแลระบบของร้าน' },
-  { name: 'editor', description: 'สร้าง/แก้ไขคอนเทนต์และแคมเปญ' },
-  { name: 'viewer', description: 'ดูข้อมูลอย่างเดียว' },
+  { name: 'super_admin', description: 'ผู้ดูแลระบบสูงสุด — สิทธิ์เต็ม' },
+  { name: 'admin', description: 'ผู้ดูแลระบบ' },
+  { name: 'marketing_manager', description: 'ผู้จัดการฝ่ายการตลาด' },
+  { name: 'marketing_staff', description: 'เจ้าหน้าที่การตลาด' },
+  { name: 'branch_manager', description: 'ผู้จัดการสาขา' },
+  { name: 'customer_service', description: 'เจ้าหน้าที่ลูกค้าสัมพันธ์' },
 ];
+
+const FIXED_TENANT_ID = 1;
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 
@@ -38,7 +41,6 @@ export class AuthService {
     @InjectRepository(PasswordReset) private readonly passwordResetRepo: Repository<PasswordReset>,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
-    private readonly billingService: BillingService,
     private readonly audit: AuditService,
   ) {
     this.jwtConfig = this.config.getOrThrow<JwtConfig>('jwt');
@@ -50,21 +52,13 @@ export class AuthService {
       throw new ConflictAppException('auth.emailTaken');
     }
 
+    const tenant = await this.tenantRepo.findOne({ where: { id: FIXED_TENANT_ID } });
+    if (!tenant) {
+      throw new ConflictAppException('auth.tenantNotFound');
+    }
+
     const defaultLocale = this.config.get<string>('app.defaultLocale') ?? 'th';
-    const slug = await this.generateUniqueSlug(dto.shopName);
-
-    const tenant = await this.tenantRepo.save(
-      this.tenantRepo.create({
-        name: dto.shopName,
-        slug,
-        status: 'trial',
-        locale: defaultLocale,
-      }),
-    );
-
-    await this.billingService.createDefaultSubscription(tenant.id);
-
-    const ownerRole = await this.getOrCreateRole('owner');
+    const adminRole = await this.getOrCreateRole('admin');
     const passwordHash = await bcrypt.hash(dto.password, this.jwtConfig.bcryptSaltRounds);
 
     const user = await this.userRepo.save(
@@ -75,7 +69,7 @@ export class AuthService {
         fullName: dto.fullName ?? null,
         locale: defaultLocale,
         status: 'active',
-        roles: [ownerRole],
+        roles: [adminRole],
       }),
     );
 
@@ -300,22 +294,6 @@ export class AuthService {
       role = await this.roleRepo.findOne({ where: { name } });
     }
     return role as Role;
-  }
-
-  private async generateUniqueSlug(name: string): Promise<string> {
-    const base =
-      name
-        .toLowerCase()
-        .normalize('NFKD')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 100) || 'shop';
-
-    let slug = `${base}-${randomBytes(3).toString('hex')}`;
-    while (await this.tenantRepo.exists({ where: { slug } })) {
-      slug = `${base}-${randomBytes(4).toString('hex')}`;
-    }
-    return slug;
   }
 
   private parseDurationMs(value: string): number {

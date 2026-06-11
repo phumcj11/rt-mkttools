@@ -10,7 +10,6 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { RequiresFeature } from '../../common/decorators/requires-feature.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { AnalyticsService } from './analytics.service';
@@ -70,7 +69,6 @@ export class AnalyticsController {
   }
 
   @Get('executive')
-  @RequiresFeature('executive')
   executive(
     @CurrentUser() user: AuthUser,
     @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
@@ -88,13 +86,13 @@ export class AnalyticsController {
   }
 
   @Post('sales')
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   recordSale(@CurrentUser() user: AuthUser, @Body() dto: RecordSaleDto) {
     return this.analytics.recordSale(user.tenantId, dto);
   }
 
   @Post('sample')
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   @HttpCode(HttpStatus.OK)
   generateSample(@CurrentUser() user: AuthUser) {
     return this.analytics.generateSample(user.tenantId);

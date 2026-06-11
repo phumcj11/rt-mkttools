@@ -32,13 +32,13 @@ export class BranchesController {
   }
 
   @Post()
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateBranchDto) {
     return this.branchesService.create(user.tenantId, dto, user.id);
   }
 
   @Patch(':id')
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   update(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
@@ -48,7 +48,7 @@ export class BranchesController {
   }
 
   @Delete(':id')
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     await this.branchesService.remove(user.tenantId, id, user.id);

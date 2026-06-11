@@ -16,23 +16,23 @@
     "comingSoon": "Coming soon"
   },
   "nav": {
-    "dashboard": "Dashboard",
-    "contentStudio": "Content Studio",
+    "dashboard": "Executive Dashboard",
+    "posm": "AI POSM Generator",
+    "contentStudio": "AI Content Factory",
+    "reviews": "Google Review Center",
+    "chat": "Omnichannel Chat",
+    "social": "Social Listening",
+    "agents": "AI Agent Center",
+    "userAdmin": "User Management",
+    "analytics": "Analytics",
     "campaigns": "Campaigns",
     "products": "Products",
-    "analytics": "Analytics",
-    "erp": "Live Data (ERP)",
+    "erp": "ERP Data",
     "branches": "Branches",
-    "chat": "AI Assistant",
     "audit": "Activity Log",
     "settings": "Settings",
     "logout": "Sign out",
-    "menu": "Menu",
-    "sections": {
-      "intelligence": "Intelligence",
-      "marketing": "Marketing",
-      "operations": "Operations"
-    }
+    "menu": "Menu"
   },
   "auth": {
     "loginTitle": "Sign in",

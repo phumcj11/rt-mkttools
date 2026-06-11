@@ -21,3 +21,7 @@ export * from './invoice.entity';
 export * from './branch.entity';
 export * from './audit-log.entity';
 export * from './erp-sales-daily.entity';
+export * from './posm-project.entity';
+export * from './google-review.entity';
+export * from './social-mention.entity';
+export * from './ai-agent.entity';

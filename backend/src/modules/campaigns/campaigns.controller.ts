@@ -33,13 +33,13 @@ export class CampaignsController {
   }
 
   @Post()
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateCampaignDto) {
     return this.campaignsService.create(user.tenantId, user.id, dto);
   }
 
   @Patch(':id')
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   update(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
@@ -49,7 +49,7 @@ export class CampaignsController {
   }
 
   @Delete(':id')
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager')
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     await this.campaignsService.remove(user.tenantId, id);

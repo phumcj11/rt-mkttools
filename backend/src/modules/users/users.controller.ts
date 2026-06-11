@@ -22,25 +22,25 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   findAll(@CurrentUser() user: AuthUser) {
     return this.usersService.findAll(user.tenantId);
   }
 
   @Get(':id')
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   findOne(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.usersService.findOne(user.tenantId, id);
   }
 
   @Post()
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateUserDto) {
     return this.usersService.create(user.tenantId, dto);
   }
 
   @Patch(':id')
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   update(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
@@ -50,7 +50,7 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles('owner')
+  @Roles('super_admin')
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     await this.usersService.remove(user.tenantId, id);

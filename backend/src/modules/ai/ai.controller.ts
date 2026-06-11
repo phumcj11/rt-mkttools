@@ -20,7 +20,7 @@ export class AiController {
   }
 
   @Post('generate')
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   @HttpCode(HttpStatus.OK)
   generate(@CurrentUser() user: AuthUser, @Body() dto: GenerateContentDto) {
     return this.aiService.generate(user.tenantId, user.id, dto);

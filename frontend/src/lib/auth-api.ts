@@ -7,7 +7,6 @@ export interface LoginInput {
 }
 
 export interface RegisterInput {
-  shopName: string;
   fullName?: string;
   email: string;
   password: string;

@@ -7,7 +7,6 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
-import { PlanFeatureGuard } from './common/guards/plan-feature.guard';
 import configuration from './config/configuration';
 import { validationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
@@ -16,7 +15,6 @@ import { AiModule } from './modules/ai/ai.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { BillingModule } from './modules/billing/billing.module';
 import { BranchesModule } from './modules/branches/branches.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { ChatModule } from './modules/chat/chat.module';
@@ -47,7 +45,6 @@ import { UsersModule } from './modules/users/users.module';
     ContentModule,
     ProductsModule,
     CampaignsModule,
-    BillingModule,
     BranchesModule,
     ErpModule,
     NotificationsModule,
@@ -59,7 +56,6 @@ import { UsersModule } from './modules/users/users.module';
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
-    { provide: APP_GUARD, useClass: PlanFeatureGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },

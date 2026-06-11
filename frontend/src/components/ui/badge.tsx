@@ -1,15 +1,16 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'muted' | 'destructive';
+type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'muted' | 'destructive' | 'outline';
 
 const variantClasses: Record<BadgeVariant, string> = {
-  default: 'border-transparent bg-primary text-primary-foreground',
-  secondary: 'border-transparent bg-secondary text-secondary-foreground',
-  success: 'border-transparent bg-emerald-100 text-emerald-700',
-  warning: 'border-transparent bg-amber-100 text-amber-700',
-  muted: 'border-transparent bg-muted text-muted-foreground',
+  default:     'border-transparent bg-primary text-primary-foreground',
+  secondary:   'border-transparent bg-secondary text-secondary-foreground',
+  success:     'border-transparent bg-emerald-100 text-emerald-700',
+  warning:     'border-transparent bg-amber-100 text-amber-700',
+  muted:       'border-transparent bg-muted text-muted-foreground',
   destructive: 'border-transparent bg-red-100 text-red-700',
+  outline:     'border border-border bg-transparent text-foreground',
 };
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {

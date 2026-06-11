@@ -7,7 +7,6 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { RequiresFeature } from '../../common/decorators/requires-feature.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { ErpInsightsService } from './erp-insights.service';
@@ -22,7 +21,6 @@ function defaultRange(): { from: string; to: string } {
   return { from: fmt(from), to: fmt(to) };
 }
 
-@RequiresFeature('erp')
 @Controller('erp')
 export class ErpController {
   constructor(
@@ -114,8 +112,7 @@ export class ErpController {
   }
 
   @Post('sync')
-  @Roles('owner', 'admin')
-  @RequiresFeature('erp_sync')
+  @Roles('super_admin', 'admin')
   runSync(@Query('days', new DefaultValuePipe(90), ParseIntPipe) days: number) {
     return this.sync.sync(days);
   }

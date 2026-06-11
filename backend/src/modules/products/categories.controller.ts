@@ -25,13 +25,13 @@ export class CategoriesController {
   }
 
   @Post()
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateCategoryDto) {
     return this.productsService.createCategory(user.tenantId, dto);
   }
 
   @Delete(':id')
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager')
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     await this.productsService.removeCategory(user.tenantId, id);

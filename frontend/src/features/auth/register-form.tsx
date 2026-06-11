@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { Loader2 } from 'lucide-react';
+import { Loader2, UserPlus } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +18,6 @@ export function RegisterForm() {
   const router = useRouter();
   const setSession = useAuthStore((s) => s.setSession);
 
-  const [shopName, setShopName] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,7 +35,7 @@ export function RegisterForm() {
     setLoading(true);
     try {
       const result = await register(
-        { shopName, fullName: fullName || undefined, email, password },
+        { fullName: fullName || undefined, email, password },
         locale,
       );
       setSession(result);
@@ -54,8 +53,11 @@ export function RegisterForm() {
   return (
     <Card className="shadow-lg">
       <CardHeader className="space-y-1 text-center">
-        <CardTitle className="text-2xl">{t('auth.registerTitle')}</CardTitle>
-        <CardDescription>{t('auth.registerSubtitle')}</CardDescription>
+        <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+          <UserPlus className="h-6 w-6 text-primary" />
+        </div>
+        <CardTitle className="text-2xl">เพิ่มผู้ใช้ใหม่</CardTitle>
+        <CardDescription>สร้างบัญชีผู้ใช้ใน 100 Baht Shop Thailand</CardDescription>
       </CardHeader>
       <form onSubmit={onSubmit}>
         <CardContent className="space-y-4">
@@ -64,17 +66,6 @@ export function RegisterForm() {
               {error}
             </div>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="shopName">{t('auth.shopName')}</Label>
-            <Input
-              id="shopName"
-              required
-              minLength={2}
-              placeholder={t('auth.shopNamePlaceholder')}
-              value={shopName}
-              onChange={(e) => setShopName(e.target.value)}
-            />
-          </div>
           <div className="space-y-2">
             <Label htmlFor="fullName">{t('auth.fullName')}</Label>
             <Input
@@ -126,8 +117,8 @@ export function RegisterForm() {
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            {loading ? t('common.processing') : t('auth.registerSubmit')}
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {loading ? t('common.processing') : 'สร้างบัญชี'}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             {t('auth.haveAccount')}{' '}

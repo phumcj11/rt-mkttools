@@ -15,7 +15,7 @@ export class TenantsController {
   }
 
   @Patch('me')
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   updateMine(@CurrentUser() user: AuthUser, @Body() dto: UpdateTenantDto) {
     return this.tenantsService.update(user.tenantId, dto);
   }

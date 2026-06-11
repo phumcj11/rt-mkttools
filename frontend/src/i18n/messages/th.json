@@ -16,23 +16,23 @@
     "comingSoon": "เร็ว ๆ นี้"
   },
   "nav": {
-    "dashboard": "แดชบอร์ด",
-    "contentStudio": "สตูดิโอคอนเทนต์",
+    "dashboard": "แดชบอร์ดผู้บริหาร",
+    "posm": "AI POSM Generator",
+    "contentStudio": "AI Content Factory",
+    "reviews": "Google Review Center",
+    "chat": "Omnichannel Chat",
+    "social": "Social Listening",
+    "agents": "AI Agent Center",
+    "userAdmin": "ระบบผู้ใช้",
+    "analytics": "วิเคราะห์ข้อมูล",
     "campaigns": "แคมเปญ",
     "products": "สินค้า",
-    "analytics": "วิเคราะห์ข้อมูล",
-    "erp": "ข้อมูลจริง (ERP)",
+    "erp": "ข้อมูล ERP",
     "branches": "สาขา",
-    "chat": "ผู้ช่วย AI",
     "audit": "บันทึกกิจกรรม",
     "settings": "ตั้งค่า",
     "logout": "ออกจากระบบ",
-    "menu": "เมนู",
-    "sections": {
-      "intelligence": "ข้อมูลและ AI",
-      "marketing": "การตลาด",
-      "operations": "การดำเนินงาน"
-    }
+    "menu": "เมนู"
   },
   "auth": {
     "loginTitle": "เข้าสู่ระบบ",

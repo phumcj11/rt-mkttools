@@ -30,13 +30,13 @@ export class ContentController {
   }
 
   @Post()
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateContentDto) {
     return this.contentService.create(user.tenantId, user.id, dto);
   }
 
   @Delete(':id')
-  @Roles('owner', 'admin', 'editor')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     await this.contentService.remove(user.tenantId, id);

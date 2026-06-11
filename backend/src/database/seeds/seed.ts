@@ -1,20 +1,43 @@
 import dataSource from '../data-source';
-import { Role, RoleName } from '../entities';
+import { Role, RoleName, Tenant } from '../entities';
 
 const ROLES: { name: RoleName; description: string }[] = [
-  { name: 'owner', description: 'เจ้าของร้าน — สิทธิ์เต็ม' },
-  { name: 'admin', description: 'ผู้ดูแลระบบของร้าน' },
-  { name: 'editor', description: 'สร้าง/แก้ไขคอนเทนต์และแคมเปญ' },
-  { name: 'viewer', description: 'ดูข้อมูลอย่างเดียว' },
+  { name: 'super_admin', description: 'ผู้ดูแลระบบสูงสุด — สิทธิ์เต็ม' },
+  { name: 'admin', description: 'ผู้ดูแลระบบ' },
+  { name: 'marketing_manager', description: 'ผู้จัดการฝ่ายการตลาด' },
+  { name: 'marketing_staff', description: 'เจ้าหน้าที่การตลาด' },
+  { name: 'branch_manager', description: 'ผู้จัดการสาขา' },
+  { name: 'customer_service', description: 'เจ้าหน้าที่ลูกค้าสัมพันธ์' },
 ];
 
 async function run(): Promise<void> {
   await dataSource.initialize();
   const roleRepo = dataSource.getRepository(Role);
+  const tenantRepo = dataSource.getRepository(Tenant);
 
+  // Seed fixed organization
+  const existing = await tenantRepo.findOne({ where: { id: 1 } });
+  if (!existing) {
+    await tenantRepo.save(
+      tenantRepo.create({
+        name: '100 Baht Shop Thailand',
+        slug: '100bahtshop',
+        status: 'active',
+        locale: 'th',
+      }),
+    );
+    // eslint-disable-next-line no-console
+    console.log('+ seeded tenant: 100 Baht Shop Thailand');
+  } else if (existing.name !== '100 Baht Shop Thailand') {
+    await tenantRepo.update(1, { name: '100 Baht Shop Thailand', status: 'active' });
+    // eslint-disable-next-line no-console
+    console.log('~ updated tenant: 100 Baht Shop Thailand');
+  }
+
+  // Seed roles
   for (const role of ROLES) {
-    const existing = await roleRepo.findOne({ where: { name: role.name } });
-    if (!existing) {
+    const existingRole = await roleRepo.findOne({ where: { name: role.name } });
+    if (!existingRole) {
       await roleRepo.save(roleRepo.create(role));
       // eslint-disable-next-line no-console
       console.log(`+ seeded role: ${role.name}`);
