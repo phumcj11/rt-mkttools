@@ -50,7 +50,20 @@
     "registerLink": "Sign up",
     "haveAccount": "Already have an account?",
     "loginLink": "Sign in",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "forgotPasswordLink": "Forgot password?",
+    "forgotPasswordTitle": "Forgot password",
+    "forgotPasswordSubtitle": "Enter your account email and we will send a reset link",
+    "forgotPasswordSubmit": "Send reset link",
+    "forgotPasswordSuccess": "If this email is registered, you will receive a password reset link",
+    "resetLinkLabel": "Password reset link (valid for 1 hour)",
+    "resetLinkHint": "Email is not configured yet — copy the link above and open it in your browser",
+    "resetPasswordTitle": "Set new password",
+    "resetPasswordSubtitle": "Choose a new password for your account",
+    "resetPasswordSubmit": "Save new password",
+    "passwordResetSuccess": "Your password has been reset. Please sign in",
+    "invalidResetLink": "This reset link is invalid or has expired",
+    "backToLogin": "Back to sign in"
   },
   "errors": {
     "invalidCredentials": "Invalid email or password",

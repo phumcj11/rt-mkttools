@@ -41,3 +41,31 @@ export function logout(refreshToken: string) {
     body: { refreshToken },
   });
 }
+
+export interface ForgotPasswordResult {
+  message: string;
+  resetUrl?: string;
+}
+
+export function forgotPassword(email: string, locale?: string) {
+  return apiRequest<ForgotPasswordResult>('/auth/forgot-password', {
+    method: 'POST',
+    body: { email },
+    auth: false,
+    locale,
+  });
+}
+
+export interface ResetPasswordInput {
+  token: string;
+  password: string;
+}
+
+export function resetPassword(input: ResetPasswordInput, locale?: string) {
+  return apiRequest<{ message: string }>('/auth/reset-password', {
+    method: 'POST',
+    body: input,
+    auth: false,
+    locale,
+  });
+}

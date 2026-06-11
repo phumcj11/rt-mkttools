@@ -10,7 +10,7 @@ import {
   UnauthorizedAppException,
 } from '../../common/exceptions/app.exception';
 import { JwtConfig } from '../../config/configuration';
-import { RefreshToken, Role, RoleName, Tenant, User } from '../../database/entities';
+import { PasswordReset, RefreshToken, Role, RoleName, Tenant, User } from '../../database/entities';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
 import { JwtPayload } from '../../common/interfaces/auth-user.interface';
@@ -24,6 +24,8 @@ const DEFAULT_ROLES: { name: RoleName; description: string }[] = [
   { name: 'viewer', description: 'ดูข้อมูลอย่างเดียว' },
 ];
 
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+
 @Injectable()
 export class AuthService {
   private readonly jwtConfig: JwtConfig;
@@ -33,6 +35,7 @@ export class AuthService {
     @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
     @InjectRepository(Role) private readonly roleRepo: Repository<Role>,
     @InjectRepository(RefreshToken) private readonly refreshRepo: Repository<RefreshToken>,
+    @InjectRepository(PasswordReset) private readonly passwordResetRepo: Repository<PasswordReset>,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly billingService: BillingService,
@@ -143,6 +146,86 @@ export class AuthService {
     await this.refreshRepo.update({ tokenHash }, { revokedAt: new Date() });
   }
 
+  async requestPasswordReset(email: string) {
+    const user = await this.userRepo.findOne({ where: { email } });
+    const response: { message: string; resetUrl?: string } = {
+      message: 'auth.passwordResetRequested',
+    };
+
+    if (!user || user.status === 'disabled') {
+      return response;
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+
+    await this.passwordResetRepo
+      .createQueryBuilder()
+      .update(PasswordReset)
+      .set({ usedAt: new Date() })
+      .where('user_id = :userId AND used_at IS NULL', { userId: user.id })
+      .execute();
+
+    await this.passwordResetRepo.save(
+      this.passwordResetRepo.create({
+        userId: user.id,
+        tokenHash: this.hashToken(rawToken),
+        expiresAt,
+      }),
+    );
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'auth.password_reset_requested',
+      entity: 'user',
+      entityId: user.id,
+    });
+
+    if (!process.env.SMTP_HOST) {
+      response.resetUrl = this.buildResetUrl(rawToken, user.locale);
+    }
+
+    return response;
+  }
+
+  async resetPassword(rawToken: string, newPassword: string) {
+    const tokenHash = this.hashToken(rawToken);
+    const record = await this.passwordResetRepo.findOne({
+      where: { tokenHash },
+      relations: { user: true },
+    });
+
+    if (!record || record.usedAt || record.expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedAppException('auth.invalidResetToken');
+    }
+
+    const user = record.user;
+    if (!user || user.status === 'disabled') {
+      throw new UnauthorizedAppException('auth.invalidResetToken');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, this.jwtConfig.bcryptSaltRounds);
+    await this.userRepo.update(user.id, { passwordHash });
+    await this.passwordResetRepo.update(record.id, { usedAt: new Date() });
+    await this.refreshRepo
+      .createQueryBuilder()
+      .update(RefreshToken)
+      .set({ revokedAt: new Date() })
+      .where('user_id = :userId AND revoked_at IS NULL', { userId: user.id })
+      .execute();
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'auth.password_reset_completed',
+      entity: 'user',
+      entityId: user.id,
+    });
+
+    return { message: 'auth.passwordResetCompleted' };
+  }
+
   // ---------- helpers ----------
 
   private async buildAuthResponse(user: User, tenant: Tenant) {
@@ -195,6 +278,18 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private buildResetUrl(rawToken: string, locale: string): string {
+    const corsOrigins = this.config.get<string[]>('app.corsOrigins') ?? [];
+    const baseUrl = (
+      process.env.NEXT_PUBLIC_APP_URL ??
+      process.env.FRONTEND_PUBLIC_URL ??
+      corsOrigins[0] ??
+      'http://localhost:3000'
+    ).replace(/\/$/, '');
+    const safeLocale = locale === 'en' ? 'en' : 'th';
+    return `${baseUrl}/${safeLocale}/reset-password?token=${encodeURIComponent(rawToken)}`;
   }
 
   private async getOrCreateRole(name: RoleName): Promise<Role> {

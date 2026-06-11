@@ -50,7 +50,20 @@
     "registerLink": "สมัครใช้งาน",
     "haveAccount": "มีบัญชีอยู่แล้ว?",
     "loginLink": "เข้าสู่ระบบ",
-    "logout": "ออกจากระบบ"
+    "logout": "ออกจากระบบ",
+    "forgotPasswordLink": "ลืมรหัสผ่าน?",
+    "forgotPasswordTitle": "ลืมรหัสผ่าน",
+    "forgotPasswordSubtitle": "กรอกอีเมลที่ใช้สมัคร เราจะส่งลิงก์ให้ตั้งรหัสผ่านใหม่",
+    "forgotPasswordSubmit": "ขอลิงก์รีเซ็ตรหัสผ่าน",
+    "forgotPasswordSuccess": "หากอีเมลนี้มีในระบบ คุณจะได้รับลิงก์ตั้งรหัสผ่านใหม่",
+    "resetLinkLabel": "ลิงก์ตั้งรหัสผ่านใหม่ (ใช้ได้ 1 ชั่วโมง)",
+    "resetLinkHint": "ระบบยังไม่ได้ตั้งค่าอีเมล — กรุณาคัดลอกลิงก์ด้านบนไปเปิดในเบราว์เซอร์",
+    "resetPasswordTitle": "ตั้งรหัสผ่านใหม่",
+    "resetPasswordSubtitle": "กรอกรหัสผ่านใหม่สำหรับบัญชีของคุณ",
+    "resetPasswordSubmit": "บันทึกรหัสผ่านใหม่",
+    "passwordResetSuccess": "ตั้งรหัสผ่านใหม่เรียบร้อยแล้ว กรุณาเข้าสู่ระบบ",
+    "invalidResetLink": "ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว",
+    "backToLogin": "กลับไปหน้าเข้าสู่ระบบ"
   },
   "errors": {
     "invalidCredentials": "อีเมลหรือรหัสผ่านไม่ถูกต้อง",

@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { Link, useRouter } from '@/i18n/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,8 @@ export function LoginForm() {
   const t = useTranslations();
   const locale = useLocale();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resetSuccess = searchParams.get('reset') === '1';
   const setSession = useAuthStore((s) => s.setSession);
 
   const [email, setEmail] = useState('');
@@ -49,6 +52,11 @@ export function LoginForm() {
       </CardHeader>
       <form onSubmit={onSubmit}>
         <CardContent className="space-y-4">
+          {resetSuccess && (
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+              {t('auth.passwordResetSuccess')}
+            </div>
+          )}
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -67,7 +75,15 @@ export function LoginForm() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">{t('auth.password')}</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">{t('auth.password')}</Label>
+              <Link
+                href="/forgot-password"
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                {t('auth.forgotPasswordLink')}
+              </Link>
+            </div>
             <Input
               id="password"
               type="password"

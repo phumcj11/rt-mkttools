@@ -3,7 +3,10 @@
     "invalidCredentials": "Invalid email or password",
     "unauthorized": "Please sign in",
     "forbidden": "You do not have permission to access this resource",
-    "emailTaken": "This email is already in use"
+    "emailTaken": "This email is already in use",
+    "passwordResetRequested": "If this email is registered, a reset link has been sent",
+    "passwordResetCompleted": "Your password has been reset. Please sign in",
+    "invalidResetToken": "This reset link is invalid or has expired"
   },
   "common": {
     "notFound": "Not found",
