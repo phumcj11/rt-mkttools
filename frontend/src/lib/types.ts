@@ -396,3 +396,23 @@ export interface ErpPromotion {
   productCount: number;
   freeItemCount: number;
 }
+
+export interface ErpInsights {
+  source: 'ai' | 'heuristic';
+  insights: string[];
+  text: string;
+  generatedAt: string;
+}
+
+export interface ErpAlert {
+  level: 'success' | 'info' | 'warning';
+  code: string;
+  message: string;
+  value?: number;
+}
+
+export interface ErpSyncResult {
+  synced: number;
+  from: string;
+  to: string;
+}

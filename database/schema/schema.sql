@@ -378,4 +378,13 @@ CREATE TABLE audit_logs (
   KEY idx_audit_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ERP daily sales snapshot (ดึงจาก ChangSiam ERP — ระดับระบบ ไม่ผูก tenant)
+CREATE TABLE erp_sales_daily (
+  sale_date   DATE NOT NULL,
+  orders      INT UNSIGNED NOT NULL DEFAULT 0,
+  revenue     DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  synced_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (sale_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

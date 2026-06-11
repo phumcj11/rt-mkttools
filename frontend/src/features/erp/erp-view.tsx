@@ -3,16 +3,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
+  AlertTriangle,
   Banknote,
   Building2,
+  CheckCircle2,
+  CloudDownload,
   Gift,
+  Info,
   Loader2,
   Package,
   RefreshCw,
   ShoppingCart,
+  Sparkles,
   TrendingUp,
   Users,
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -25,15 +31,20 @@ import {
 } from '@/components/ui/table';
 import { ApiError } from '@/lib/api';
 import {
+  getErpAiInsights,
+  getErpAlerts,
   getErpDashboard,
   getErpPromotions,
   getErpSalesByBranch,
   getErpSalesSummary,
   getErpTopProducts,
+  syncErp,
 } from '@/lib/erp-api';
 import type {
+  ErpAlert,
   ErpBranchSales,
   ErpDashboard,
+  ErpInsights,
   ErpPromotion,
   ErpSalesSummary,
   ErpTopProduct,
@@ -62,6 +73,39 @@ export function ErpView() {
   const [topProducts, setTopProducts] = useState<ErpTopProduct[]>([]);
   const [promotions, setPromotions] = useState<ErpPromotion[]>([]);
 
+  const [insights, setInsights] = useState<ErpInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [alerts, setAlerts] = useState<ErpAlert[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  const loadInsights = useCallback(async () => {
+    setInsightsLoading(true);
+    try {
+      const [ins, al] = await Promise.all([getErpAiInsights(days), getErpAlerts()]);
+      setInsights(ins);
+      setAlerts(al);
+    } catch {
+      // insight ไม่ critical — เงียบไว้ ปล่อยให้ส่วนอื่นทำงานต่อ
+    } finally {
+      setInsightsLoading(false);
+    }
+  }, [days]);
+
+  const handleSync = useCallback(async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await syncErp(90);
+      setSyncMsg(t('sync.done', { count: res.synced }));
+      await loadInsights();
+    } catch (err) {
+      setSyncMsg(err instanceof ApiError ? err.message : t('unavailable'));
+    } finally {
+      setSyncing(false);
+    }
+  }, [loadInsights, t]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -88,6 +132,10 @@ export function ErpView() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadInsights();
+  }, [loadInsights]);
 
   const maxTrend = Math.max(1, ...(dashboard?.trend30.map((p) => p.revenue) ?? [1]));
 
@@ -126,6 +174,14 @@ export function ErpView() {
               </button>
             ))}
           </div>
+          <Button variant="outline" onClick={() => void handleSync()} disabled={syncing}>
+            {syncing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CloudDownload className="h-4 w-4" />
+            )}
+            {t('sync.button')}
+          </Button>
           <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
@@ -135,6 +191,38 @@ export function ErpView() {
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
+        </div>
+      )}
+
+      {syncMsg && (
+        <div className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-primary">
+          {syncMsg}
+        </div>
+      )}
+
+      {alerts.length > 0 && (
+        <div className="space-y-2">
+          {alerts.map((a, i) => (
+            <div
+              key={`${a.code}-${i}`}
+              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                a.level === 'warning'
+                  ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                  : a.level === 'success'
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
+                    : 'border-primary/30 bg-primary/10 text-primary'
+              }`}
+            >
+              {a.level === 'warning' ? (
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+              ) : a.level === 'success' ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+              ) : (
+                <Info className="h-4 w-4 shrink-0" />
+              )}
+              {a.message}
+            </div>
+          ))}
         </div>
       )}
 
@@ -157,6 +245,52 @@ export function ErpView() {
               </Card>
             ))}
           </div>
+
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="h-4 w-4 text-gold" />
+                {t('ai.title')}
+                {insights && (
+                  <Badge variant={insights.source === 'ai' ? 'success' : 'muted'}>
+                    {t(`ai.source.${insights.source}`)}
+                  </Badge>
+                )}
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void loadInsights()}
+                disabled={insightsLoading}
+              >
+                {insightsLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {t('ai.regenerate')}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {insightsLoading && !insights ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('ai.analyzing')}
+                </div>
+              ) : insights && insights.insights.length > 0 ? (
+                <ul className="space-y-2">
+                  {insights.insights.map((line, i) => (
+                    <li key={i} className="flex gap-2 text-sm">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-gold" />
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="py-2 text-sm text-muted-foreground">{t('ai.empty')}</p>
+              )}
+            </CardContent>
+          </Card>
 
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">

@@ -3,8 +3,14 @@ import {
   DefaultValuePipe,
   Get,
   ParseIntPipe,
+  Post,
   Query,
 } from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ErpInsightsService } from './erp-insights.service';
+import { ErpSyncService } from './erp-sync.service';
 import { ErpService } from './erp.service';
 
 function defaultRange(): { from: string; to: string } {
@@ -17,7 +23,11 @@ function defaultRange(): { from: string; to: string } {
 
 @Controller('erp')
 export class ErpController {
-  constructor(private readonly erp: ErpService) {}
+  constructor(
+    private readonly erp: ErpService,
+    private readonly insights: ErpInsightsService,
+    private readonly sync: ErpSyncService,
+  ) {}
 
   @Get('dashboard')
   dashboard() {
@@ -81,6 +91,30 @@ export class ErpController {
   @Get('promotions')
   promotions(@Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number) {
     return this.erp.promotions(limit);
+  }
+
+  @Get('ai-insights')
+  aiInsights(
+    @CurrentUser() user: AuthUser,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+  ) {
+    return this.insights.analyze(user, days);
+  }
+
+  @Get('history')
+  history(@Query('days', new DefaultValuePipe(90), ParseIntPipe) days: number) {
+    return this.sync.history(days);
+  }
+
+  @Get('alerts')
+  alerts() {
+    return this.sync.computeAlerts();
+  }
+
+  @Post('sync')
+  @Roles('owner', 'admin')
+  runSync(@Query('days', new DefaultValuePipe(90), ParseIntPipe) days: number) {
+    return this.sync.sync(days);
   }
 
   private toInt(v?: string): number | undefined {
