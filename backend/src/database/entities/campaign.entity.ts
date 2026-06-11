@@ -18,6 +18,9 @@ export class Campaign {
   @Column({ name: 'tenant_id', type: 'bigint', unsigned: true })
   tenantId: number;
 
+  @Column({ name: 'branch_id', type: 'bigint', unsigned: true, nullable: true })
+  branchId: number | null;
+
   @Column({ type: 'varchar', length: 200 })
   name: string;
 

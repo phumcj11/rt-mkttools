@@ -23,16 +23,18 @@ export class AnalyticsController {
   summary(
     @CurrentUser() user: AuthUser,
     @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.analytics.summary(user.tenantId, days);
+    return this.analytics.summary(user.tenantId, days, this.parseBranch(branchId));
   }
 
   @Get('sales-series')
   salesSeries(
     @CurrentUser() user: AuthUser,
     @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.analytics.salesSeries(user.tenantId, days);
+    return this.analytics.salesSeries(user.tenantId, days, this.parseBranch(branchId));
   }
 
   @Get('top-products')
@@ -40,8 +42,9 @@ export class AnalyticsController {
     @CurrentUser() user: AuthUser,
     @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
     @Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.analytics.topProducts(user.tenantId, days, limit);
+    return this.analytics.topProducts(user.tenantId, days, limit, this.parseBranch(branchId));
   }
 
   @Get('campaign-status')
@@ -49,12 +52,37 @@ export class AnalyticsController {
     return this.analytics.campaignStatus(user.tenantId);
   }
 
+  @Get('sales-by-branch')
+  salesByBranch(
+    @CurrentUser() user: AuthUser,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+  ) {
+    return this.analytics.salesByBranch(user.tenantId, days);
+  }
+
+  @Get('sales-by-category')
+  salesByCategory(
+    @CurrentUser() user: AuthUser,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+  ) {
+    return this.analytics.salesByCategory(user.tenantId, days);
+  }
+
+  @Get('executive')
+  executive(
+    @CurrentUser() user: AuthUser,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+  ) {
+    return this.analytics.executiveSummary(user.tenantId, days);
+  }
+
   @Get('sales')
   listSales(
     @CurrentUser() user: AuthUser,
     @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.analytics.listSales(user.tenantId, days);
+    return this.analytics.listSales(user.tenantId, days, this.parseBranch(branchId));
   }
 
   @Post('sales')
@@ -68,5 +96,11 @@ export class AnalyticsController {
   @HttpCode(HttpStatus.OK)
   generateSample(@CurrentUser() user: AuthUser) {
     return this.analytics.generateSample(user.tenantId);
+  }
+
+  private parseBranch(branchId?: string): number | undefined {
+    if (branchId === undefined || branchId === '' || branchId === 'all') return undefined;
+    const n = Number(branchId);
+    return Number.isNaN(n) ? undefined : n;
   }
 }

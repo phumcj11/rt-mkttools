@@ -14,6 +14,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { BranchesModule } from './modules/branches/branches.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { ContentModule } from './modules/content/content.module';
@@ -42,6 +43,7 @@ import { UsersModule } from './modules/users/users.module';
     ProductsModule,
     CampaignsModule,
     BillingModule,
+    BranchesModule,
     NotificationsModule,
     ChatModule,
     RealtimeModule,

@@ -30,6 +30,9 @@ export class User {
   @JoinColumn({ name: 'tenant_id' })
   tenant: Tenant;
 
+  @Column({ name: 'branch_id', type: 'bigint', unsigned: true, nullable: true })
+  branchId: number | null;
+
   @Column({ type: 'varchar', length: 190 })
   email: string;
 

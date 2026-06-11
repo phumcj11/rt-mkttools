@@ -26,6 +26,7 @@ CREATE TABLE tenants (
 CREATE TABLE users (
   id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   tenant_id       BIGINT UNSIGNED NOT NULL,
+  branch_id       BIGINT UNSIGNED NULL,
   email           VARCHAR(190) NOT NULL,
   password_hash   VARCHAR(255) NOT NULL,
   full_name       VARCHAR(150) NULL,
@@ -54,6 +55,24 @@ CREATE TABLE user_roles (
   PRIMARY KEY (user_id, role_id),
   CONSTRAINT fk_userroles_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_userroles_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+--  ORGANIZATION (Branches)
+-- ------------------------------------------------------------
+CREATE TABLE branches (
+  id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tenant_id       BIGINT UNSIGNED NOT NULL,
+  name            VARCHAR(150) NOT NULL,
+  code            VARCHAR(50) NULL,
+  address         VARCHAR(255) NULL,
+  phone           VARCHAR(30) NULL,
+  status          ENUM('active','inactive') NOT NULL DEFAULT 'active',
+  created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_branches_tenant (tenant_id),
+  CONSTRAINT fk_branches_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -120,6 +139,7 @@ CREATE TABLE products (
 CREATE TABLE campaigns (
   id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   tenant_id       BIGINT UNSIGNED NOT NULL,
+  branch_id       BIGINT UNSIGNED NULL,
   name            VARCHAR(200) NOT NULL,
   objective       VARCHAR(100) NULL,              -- awareness | sales | engagement
   channel         VARCHAR(50)  NULL,              -- facebook | line | tiktok | instagram
@@ -265,6 +285,7 @@ CREATE TABLE chat_messages (
 CREATE TABLE sales_records (
   id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   tenant_id       BIGINT UNSIGNED NOT NULL,
+  branch_id       BIGINT UNSIGNED NULL,
   product_id      BIGINT UNSIGNED NULL,
   campaign_id     BIGINT UNSIGNED NULL,
   amount          DECIMAL(12,2) NOT NULL DEFAULT 0.00,

@@ -23,6 +23,11 @@ export class RecordSaleDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  branchId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   productId?: number;
 
   @IsOptional()

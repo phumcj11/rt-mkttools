@@ -21,6 +21,7 @@
     "campaigns": "Campaigns",
     "products": "Products",
     "analytics": "Analytics",
+    "branches": "Branches",
     "chat": "AI Assistant",
     "settings": "Settings",
     "logout": "Sign out",
@@ -67,7 +68,20 @@
     "aiUsage": "AI Usage",
     "totalProducts": "Total Products",
     "thisMonth": "Last 30 days",
-    "placeholderNote": "See detailed sales reports and charts in the “Analytics” menu"
+    "placeholderNote": "See detailed sales reports and charts in the “Analytics” menu",
+    "executiveTitle": "Executive Dashboard",
+    "salesGrowth": "Sales Growth",
+    "ordersGrowth": "Orders Growth",
+    "vsPrevious": "vs previous period",
+    "branchCount": "Branches",
+    "topBranch": "Top Branch",
+    "salesByBranch": "Sales by Branch",
+    "salesByCategory": "Sales by Category",
+    "aiInsights": "AI Insights",
+    "noBranchSales": "No branch sales data yet",
+    "noCategorySales": "No category sales data yet",
+    "noInsights": "No insights for this period yet",
+    "orders": "orders"
   },
   "analyticsPage": {
     "title": "Analytics",
@@ -242,6 +256,29 @@
       "active": "Active",
       "past_due": "Past due",
       "canceled": "Canceled"
+    }
+  },
+  "branches": {
+    "title": "Branches",
+    "subtitle": "Manage branches and view sales per branch",
+    "addBranch": "Add branch",
+    "editBranch": "Edit branch",
+    "newBranch": "New branch",
+    "name": "Branch name",
+    "namePlaceholder": "e.g. Central Ladprao",
+    "code": "Branch code",
+    "codePlaceholder": "e.g. BKK-01",
+    "address": "Address",
+    "addressPlaceholder": "Branch address (optional)",
+    "phone": "Phone",
+    "phonePlaceholder": "e.g. 02-123-4567",
+    "status": "Status",
+    "actions": "Actions",
+    "empty": "No branches yet. Add your first branch to get started.",
+    "deleteConfirm": "Delete this branch?",
+    "statusValues": {
+      "active": "Open",
+      "inactive": "Closed"
     }
   }
 }

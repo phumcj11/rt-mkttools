@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Building2,
   LayoutDashboard,
   Megaphone,
   MessageCircle,
@@ -21,6 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'campaigns', href: '/campaigns', icon: Megaphone },
   { key: 'products', href: '/products', icon: Package },
   { key: 'analytics', href: '/analytics', icon: BarChart3 },
+  { key: 'branches', href: '/branches', icon: Building2 },
   { key: 'chat', href: '/chat', icon: MessageCircle },
   { key: 'settings', href: '/settings', icon: Settings },
 ];

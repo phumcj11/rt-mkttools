@@ -21,6 +21,7 @@
     "campaigns": "แคมเปญ",
     "products": "สินค้า",
     "analytics": "วิเคราะห์ข้อมูล",
+    "branches": "สาขา",
     "chat": "ผู้ช่วย AI",
     "settings": "ตั้งค่า",
     "logout": "ออกจากระบบ",
@@ -67,7 +68,20 @@
     "aiUsage": "การใช้งาน AI",
     "totalProducts": "สินค้าทั้งหมด",
     "thisMonth": "30 วันล่าสุด",
-    "placeholderNote": "ดูรายงานยอดขายและกราฟแบบละเอียดได้ที่เมนู “วิเคราะห์ข้อมูล”"
+    "placeholderNote": "ดูรายงานยอดขายและกราฟแบบละเอียดได้ที่เมนู “วิเคราะห์ข้อมูล”",
+    "executiveTitle": "แดชบอร์ดผู้บริหาร",
+    "salesGrowth": "การเติบโตยอดขาย",
+    "ordersGrowth": "การเติบโตออเดอร์",
+    "vsPrevious": "เทียบช่วงก่อนหน้า",
+    "branchCount": "จำนวนสาขา",
+    "topBranch": "สาขายอดเยี่ยม",
+    "salesByBranch": "ยอดขายรายสาขา",
+    "salesByCategory": "ยอดขายรายหมวด",
+    "aiInsights": "ข้อมูลเชิงลึกจาก AI",
+    "noBranchSales": "ยังไม่มียอดขายแยกตามสาขา",
+    "noCategorySales": "ยังไม่มียอดขายแยกตามหมวด",
+    "noInsights": "ยังไม่มีข้อมูลเชิงลึกในช่วงนี้",
+    "orders": "ออเดอร์"
   },
   "analyticsPage": {
     "title": "วิเคราะห์ข้อมูล",
@@ -242,6 +256,29 @@
       "active": "ใช้งาน",
       "past_due": "ค้างชำระ",
       "canceled": "ยกเลิก"
+    }
+  },
+  "branches": {
+    "title": "สาขา",
+    "subtitle": "จัดการสาขาและดูยอดขายแยกตามสาขา",
+    "addBranch": "เพิ่มสาขา",
+    "editBranch": "แก้ไขสาขา",
+    "newBranch": "สาขาใหม่",
+    "name": "ชื่อสาขา",
+    "namePlaceholder": "เช่น สาขาเซ็นทรัลลาดพร้าว",
+    "code": "รหัสสาขา",
+    "codePlaceholder": "เช่น BKK-01",
+    "address": "ที่อยู่",
+    "addressPlaceholder": "ที่อยู่สาขา (ไม่บังคับ)",
+    "phone": "เบอร์โทร",
+    "phonePlaceholder": "เช่น 02-123-4567",
+    "status": "สถานะ",
+    "actions": "จัดการ",
+    "empty": "ยังไม่มีสาขา เริ่มเพิ่มสาขาแรกของคุณได้เลย",
+    "deleteConfirm": "ต้องการลบสาขานี้หรือไม่?",
+    "statusValues": {
+      "active": "เปิดทำการ",
+      "inactive": "ปิดทำการ"
     }
   }
 }

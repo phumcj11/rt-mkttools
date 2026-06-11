@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   AiUsage,
+  Branch,
   Campaign,
+  Category,
   Product,
   SalesRecord,
 } from '../../database/entities';
@@ -10,7 +12,7 @@ import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([SalesRecord, Product, Campaign, AiUsage])],
+  imports: [TypeOrmModule.forFeature([SalesRecord, Product, Campaign, AiUsage, Branch, Category])],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],
   exports: [AnalyticsService],

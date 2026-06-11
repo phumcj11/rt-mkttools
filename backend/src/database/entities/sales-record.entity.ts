@@ -9,6 +9,9 @@ export class SalesRecord {
   @Column({ name: 'tenant_id', type: 'bigint', unsigned: true })
   tenantId: number;
 
+  @Column({ name: 'branch_id', type: 'bigint', unsigned: true, nullable: true })
+  branchId: number | null;
+
   @Column({ name: 'product_id', type: 'bigint', unsigned: true, nullable: true })
   productId: number | null;
 

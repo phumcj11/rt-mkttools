@@ -233,12 +233,60 @@ export interface CampaignStatusCount {
 
 export interface SalesRecordItem {
   id: number;
+  branchId: number | null;
   productId: number | null;
   campaignId: number | null;
   amount: number;
   quantity: number;
   soldAt: string;
   createdAt: string;
+}
+
+// ---------- Phase 7: branches + executive dashboard ----------
+
+export type BranchStatus = 'active' | 'inactive';
+
+export interface Branch {
+  id: number;
+  name: string;
+  code: string | null;
+  address: string | null;
+  phone: string | null;
+  status: BranchStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BranchInput {
+  name: string;
+  code?: string;
+  address?: string;
+  phone?: string;
+  status?: BranchStatus;
+}
+
+export interface BranchSalesPoint {
+  branchId: number | null;
+  name: string;
+  total: number;
+  orders: number;
+}
+
+export interface CategorySalesPoint {
+  categoryId: number | null;
+  name: string;
+  total: number;
+  quantity: number;
+}
+
+export interface ExecutiveSummary {
+  current: { totalSales: number; totalOrders: number; aiTokens: number };
+  previous: { totalSales: number; totalOrders: number };
+  growth: { sales: number; orders: number };
+  branchCount: number;
+  topBranch: BranchSalesPoint | null;
+  insights: string[];
+  periodDays: number;
 }
 
 export type PlanCode = 'free' | 'pro' | 'business';
