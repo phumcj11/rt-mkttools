@@ -19,3 +19,4 @@ export * from './plan.entity';
 export * from './subscription.entity';
 export * from './invoice.entity';
 export * from './branch.entity';
+export * from './audit-log.entity';

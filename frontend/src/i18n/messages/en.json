@@ -23,6 +23,7 @@
     "analytics": "Analytics",
     "branches": "Branches",
     "chat": "AI Assistant",
+    "audit": "Activity Log",
     "settings": "Settings",
     "logout": "Sign out",
     "menu": "Menu"
@@ -246,6 +247,11 @@
     "invoiceDate": "Date",
     "invoiceAmount": "Amount",
     "invoiceStatus": "Status",
+    "invoiceActions": "Actions",
+    "payInvoice": "Pay",
+    "voidInvoice": "Void",
+    "invoicePaid": "Invoice paid successfully",
+    "invoiceVoided": "Invoice voided successfully",
     "invoiceStatuses": {
       "open": "Open",
       "paid": "Paid",
@@ -279,6 +285,27 @@
     "statusValues": {
       "active": "Open",
       "inactive": "Closed"
+    }
+  },
+  "audit": {
+    "title": "Activity Log",
+    "subtitle": "History of important actions in the system (Audit Logs)",
+    "time": "Time",
+    "action": "Action",
+    "entity": "Entity",
+    "user": "User",
+    "details": "Details",
+    "empty": "No activity logged yet",
+    "refresh": "Refresh",
+    "actions": {
+      "auth.login": "Signed in",
+      "auth.registered": "Registered",
+      "billing.plan_changed": "Plan changed",
+      "billing.invoice_paid": "Invoice paid",
+      "billing.invoice_voided": "Invoice voided",
+      "branch.created": "Branch created",
+      "branch.updated": "Branch updated",
+      "branch.deleted": "Branch deleted"
     }
   }
 }

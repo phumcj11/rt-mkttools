@@ -24,6 +24,9 @@
   "billing": {
     "noSubscription": "No subscription found for this shop",
     "planNotFound": "Selected plan was not found",
-    "userLimitExceeded": "User limit for your plan has been exceeded"
+    "userLimitExceeded": "User limit for your plan has been exceeded",
+    "invoiceNotFound": "Invoice not found",
+    "invoiceNotPayable": "This invoice cannot be paid",
+    "invoiceNotVoidable": "This invoice cannot be voided"
   }
 }

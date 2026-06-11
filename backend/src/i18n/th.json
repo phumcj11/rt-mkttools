@@ -24,6 +24,9 @@
   "billing": {
     "noSubscription": "ไม่พบแพ็กเกจของร้าน",
     "planNotFound": "ไม่พบแพ็กเกจที่เลือก",
-    "userLimitExceeded": "จำนวนผู้ใช้เกินขีดจำกัดของแพ็กเกจ"
+    "userLimitExceeded": "จำนวนผู้ใช้เกินขีดจำกัดของแพ็กเกจ",
+    "invoiceNotFound": "ไม่พบใบแจ้งหนี้",
+    "invoiceNotPayable": "ใบแจ้งหนี้นี้ไม่สามารถชำระได้",
+    "invoiceNotVoidable": "ใบแจ้งหนี้นี้ไม่สามารถยกเลิกได้"
   }
 }

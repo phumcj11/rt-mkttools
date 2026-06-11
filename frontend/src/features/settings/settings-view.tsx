@@ -15,7 +15,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ApiError } from '@/lib/api';
-import { changePlan, getSubscription, listInvoices, listPlans } from '@/lib/billing-api';
+import {
+  changePlan,
+  getSubscription,
+  listInvoices,
+  listPlans,
+  payInvoice,
+  voidInvoice,
+} from '@/lib/billing-api';
 import type { InvoiceItem, PlanCode, PlanSummary, SubscriptionSummary } from '@/lib/types';
 
 const PLAN_ORDER: PlanCode[] = ['free', 'pro', 'business'];
@@ -39,6 +46,7 @@ export function SettingsView() {
   const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<PlanCode | null>(null);
+  const [invoiceBusy, setInvoiceBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -81,6 +89,38 @@ export function SettingsView() {
       setError(err instanceof ApiError ? err.message : te('generic'));
     } finally {
       setUpgrading(null);
+    }
+  };
+
+  const handlePayInvoice = async (id: number) => {
+    setInvoiceBusy(id);
+    setError(null);
+    setMessage(null);
+    try {
+      await payInvoice(id);
+      const [inv, sub] = await Promise.all([listInvoices(), getSubscription()]);
+      setInvoices(inv);
+      setSubscription(sub);
+      setMessage(t('invoicePaid'));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : te('generic'));
+    } finally {
+      setInvoiceBusy(null);
+    }
+  };
+
+  const handleVoidInvoice = async (id: number) => {
+    setInvoiceBusy(id);
+    setError(null);
+    setMessage(null);
+    try {
+      await voidInvoice(id);
+      setInvoices(await listInvoices());
+      setMessage(t('invoiceVoided'));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : te('generic'));
+    } finally {
+      setInvoiceBusy(null);
     }
   };
 
@@ -227,6 +267,7 @@ export function SettingsView() {
                   <TableHead>{t('invoiceDate')}</TableHead>
                   <TableHead>{t('invoiceAmount')}</TableHead>
                   <TableHead>{t('invoiceStatus')}</TableHead>
+                  <TableHead className="text-right">{t('invoiceActions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -237,9 +278,44 @@ export function SettingsView() {
                       {formatPrice(inv.amount, 'th')} {inv.currency}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={inv.status === 'paid' ? 'success' : 'warning'}>
+                      <Badge
+                        variant={
+                          inv.status === 'paid'
+                            ? 'success'
+                            : inv.status === 'void'
+                              ? 'muted'
+                              : 'warning'
+                        }
+                      >
                         {t(`invoiceStatuses.${inv.status}`)}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {inv.status === 'open' ? (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            disabled={invoiceBusy !== null}
+                            onClick={() => void handlePayInvoice(inv.id)}
+                          >
+                            {invoiceBusy === inv.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              t('payInvoice')
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={invoiceBusy !== null}
+                            onClick={() => void handleVoidInvoice(inv.id)}
+                          >
+                            {t('voidInvoice')}
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

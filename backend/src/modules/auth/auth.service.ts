@@ -11,6 +11,7 @@ import {
 } from '../../common/exceptions/app.exception';
 import { JwtConfig } from '../../config/configuration';
 import { RefreshToken, Role, RoleName, Tenant, User } from '../../database/entities';
+import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
 import { JwtPayload } from '../../common/interfaces/auth-user.interface';
 import { LoginDto } from './dto/login.dto';
@@ -35,6 +36,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly billingService: BillingService,
+    private readonly audit: AuditService,
   ) {
     this.jwtConfig = this.config.getOrThrow<JwtConfig>('jwt');
   }
@@ -74,6 +76,15 @@ export class AuthService {
       }),
     );
 
+    await this.audit.log({
+      tenantId: tenant.id,
+      userId: user.id,
+      action: 'auth.registered',
+      entity: 'user',
+      entityId: user.id,
+      metadata: { email: user.email },
+    });
+
     return this.buildAuthResponse(user, tenant);
   }
 
@@ -96,6 +107,13 @@ export class AuthService {
     }
 
     await this.userRepo.update(user.id, { lastLoginAt: new Date() });
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'auth.login',
+      entity: 'user',
+      entityId: user.id,
+    });
     return this.buildAuthResponse(user, user.tenant);
   }
 

@@ -34,7 +34,7 @@ export class BranchesController {
   @Post()
   @Roles('owner', 'admin')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateBranchDto) {
-    return this.branchesService.create(user.tenantId, dto);
+    return this.branchesService.create(user.tenantId, dto, user.id);
   }
 
   @Patch(':id')
@@ -44,14 +44,14 @@ export class BranchesController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateBranchDto,
   ) {
-    return this.branchesService.update(user.tenantId, id, dto);
+    return this.branchesService.update(user.tenantId, id, dto, user.id);
   }
 
   @Delete(':id')
   @Roles('owner', 'admin')
   @HttpCode(HttpStatus.OK)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
-    await this.branchesService.remove(user.tenantId, id);
+    await this.branchesService.remove(user.tenantId, id, user.id);
     return { message: 'ลบสาขาเรียบร้อย' };
   }
 }

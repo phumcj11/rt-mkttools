@@ -5,6 +5,7 @@ import {
   Megaphone,
   MessageCircle,
   Package,
+  ScrollText,
   Settings,
   Sparkles,
   type LucideIcon,
@@ -24,5 +25,6 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'analytics', href: '/analytics', icon: BarChart3 },
   { key: 'branches', href: '/branches', icon: Building2 },
   { key: 'chat', href: '/chat', icon: MessageCircle },
+  { key: 'audit', href: '/audit', icon: ScrollText },
   { key: 'settings', href: '/settings', icon: Settings },
 ];

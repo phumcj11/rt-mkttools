@@ -289,6 +289,18 @@ export interface ExecutiveSummary {
   periodDays: number;
 }
 
+export interface AuditLogItem {
+  id: number;
+  tenantId: number | null;
+  userId: number | null;
+  action: string;
+  entity: string | null;
+  entityId: number | null;
+  metadata: Record<string, unknown> | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
 export type PlanCode = 'free' | 'pro' | 'business';
 
 export interface PlanSummary {

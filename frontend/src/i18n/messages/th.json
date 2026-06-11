@@ -23,6 +23,7 @@
     "analytics": "วิเคราะห์ข้อมูล",
     "branches": "สาขา",
     "chat": "ผู้ช่วย AI",
+    "audit": "บันทึกกิจกรรม",
     "settings": "ตั้งค่า",
     "logout": "ออกจากระบบ",
     "menu": "เมนู"
@@ -246,6 +247,11 @@
     "invoiceDate": "วันที่",
     "invoiceAmount": "จำนวนเงิน",
     "invoiceStatus": "สถานะ",
+    "invoiceActions": "จัดการ",
+    "payInvoice": "ชำระเงิน",
+    "voidInvoice": "ยกเลิก",
+    "invoicePaid": "ชำระใบแจ้งหนี้เรียบร้อย",
+    "invoiceVoided": "ยกเลิกใบแจ้งหนี้เรียบร้อย",
     "invoiceStatuses": {
       "open": "รอชำระ",
       "paid": "ชำระแล้ว",
@@ -279,6 +285,27 @@
     "statusValues": {
       "active": "เปิดทำการ",
       "inactive": "ปิดทำการ"
+    }
+  },
+  "audit": {
+    "title": "บันทึกกิจกรรม",
+    "subtitle": "ประวัติการกระทำสำคัญในระบบ (Audit Logs)",
+    "time": "เวลา",
+    "action": "การกระทำ",
+    "entity": "รายการ",
+    "user": "ผู้ใช้",
+    "details": "รายละเอียด",
+    "empty": "ยังไม่มีบันทึกกิจกรรม",
+    "refresh": "รีเฟรช",
+    "actions": {
+      "auth.login": "เข้าสู่ระบบ",
+      "auth.registered": "สมัครใช้งาน",
+      "billing.plan_changed": "เปลี่ยนแพ็กเกจ",
+      "billing.invoice_paid": "ชำระใบแจ้งหนี้",
+      "billing.invoice_voided": "ยกเลิกใบแจ้งหนี้",
+      "branch.created": "สร้างสาขา",
+      "branch.updated": "แก้ไขสาขา",
+      "branch.deleted": "ลบสาขา"
     }
   }
 }

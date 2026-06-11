@@ -7,6 +7,7 @@ import {
   NotFoundAppException,
 } from '../../common/exceptions/app.exception';
 import { AiUsage, Invoice, Plan, PlanCode, Subscription, User } from '../../database/entities';
+import { AuditService } from '../audit/audit.service';
 
 export interface PlanSummary {
   id: number;
@@ -42,6 +43,7 @@ export class BillingService {
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(AiUsage) private readonly usageRepo: Repository<AiUsage>,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   async listPlans(): Promise<PlanSummary[]> {
@@ -75,9 +77,14 @@ export class BillingService {
     );
   }
 
-  async changePlan(tenantId: number, planCode: PlanCode): Promise<SubscriptionSummary> {
+  async changePlan(
+    tenantId: number,
+    planCode: PlanCode,
+    actorUserId?: number,
+  ): Promise<SubscriptionSummary> {
     const targetPlan = await this.getPlanByCode(planCode);
     const subscription = await this.getActiveSubscription(tenantId);
+    const previousPlanId = subscription.planId;
 
     if (subscription.planId === targetPlan.id) {
       return this.buildSubscriptionSummary(subscription);
@@ -107,6 +114,15 @@ export class BillingService {
       );
     }
 
+    await this.audit.log({
+      tenantId,
+      userId: actorUserId,
+      action: 'billing.plan_changed',
+      entity: 'subscription',
+      entityId: subscription.id,
+      metadata: { previousPlanId, newPlanCode: planCode, amount: price },
+    });
+
     return this.buildSubscriptionSummary(subscription);
   }
 
@@ -115,14 +131,60 @@ export class BillingService {
       where: { tenantId },
       order: { issuedAt: 'DESC' },
     });
-    return invoices.map((inv) => ({
-      id: inv.id,
-      amount: parseFloat(inv.amount),
-      currency: inv.currency,
-      status: inv.status,
-      issuedAt: inv.issuedAt,
-      paidAt: inv.paidAt,
-    }));
+    return invoices.map((inv) => this.serializeInvoice(inv));
+  }
+
+  async payInvoice(tenantId: number, invoiceId: number, actorUserId?: number) {
+    const invoice = await this.getInvoice(tenantId, invoiceId);
+    if (invoice.status !== 'open') {
+      throw new AppException('billing.invoiceNotPayable', HttpStatus.BAD_REQUEST);
+    }
+    invoice.status = 'paid';
+    invoice.paidAt = new Date();
+    await this.invoiceRepo.save(invoice);
+
+    // เมื่อชำระแล้ว ต่ออายุรอบบิลและคง subscription เป็น active
+    if (invoice.subscriptionId) {
+      const subscription = await this.subscriptionRepo.findOne({
+        where: { id: invoice.subscriptionId, tenantId },
+      });
+      if (subscription) {
+        subscription.status = 'active';
+        subscription.currentPeriodEnd = this.nextMonthEnd();
+        await this.subscriptionRepo.save(subscription);
+      }
+    }
+
+    await this.audit.log({
+      tenantId,
+      userId: actorUserId,
+      action: 'billing.invoice_paid',
+      entity: 'invoice',
+      entityId: invoice.id,
+      metadata: { amount: parseFloat(invoice.amount) },
+    });
+
+    return this.serializeInvoice(invoice);
+  }
+
+  async voidInvoice(tenantId: number, invoiceId: number, actorUserId?: number) {
+    const invoice = await this.getInvoice(tenantId, invoiceId);
+    if (invoice.status !== 'open') {
+      throw new AppException('billing.invoiceNotVoidable', HttpStatus.BAD_REQUEST);
+    }
+    invoice.status = 'void';
+    await this.invoiceRepo.save(invoice);
+
+    await this.audit.log({
+      tenantId,
+      userId: actorUserId,
+      action: 'billing.invoice_voided',
+      entity: 'invoice',
+      entityId: invoice.id,
+      metadata: { amount: parseFloat(invoice.amount) },
+    });
+
+    return this.serializeInvoice(invoice);
   }
 
   async getTenantAiTokenLimit(tenantId: number): Promise<number> {
@@ -154,6 +216,25 @@ export class BillingService {
       throw new NotFoundAppException('billing.noSubscription');
     }
     return subscription;
+  }
+
+  private async getInvoice(tenantId: number, invoiceId: number): Promise<Invoice> {
+    const invoice = await this.invoiceRepo.findOne({ where: { id: invoiceId, tenantId } });
+    if (!invoice) {
+      throw new NotFoundAppException('billing.invoiceNotFound');
+    }
+    return invoice;
+  }
+
+  private serializeInvoice(inv: Invoice) {
+    return {
+      id: inv.id,
+      amount: parseFloat(inv.amount),
+      currency: inv.currency,
+      status: inv.status,
+      issuedAt: inv.issuedAt,
+      paidAt: inv.paidAt,
+    };
   }
 
   private async getPlanByCode(code: PlanCode): Promise<Plan> {

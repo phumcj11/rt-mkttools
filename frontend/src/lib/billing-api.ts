@@ -19,3 +19,11 @@ export function changePlan(planCode: PlanCode) {
 export function listInvoices() {
   return apiRequest<InvoiceItem[]>('/billing/invoices');
 }
+
+export function payInvoice(id: number) {
+  return apiRequest<InvoiceItem>(`/billing/invoices/${id}/pay`, { method: 'POST' });
+}
+
+export function voidInvoice(id: number) {
+  return apiRequest<InvoiceItem>(`/billing/invoices/${id}/void`, { method: 'POST' });
+}

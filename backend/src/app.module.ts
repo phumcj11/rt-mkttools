@@ -12,6 +12,7 @@ import { DatabaseModule } from './database/database.module';
 import { I18nModule } from './i18n/i18n.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { BranchesModule } from './modules/branches/branches.module';
@@ -35,6 +36,7 @@ import { UsersModule } from './modules/users/users.module';
     }),
     I18nModule,
     DatabaseModule,
+    AuditModule,
     AuthModule,
     UsersModule,
     TenantsModule,
