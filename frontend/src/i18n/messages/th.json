@@ -42,6 +42,8 @@
     "emailPlaceholder": "you@example.com",
     "password": "รหัสผ่าน",
     "passwordPlaceholder": "อย่างน้อย 8 ตัวอักษร",
+    "confirmPassword": "ยืนยันรหัสผ่าน",
+    "confirmPasswordPlaceholder": "พิมพ์รหัสผ่านอีกครั้ง",
     "loginSubmit": "เข้าสู่ระบบ",
     "registerSubmit": "สมัครใช้งาน",
     "noAccount": "ยังไม่มีบัญชี?",
@@ -54,6 +56,7 @@
     "invalidCredentials": "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
     "emailTaken": "อีเมลนี้ถูกใช้งานแล้ว",
     "validationFailed": "ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง",
+    "passwordMismatch": "รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน",
     "network": "เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ",
     "generic": "เกิดข้อผิดพลาด กรุณาลองใหม่"
   },

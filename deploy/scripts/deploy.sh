@@ -21,6 +21,8 @@ if [ -f .env ]; then
   # shellcheck disable=SC1091
   . ./.env
   set +a
+  # Next.js workspace build อ่าน .env จาก frontend/ — sync NEXT_PUBLIC_* ให้ชัวร์
+  grep '^NEXT_PUBLIC_' .env > frontend/.env.production.local 2>/dev/null || true
 fi
 
 echo "==> Building backend (NestJS)"

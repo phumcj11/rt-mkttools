@@ -1,7 +1,9 @@
 import { useAuthStore } from '@/stores/auth-store';
 import type { ApiErrorBody, AuthResult } from './types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
+// ค่าเริ่มต้น /api = same-origin (ใช้ได้บน prod ผ่าน reverse proxy แม้ build ไม่ได้โหลด .env)
+// dev ใช้ NEXT_PUBLIC_API_URL=http://localhost:4000/api จาก root .env
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
 export class ApiError extends Error {
   code: string;

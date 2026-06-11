@@ -1,7 +1,11 @@
 import { io, type Socket } from 'socket.io-client';
 import { useAuthStore } from '@/stores/auth-store';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? 'http://localhost:4000';
+function socketBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_SOCKET_URL) return process.env.NEXT_PUBLIC_SOCKET_URL;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return 'http://localhost:4000';
+}
 
 let socket: Socket | null = null;
 
@@ -12,7 +16,7 @@ let socket: Socket | null = null;
 export function getSocket(): Socket {
   if (socket) return socket;
 
-  socket = io(SOCKET_URL, {
+  socket = io(socketBaseUrl(), {
     path: '/socket.io',
     transports: ['websocket', 'polling'],
     autoConnect: false,
