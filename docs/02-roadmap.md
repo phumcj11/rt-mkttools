@@ -7,7 +7,7 @@
 | --- | --- | --- | --- |
 | 0 | Foundation / Scaffold | โครงสร้าง monorepo, เอกสาร, env, .gitignore | ✅ เสร็จ |
 | 1 | Core Backend | NestJS base, MySQL, Auth (JWT), Users, Tenants, RBAC | ✅ เสร็จ |
-| 2 | Core Frontend | Next.js base, i18n th/en, Shadcn theme (Kanit/#E60012), Auth UI, Dashboard shell | ⏳ |
+| 2 | Core Frontend | Next.js base, i18n th/en, Shadcn theme (Kanit/#E60012), Auth UI, Dashboard shell | ✅ เสร็จ |
 | 3 | AI Engine | OpenAI integration, Content Generator, prompt templates, usage/quota | ⏳ |
 | 4 | Marketing Modules | Products, Campaigns, Promotions, scheduling | ⏳ |
 | 5 | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ⏳ |
@@ -34,12 +34,13 @@
 - [x] i18n backend (th/en error messages) + response envelope มาตรฐาน
 - [x] Global JwtAuthGuard + RolesGuard + ValidationPipe + ExceptionFilter + TransformInterceptor
 
-### Phase 2 — Core Frontend
-- Next.js (App Router) + Tailwind + Shadcn UI
-- ธีม: Kanit, primary `#E60012`, accent gold, mobile first
-- i18n locale routing `/[locale]/` (default th)
-- หน้า Auth (login/register) เชื่อม backend
-- AppShell: Sidebar + Topbar + Dashboard ว่าง
+### Phase 2 — Core Frontend ✅
+- [x] Next.js (App Router) + Tailwind + Shadcn UI (button/input/label/card)
+- [x] ธีม: Kanit, primary `#E60012`, accent gold, mobile first
+- [x] i18n locale routing `/[locale]/` (default th) ด้วย next-intl + locale switcher
+- [x] หน้า Auth (login/register) เชื่อม backend จริง + จัดการ token/refresh
+- [x] AppShell: Sidebar + Topbar + Dashboard (การ์ดสถิติ) + protected route
+- [x] หน้า placeholder สำหรับ content/campaigns/products/analytics/chat/settings
 
 ### Phase 3 — AI Engine
 - โมดูล `ai` ห่อ OpenAI API

@@ -8,9 +8,12 @@
     "edit": "แก้ไข",
     "create": "สร้าง",
     "search": "ค้นหา",
+    "submit": "ยืนยัน",
     "loading": "กำลังโหลด...",
+    "processing": "กำลังดำเนินการ...",
     "confirm": "ยืนยัน",
-    "back": "ย้อนกลับ"
+    "back": "ย้อนกลับ",
+    "comingSoon": "เร็ว ๆ นี้"
   },
   "nav": {
     "dashboard": "แดชบอร์ด",
@@ -19,21 +22,56 @@
     "products": "สินค้า",
     "analytics": "วิเคราะห์ข้อมูล",
     "chat": "ผู้ช่วย AI",
-    "settings": "ตั้งค่า"
+    "settings": "ตั้งค่า",
+    "logout": "ออกจากระบบ",
+    "menu": "เมนู"
   },
   "auth": {
-    "login": "เข้าสู่ระบบ",
-    "logout": "ออกจากระบบ",
-    "register": "สมัครสมาชิก",
+    "loginTitle": "เข้าสู่ระบบ",
+    "loginSubtitle": "ยินดีต้อนรับกลับสู่ร้าน 100 บาท",
+    "registerTitle": "สมัครใช้งาน",
+    "registerSubtitle": "เริ่มต้นใช้แพลตฟอร์ม AI การตลาดสำหรับร้านของคุณ",
+    "shopName": "ชื่อร้าน",
+    "shopNamePlaceholder": "เช่น ร้าน 100 บาท สาขาหลัก",
+    "fullName": "ชื่อ-นามสกุล",
+    "fullNamePlaceholder": "ชื่อของคุณ",
     "email": "อีเมล",
+    "emailPlaceholder": "you@example.com",
     "password": "รหัสผ่าน",
-    "forgotPassword": "ลืมรหัสผ่าน?"
+    "passwordPlaceholder": "อย่างน้อย 8 ตัวอักษร",
+    "loginSubmit": "เข้าสู่ระบบ",
+    "registerSubmit": "สมัครใช้งาน",
+    "noAccount": "ยังไม่มีบัญชี?",
+    "registerLink": "สมัครใช้งาน",
+    "haveAccount": "มีบัญชีอยู่แล้ว?",
+    "loginLink": "เข้าสู่ระบบ",
+    "logout": "ออกจากระบบ"
+  },
+  "errors": {
+    "invalidCredentials": "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+    "emailTaken": "อีเมลนี้ถูกใช้งานแล้ว",
+    "validationFailed": "ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง",
+    "network": "เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ",
+    "generic": "เกิดข้อผิดพลาด กรุณาลองใหม่"
+  },
+  "validation": {
+    "required": "กรุณากรอกข้อมูลนี้",
+    "email": "รูปแบบอีเมลไม่ถูกต้อง",
+    "minPassword": "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร"
   },
   "dashboard": {
     "title": "ภาพรวม",
-    "welcome": "ยินดีต้อนรับกลับมา",
+    "welcome": "ยินดีต้อนรับ",
     "totalSales": "ยอดขายรวม",
     "activeCampaigns": "แคมเปญที่ใช้งาน",
-    "aiUsage": "การใช้งาน AI"
+    "aiUsage": "การใช้งาน AI",
+    "totalProducts": "สินค้าทั้งหมด",
+    "thisMonth": "เดือนนี้",
+    "placeholderNote": "ข้อมูลตัวอย่าง — จะเชื่อมต่อข้อมูลจริงในเฟสถัดไป"
+  },
+  "locale": {
+    "label": "ภาษา",
+    "th": "ไทย",
+    "en": "English"
   }
 }

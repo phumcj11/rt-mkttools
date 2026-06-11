@@ -8,9 +8,12 @@
     "edit": "Edit",
     "create": "Create",
     "search": "Search",
+    "submit": "Submit",
     "loading": "Loading...",
+    "processing": "Processing...",
     "confirm": "Confirm",
-    "back": "Back"
+    "back": "Back",
+    "comingSoon": "Coming soon"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -19,21 +22,56 @@
     "products": "Products",
     "analytics": "Analytics",
     "chat": "AI Assistant",
-    "settings": "Settings"
+    "settings": "Settings",
+    "logout": "Sign out",
+    "menu": "Menu"
   },
   "auth": {
-    "login": "Sign in",
-    "logout": "Sign out",
-    "register": "Sign up",
+    "loginTitle": "Sign in",
+    "loginSubtitle": "Welcome back to 100 Baht Shop",
+    "registerTitle": "Create account",
+    "registerSubtitle": "Start using the Marketing AI platform for your shop",
+    "shopName": "Shop name",
+    "shopNamePlaceholder": "e.g. 100 Baht Shop — Main branch",
+    "fullName": "Full name",
+    "fullNamePlaceholder": "Your name",
     "email": "Email",
+    "emailPlaceholder": "you@example.com",
     "password": "Password",
-    "forgotPassword": "Forgot password?"
+    "passwordPlaceholder": "At least 8 characters",
+    "loginSubmit": "Sign in",
+    "registerSubmit": "Create account",
+    "noAccount": "Don't have an account?",
+    "registerLink": "Sign up",
+    "haveAccount": "Already have an account?",
+    "loginLink": "Sign in",
+    "logout": "Sign out"
+  },
+  "errors": {
+    "invalidCredentials": "Invalid email or password",
+    "emailTaken": "This email is already in use",
+    "validationFailed": "Validation failed, please check your input",
+    "network": "Could not reach the server",
+    "generic": "Something went wrong, please try again"
+  },
+  "validation": {
+    "required": "This field is required",
+    "email": "Invalid email format",
+    "minPassword": "Password must be at least 8 characters"
   },
   "dashboard": {
     "title": "Overview",
-    "welcome": "Welcome back",
+    "welcome": "Welcome",
     "totalSales": "Total Sales",
     "activeCampaigns": "Active Campaigns",
-    "aiUsage": "AI Usage"
+    "aiUsage": "AI Usage",
+    "totalProducts": "Total Products",
+    "thisMonth": "This month",
+    "placeholderNote": "Sample data — real data will be connected in the next phase"
+  },
+  "locale": {
+    "label": "Language",
+    "th": "ไทย",
+    "en": "English"
   }
 }
