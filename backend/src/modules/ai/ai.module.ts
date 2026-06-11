@@ -9,6 +9,6 @@ import { OpenAiService } from './openai.service';
   imports: [TypeOrmModule.forFeature([AiRequest, AiUsage, AiTemplate])],
   controllers: [AiController],
   providers: [AiService, OpenAiService],
-  exports: [AiService],
+  exports: [AiService, OpenAiService],
 })
 export class AiModule {}

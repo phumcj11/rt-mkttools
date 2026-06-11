@@ -29,4 +29,7 @@ export const validationSchema = Joi.object({
   OPENAI_MAX_TOKENS: Joi.number().default(1024),
   OPENAI_TEMPERATURE: Joi.number().default(0.7),
   AI_MONTHLY_TOKEN_LIMIT: Joi.number().default(1000000),
+
+  SOCKET_PATH: Joi.string().default('/socket.io'),
+  SOCKET_CORS_ORIGINS: Joi.string().allow('').optional(),
 }).unknown(true);

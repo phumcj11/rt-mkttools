@@ -118,16 +118,16 @@ export class AiService {
     }
   }
 
-  // ---------- helpers ----------
+  // ---------- helpers (public: shared with chat) ----------
 
-  private async assertWithinQuota(tenantId: number): Promise<void> {
+  async assertWithinQuota(tenantId: number): Promise<void> {
     const usage = await this.getUsage(tenantId);
     if (usage.totalTokens >= usage.limit) {
       throw new AppException('ai.quotaExceeded', HttpStatus.TOO_MANY_REQUESTS);
     }
   }
 
-  private async addUsage(tenantId: number, tokens: number): Promise<void> {
+  async addUsage(tenantId: number, tokens: number): Promise<void> {
     const periodMonth = this.currentPeriod();
     const existing = await this.usageRepo.findOne({ where: { tenantId, periodMonth } });
     if (existing) {

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { logout } from '@/lib/auth-api';
 import { useAuthStore } from '@/stores/auth-store';
 import { LocaleSwitcher } from './locale-switcher';
+import { NotificationBell } from './notification-bell';
 
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const t = useTranslations('nav');
@@ -37,6 +38,7 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
       </Button>
 
       <div className="ml-auto flex items-center gap-3">
+        <NotificationBell />
         <LocaleSwitcher />
         <div className="hidden text-right sm:block">
           <p className="text-sm font-medium leading-tight">{user?.fullName ?? user?.email}</p>

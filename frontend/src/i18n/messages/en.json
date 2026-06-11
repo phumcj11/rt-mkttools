@@ -177,5 +177,21 @@
         "bundle": "Bundle/package"
       }
     }
+  },
+  "chat": {
+    "title": "AI Assistant",
+    "subtitle": "Chat with your marketing AI assistant in real time",
+    "newChat": "New chat",
+    "noThreads": "No conversations yet",
+    "untitled": "New conversation",
+    "emptyHint": "Ask the AI assistant anything, like promotion ideas or product captions",
+    "inputPlaceholder": "Type a message... (Enter to send, Shift+Enter for new line)",
+    "replyError": "The AI assistant failed to reply, please try again",
+    "aiNotConfigured": "AI is not configured, please contact your administrator"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "empty": "No notifications yet"
   }
 }

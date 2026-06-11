@@ -3,12 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotFoundAppException } from '../../common/exceptions/app.exception';
 import { ContentItem } from '../../database/entities';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateContentDto } from './dto/create-content.dto';
 
 @Injectable()
 export class ContentService {
   constructor(
     @InjectRepository(ContentItem) private readonly contentRepo: Repository<ContentItem>,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async findAll(tenantId: number) {
@@ -39,7 +41,17 @@ export class ContentService {
       aiRequestId: dto.aiRequestId ?? null,
       status: 'draft',
     });
-    return this.contentRepo.save(item);
+    const saved = await this.contentRepo.save(item);
+
+    await this.notifications.create({
+      tenantId,
+      userId,
+      type: 'content',
+      title: 'บันทึกคอนเทนต์แล้ว',
+      body: 'คอนเทนต์ถูกบันทึกเป็นแบบร่างเรียบร้อย',
+    });
+
+    return saved;
   }
 
   async remove(tenantId: number, id: number): Promise<void> {

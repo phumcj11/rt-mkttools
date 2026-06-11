@@ -9,8 +9,8 @@
 | 1 | Core Backend | NestJS base, MySQL, Auth (JWT), Users, Tenants, RBAC | ✅ เสร็จ |
 | 2 | Core Frontend | Next.js base, i18n th/en, Shadcn theme (Kanit/#E60012), Auth UI, Dashboard shell | ✅ เสร็จ |
 | 3 | AI Engine | OpenAI integration, Content Generator, prompt templates, usage/quota | ✅ เสร็จ |
-| 4 | Marketing Modules | Products, Campaigns, Promotions, scheduling | ⏳ |
-| 5 | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ⏳ |
+| 4 | Marketing Modules | Products, Campaigns, Promotions, scheduling | ✅ เสร็จ |
+| 5 | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ✅ เสร็จ |
 | 6 | Analytics | Dashboards, sales metrics, reports, export | ⏳ |
 | 7 | Billing & Plans | Plans, subscriptions, usage limits, invoices | ⏳ |
 | 8 | Hardening & Deploy | Security, tests, Nginx/PM2 บน AlmaLinux, monitoring, backups | ⏳ |
@@ -56,10 +56,13 @@
 - [x] Products UI: ตาราง + ฟอร์มเพิ่ม/แก้ไข/ลบ + แผงจัดการหมวดหมู่
 - [x] Campaigns UI: ตาราง + ฟอร์มเพิ่ม/แก้ไข/ลบ + แผงจัดการโปรโมชั่นต่อแคมเปญ
 
-### Phase 5 — Realtime & Notifications
-- Socket.io gateway (auth ด้วย JWT)
-- Notifications แบบ push live
-- AI chat (threads + messages, streaming)
+### Phase 5 — Realtime & Notifications ✅
+- [x] Socket.io gateway (`@nestjs/platform-socket.io`) + auth ด้วย JWT ตอน handshake (`auth.token`)
+- [x] ห้อง realtime แยกตาม `user:{id}` และ `tenant:{id}` + `RealtimeService` (global) สำหรับ emit
+- [x] โมดูล `notifications` (REST: list / unread-count / mark-read / read-all) + push event `notification:new`
+- [x] ผูก notification เข้ากับ flow จริง (สร้างแคมเปญ / บันทึกคอนเทนต์)
+- [x] โมดูล `chat` (threads + messages, tenant/user-scoped) + OpenAI streaming ผ่าน event `chat:send`/`chat:chunk`/`chat:done`
+- [x] Frontend: socket client + กระดิ่งแจ้งเตือนบน Topbar (badge + dropdown) + หน้า Chat สตรีมเรียลไทม์
 
 ### Phase 6 — Analytics
 - บันทึก sales_records + สรุป metrics_daily

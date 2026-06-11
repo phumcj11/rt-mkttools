@@ -160,3 +160,42 @@ export interface PromotionInput {
   startDate?: string;
   endDate?: string;
 }
+
+// ---------- Phase 5: realtime & notifications ----------
+
+export type NotificationType = 'system' | 'campaign' | 'content' | 'ai' | 'product';
+
+export interface Notification {
+  id: number;
+  tenantId: number;
+  userId: number | null;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export type ChatRole = 'user' | 'assistant' | 'system';
+
+export interface ChatThread {
+  id: number;
+  title: string | null;
+  createdAt: string;
+}
+
+export interface ChatMessage {
+  id: number;
+  threadId: number;
+  role: ChatRole;
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatDonePayload {
+  threadId: number;
+  userMessageId: number;
+  assistantMessageId: number;
+  content: string;
+  tokens: { prompt: number; completion: number; total: number };
+}

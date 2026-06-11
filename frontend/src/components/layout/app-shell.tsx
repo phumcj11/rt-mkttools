@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
+import { useRealtime } from '@/lib/use-realtime';
 import { useAuthStore } from '@/stores/auth-store';
 import { SidebarNav } from './sidebar';
 import { Topbar } from './topbar';
@@ -12,6 +13,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { hydrated, accessToken } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useRealtime();
 
   useEffect(() => {
     if (hydrated && !accessToken) {

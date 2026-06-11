@@ -1,0 +1,32 @@
+# ============================================================
+#  ร้าน 100 บาท — .htaccess reverse proxy (DirectAdmin subdomain)
+#  วางไฟล์นี้ที่ docroot ของ subdomain เช่น
+#    /home/<user>/domains/rt.k-mkt.com/public_html/.htaccess
+#
+#  ทำหน้าที่ proxy ไป Node ที่รันด้วย PM2:
+#    /api, /socket.io -> NestJS  (127.0.0.1:4000)
+#    อื่น ๆ ทั้งหมด    -> Next.js (127.0.0.1:3000)
+#
+#  ต้องเปิดโมดูล: proxy proxy_http rewrite (ปกติ DirectAdmin เปิดให้อยู่แล้ว)
+#
+#  *** สำคัญมากสำหรับ SSL/Let's Encrypt ***
+#  บรรทัด acme-challenge ด้านล่าง "ห้ามลบ" — DirectAdmin ใช้ global Alias
+#    /.well-known/acme-challenge -> /var/www/html/.well-known/acme-challenge
+#  ถ้า proxy ดักเส้นทางนี้ การออก/ต่ออายุใบ (renew ทุก ~60 วัน) จะล้มทันที
+# ============================================================
+RewriteEngine On
+
+# Let's Encrypt HTTP-01 challenge ต้องเสิร์ฟจาก disk ห้าม proxy/redirect
+RewriteRule ^\.well-known/acme-challenge/ - [L]
+
+# bare root -> default locale (เลี่ยง edge case proxy path ว่างที่ทำให้ Next 404)
+RewriteRule ^$ /th [R=302,L]
+
+RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+RewriteRule ^api(/.*)?$        http://127.0.0.1:4000%{REQUEST_URI} [P,L]
+
+RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+RewriteRule ^socket\.io(/.*)?$ http://127.0.0.1:4000%{REQUEST_URI} [P,L]
+
+RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+RewriteRule ^                  http://127.0.0.1:3000%{REQUEST_URI} [P,L]

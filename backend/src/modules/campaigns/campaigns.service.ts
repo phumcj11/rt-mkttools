@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotFoundAppException } from '../../common/exceptions/app.exception';
 import { Campaign, Promotion } from '../../database/entities';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
@@ -12,6 +13,7 @@ export class CampaignsService {
   constructor(
     @InjectRepository(Campaign) private readonly campaignRepo: Repository<Campaign>,
     @InjectRepository(Promotion) private readonly promotionRepo: Repository<Promotion>,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ---------- campaigns ----------
@@ -26,8 +28,8 @@ export class CampaignsService {
     return campaign;
   }
 
-  create(tenantId: number, userId: number | null, dto: CreateCampaignDto) {
-    return this.campaignRepo.save(
+  async create(tenantId: number, userId: number | null, dto: CreateCampaignDto) {
+    const campaign = await this.campaignRepo.save(
       this.campaignRepo.create({
         tenantId,
         createdBy: userId,
@@ -39,6 +41,16 @@ export class CampaignsService {
         endDate: dto.endDate ?? null,
       }),
     );
+
+    await this.notifications.create({
+      tenantId,
+      userId,
+      type: 'campaign',
+      title: 'สร้างแคมเปญใหม่',
+      body: `แคมเปญ "${campaign.name}" ถูกสร้างเรียบร้อยแล้ว`,
+    });
+
+    return campaign;
   }
 
   async update(tenantId: number, id: number, dto: UpdateCampaignDto) {

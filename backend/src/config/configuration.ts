@@ -35,11 +35,17 @@ export interface AiConfig {
   monthlyTokenLimit: number;
 }
 
+export interface RealtimeConfig {
+  path: string;
+  corsOrigins: string[];
+}
+
 export interface RootConfig {
   app: AppConfig;
   database: DatabaseConfig;
   jwt: JwtConfig;
   ai: AiConfig;
+  realtime: RealtimeConfig;
 }
 
 const toBool = (value: string | undefined, fallback = false): boolean => {
@@ -88,5 +94,13 @@ export default (): RootConfig => ({
     maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS ?? '1024', 10),
     temperature: parseFloat(process.env.OPENAI_TEMPERATURE ?? '0.7'),
     monthlyTokenLimit: parseInt(process.env.AI_MONTHLY_TOKEN_LIMIT ?? '1000000', 10),
+  },
+  realtime: {
+    path: process.env.SOCKET_PATH ?? '/socket.io',
+    // ใช้ origin เดียวกับ CORS ของ REST หากไม่ได้ตั้ง SOCKET_CORS_ORIGINS แยก
+    corsOrigins: toList(
+      process.env.SOCKET_CORS_ORIGINS ?? process.env.CORS_ORIGINS,
+      ['http://localhost:3000'],
+    ),
   },
 });

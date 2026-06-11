@@ -15,5 +15,10 @@
     "quotaExceeded": "Monthly AI quota for your plan has been exceeded",
     "generationFailed": "Content generation failed, please try again",
     "notConfigured": "AI is not configured, please contact your administrator"
+  },
+  "chat": {
+    "threadNotFound": "Conversation not found",
+    "replyFailed": "The AI assistant failed to reply, please try again",
+    "emptyMessage": "Please type a message before sending"
   }
 }
