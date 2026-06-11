@@ -9,7 +9,14 @@ import {
 } from 'class-validator';
 import { RoleName, UserStatus } from '../../../database/entities';
 
-const ROLE_VALUES: RoleName[] = ['owner', 'admin', 'editor', 'viewer'];
+const ROLE_VALUES: RoleName[] = [
+  'super_admin',
+  'admin',
+  'marketing_manager',
+  'marketing_staff',
+  'branch_manager',
+  'customer_service',
+];
 const STATUS_VALUES: UserStatus[] = ['active', 'invited', 'disabled'];
 
 export class UpdateUserDto {

@@ -23,7 +23,7 @@ export class BillingController {
   }
 
   @Patch('subscription')
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   changePlan(@CurrentUser() user: AuthUser, @Body() dto: ChangePlanDto) {
     return this.billingService.changePlan(user.tenantId, dto.planCode, user.id);
   }
@@ -34,7 +34,7 @@ export class BillingController {
   }
 
   @Post('invoices/:id/pay')
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   payInvoice(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
@@ -44,7 +44,7 @@ export class BillingController {
   }
 
   @Post('invoices/:id/void')
-  @Roles('owner', 'admin')
+  @Roles('super_admin', 'admin')
   voidInvoice(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.billingService.voidInvoice(user.tenantId, id, user.id);
   }

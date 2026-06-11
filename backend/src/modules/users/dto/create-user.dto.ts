@@ -12,7 +12,14 @@ import {
 } from 'class-validator';
 import { RoleName } from '../../../database/entities';
 
-const ROLE_VALUES: RoleName[] = ['owner', 'admin', 'editor', 'viewer'];
+const ROLE_VALUES: RoleName[] = [
+  'super_admin',
+  'admin',
+  'marketing_manager',
+  'marketing_staff',
+  'branch_manager',
+  'customer_service',
+];
 
 export class CreateUserDto {
   @IsEmail()
