@@ -1,0 +1,31 @@
+import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+
+export interface ApiResponse<T> {
+  success: true;
+  data: T;
+}
+
+/**
+ * ห่อ response ทุกตัวให้อยู่ในรูป { success: true, data }
+ * (เว้น response ที่มี meta/pagination อยู่แล้วจะแนบ meta ออกมาด้วย)
+ */
+@Injectable()
+export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<T> | any> {
+  intercept(_context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T> | any> {
+    return next.handle().pipe(
+      map((payload) => {
+        if (
+          payload &&
+          typeof payload === 'object' &&
+          'data' in payload &&
+          'meta' in payload
+        ) {
+          return { success: true, ...payload };
+        }
+        return { success: true, data: payload ?? null };
+      }),
+    );
+  }
+}

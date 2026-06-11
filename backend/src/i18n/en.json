@@ -1,0 +1,18 @@
+{
+  "auth": {
+    "invalidCredentials": "Invalid email or password",
+    "unauthorized": "Please sign in",
+    "forbidden": "You do not have permission to access this resource",
+    "emailTaken": "This email is already in use"
+  },
+  "common": {
+    "notFound": "Not found",
+    "validationFailed": "Validation failed",
+    "serverError": "Internal server error",
+    "rateLimited": "Too many requests, please try again later"
+  },
+  "ai": {
+    "quotaExceeded": "Monthly AI quota for your plan has been exceeded",
+    "generationFailed": "Content generation failed, please try again"
+  }
+}

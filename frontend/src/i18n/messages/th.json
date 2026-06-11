@@ -1,0 +1,39 @@
+{
+  "common": {
+    "appName": "ร้าน 100 บาท",
+    "appTagline": "แพลตฟอร์ม AI การตลาด",
+    "save": "บันทึก",
+    "cancel": "ยกเลิก",
+    "delete": "ลบ",
+    "edit": "แก้ไข",
+    "create": "สร้าง",
+    "search": "ค้นหา",
+    "loading": "กำลังโหลด...",
+    "confirm": "ยืนยัน",
+    "back": "ย้อนกลับ"
+  },
+  "nav": {
+    "dashboard": "แดชบอร์ด",
+    "contentStudio": "สตูดิโอคอนเทนต์",
+    "campaigns": "แคมเปญ",
+    "products": "สินค้า",
+    "analytics": "วิเคราะห์ข้อมูล",
+    "chat": "ผู้ช่วย AI",
+    "settings": "ตั้งค่า"
+  },
+  "auth": {
+    "login": "เข้าสู่ระบบ",
+    "logout": "ออกจากระบบ",
+    "register": "สมัครสมาชิก",
+    "email": "อีเมล",
+    "password": "รหัสผ่าน",
+    "forgotPassword": "ลืมรหัสผ่าน?"
+  },
+  "dashboard": {
+    "title": "ภาพรวม",
+    "welcome": "ยินดีต้อนรับกลับมา",
+    "totalSales": "ยอดขายรวม",
+    "activeCampaigns": "แคมเปญที่ใช้งาน",
+    "aiUsage": "การใช้งาน AI"
+  }
+}

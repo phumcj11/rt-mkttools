@@ -1,0 +1,39 @@
+{
+  "common": {
+    "appName": "100 Baht Shop",
+    "appTagline": "Marketing AI Platform",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "loading": "Loading...",
+    "confirm": "Confirm",
+    "back": "Back"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "contentStudio": "Content Studio",
+    "campaigns": "Campaigns",
+    "products": "Products",
+    "analytics": "Analytics",
+    "chat": "AI Assistant",
+    "settings": "Settings"
+  },
+  "auth": {
+    "login": "Sign in",
+    "logout": "Sign out",
+    "register": "Sign up",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?"
+  },
+  "dashboard": {
+    "title": "Overview",
+    "welcome": "Welcome back",
+    "totalSales": "Total Sales",
+    "activeCampaigns": "Active Campaigns",
+    "aiUsage": "AI Usage"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "rt-mkttools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ร้าน 100 บาท — Marketing AI Platform (Thai-first SaaS). Monorepo: Next.js frontend + NestJS backend + MySQL.",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev:backend": "npm --workspace backend run start:dev",
+    "build:frontend": "npm --workspace frontend run build",
+    "build:backend": "npm --workspace backend run build",
+    "lint": "npm --workspaces run lint --if-present",
+    "test": "npm --workspaces run test --if-present"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "keywords": [
+    "marketing",
+    "ai",
+    "saas",
+    "nextjs",
+    "nestjs",
+    "mysql",
+    "thai",
+    "i18n"
+  ]
+}
