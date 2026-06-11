@@ -159,7 +159,7 @@ export function PosmView() {
               ) : (
                 <div className="flex aspect-[3/4] items-center justify-center rounded-lg border-2 border-dashed">
                   <p className="text-center text-sm text-muted-foreground px-4">
-                    กรอกข้อมูลสินค้าและกด "สร้าง POSM" เพื่อดู Preview
+                    กรอกข้อมูลสินค้าและกด &quot;สร้าง POSM&quot; เพื่อดู Preview
                   </p>
                 </div>
               )}
