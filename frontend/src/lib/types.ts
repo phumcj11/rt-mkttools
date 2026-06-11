@@ -287,6 +287,12 @@ export interface ExecutiveSummary {
   topBranch: BranchSalesPoint | null;
   insights: string[];
   periodDays: number;
+  kpis: {
+    chatThreads: number;
+    chatMessages: number;
+    reviews: { count: number; avgRating: number | null; placeholder: boolean };
+    social: { mentions: number; placeholder: boolean };
+  };
 }
 
 export interface AuditLogItem {
@@ -333,9 +339,13 @@ export interface InvoiceItem {
   amount: number;
   currency: string;
   status: 'open' | 'paid' | 'void';
+  paymentMethod?: 'manual' | 'bank_transfer' | 'promptpay' | null;
+  paymentReference?: string | null;
   issuedAt: string;
   paidAt: string | null;
 }
+
+export type PaymentMethod = 'manual' | 'bank_transfer' | 'promptpay';
 
 // ----- ERP integration (read-only, live from ChangSiam) -----
 

@@ -5,6 +5,8 @@ import {
   Branch,
   Campaign,
   Category,
+  ChatMessage,
+  ChatThread,
   Product,
   SalesRecord,
 } from '../../database/entities';
@@ -12,7 +14,7 @@ import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([SalesRecord, Product, Campaign, AiUsage, Branch, Category])],
+  imports: [TypeOrmModule.forFeature([SalesRecord, Product, Campaign, AiUsage, Branch, Category, ChatThread, ChatMessage])],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],
   exports: [AnalyticsService],

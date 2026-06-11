@@ -30,7 +30,8 @@
     "userLimitExceeded": "User limit for your plan has been exceeded",
     "invoiceNotFound": "Invoice not found",
     "invoiceNotPayable": "This invoice cannot be paid",
-    "invoiceNotVoidable": "This invoice cannot be voided"
+    "invoiceNotVoidable": "This invoice cannot be voided",
+    "featureNotAvailable": "This feature is not included in your plan. Please upgrade"
   },
   "erp": {
     "unavailable": "Could not reach the ERP system, please try again later"

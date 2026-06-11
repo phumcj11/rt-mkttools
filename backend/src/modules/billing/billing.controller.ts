@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { BillingService } from './billing.service';
 import { ChangePlanDto } from './dto/change-plan.dto';
+import { PayInvoiceDto } from './dto/pay-invoice.dto';
 
 @Controller('billing')
 export class BillingController {
@@ -34,8 +35,12 @@ export class BillingController {
 
   @Post('invoices/:id/pay')
   @Roles('owner', 'admin')
-  payInvoice(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
-    return this.billingService.payInvoice(user.tenantId, id, user.id);
+  payInvoice(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: PayInvoiceDto,
+  ) {
+    return this.billingService.payInvoice(user.tenantId, id, dto, user.id);
   }
 
   @Post('invoices/:id/void')

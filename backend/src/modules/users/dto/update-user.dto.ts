@@ -1,7 +1,9 @@
 import {
   IsArray,
   IsIn,
+  IsInt,
   IsOptional,
+  IsPositive,
   IsString,
   MaxLength,
 } from 'class-validator';
@@ -29,4 +31,9 @@ export class UpdateUserDto {
   @IsArray()
   @IsIn(ROLE_VALUES, { each: true })
   roles?: RoleName[];
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  branchId?: number | null;
 }

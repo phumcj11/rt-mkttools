@@ -27,7 +27,12 @@
     "audit": "บันทึกกิจกรรม",
     "settings": "ตั้งค่า",
     "logout": "ออกจากระบบ",
-    "menu": "เมนู"
+    "menu": "เมนู",
+    "sections": {
+      "intelligence": "ข้อมูลและ AI",
+      "marketing": "การตลาด",
+      "operations": "การดำเนินงาน"
+    }
   },
   "auth": {
     "loginTitle": "เข้าสู่ระบบ",
@@ -99,7 +104,13 @@
     "noBranchSales": "ยังไม่มียอดขายแยกตามสาขา",
     "noCategorySales": "ยังไม่มียอดขายแยกตามหมวด",
     "noInsights": "ยังไม่มีข้อมูลเชิงลึกในช่วงนี้",
-    "orders": "ออเดอร์"
+    "orders": "ออเดอร์",
+    "kpiChatThreads": "ห้องสนทนา AI",
+    "kpiChatMessages": "ข้อความ AI",
+    "kpiReviews": "Google Review",
+    "kpiSocial": "Social Listening",
+    "kpiComingSoon": "เร็ว ๆ นี้ (Phase 9–10)",
+    "kpiSection": "KPI อื่น ๆ"
   },
   "analyticsPage": {
     "title": "วิเคราะห์ข้อมูล",
@@ -116,7 +127,9 @@
     "noProducts": "ยังไม่มีข้อมูลสินค้าขายดี",
     "noCampaigns": "ยังไม่มีแคมเปญ",
     "emptyData": "ยังไม่มีข้อมูลยอดขายในช่วงนี้ ลองสร้างข้อมูลตัวอย่างเพื่อดูการทำงาน",
-    "generateSample": "สร้างข้อมูลตัวอย่าง"
+    "generateSample": "สร้างข้อมูลตัวอย่าง",
+    "filterBranch": "กรองตามสาขา",
+    "allBranches": "ทุกสาขา"
   },
   "locale": {
     "label": "ภาษา",
@@ -258,7 +271,7 @@
     "planChanged": "เปลี่ยนแพ็กเกจเรียบร้อย",
     "planAiTokens": "AI {count} โทเค็น/เดือน",
     "planUsers": "ผู้ใช้ได้สูงสุด {count} คน",
-    "paymentNote": "การชำระเงินจริงจะเชื่อมต่อในเฟสถัดไป — ตอนนี้เป็นการเปลี่ยนแพ็กเกจแบบ mock",
+    "paymentNote": "ชำระผ่านโอนเงิน/PromptPay แล้วกดชำระเงิน — ระบบบันทึกวิธีชำระและเลขอ้างอิง",
     "invoices": "ใบแจ้งหนี้",
     "noInvoices": "ยังไม่มีใบแจ้งหนี้",
     "invoiceDate": "วันที่",
@@ -267,6 +280,14 @@
     "invoiceActions": "จัดการ",
     "payInvoice": "ชำระเงิน",
     "voidInvoice": "ยกเลิก",
+    "paymentMethod": "วิธีชำระเงิน",
+    "paymentReference": "เลขอ้างอิง/หลักฐาน",
+    "paymentReferencePlaceholder": "เช่น เลขสลิปโอนเงิน",
+    "paymentMethods": {
+      "bank_transfer": "โอนเงินธนาคาร",
+      "promptpay": "PromptPay",
+      "manual": "ชำระด้วยตนเอง"
+    },
     "invoicePaid": "ชำระใบแจ้งหนี้เรียบร้อย",
     "invoiceVoided": "ยกเลิกใบแจ้งหนี้เรียบร้อย",
     "invoiceStatuses": {

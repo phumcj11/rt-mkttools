@@ -18,8 +18,9 @@ export class CampaignsService {
 
   // ---------- campaigns ----------
 
-  findAll(tenantId: number) {
-    return this.campaignRepo.find({ where: { tenantId }, order: { createdAt: 'DESC' } });
+  findAll(tenantId: number, branchId?: number) {
+    const where = branchId !== undefined ? { tenantId, branchId } : { tenantId };
+    return this.campaignRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
   async findOne(tenantId: number, id: number) {
@@ -39,6 +40,7 @@ export class CampaignsService {
         status: dto.status ?? 'draft',
         startDate: dto.startDate ?? null,
         endDate: dto.endDate ?? null,
+        branchId: dto.branchId ?? null,
       }),
     );
 
@@ -62,6 +64,7 @@ export class CampaignsService {
       ...(dto.status !== undefined && { status: dto.status }),
       ...(dto.startDate !== undefined && { startDate: dto.startDate }),
       ...(dto.endDate !== undefined && { endDate: dto.endDate }),
+      ...(dto.branchId !== undefined && { branchId: dto.branchId }),
     });
     return this.campaignRepo.save(campaign);
   }

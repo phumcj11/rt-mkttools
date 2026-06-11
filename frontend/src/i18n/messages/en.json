@@ -27,7 +27,12 @@
     "audit": "Activity Log",
     "settings": "Settings",
     "logout": "Sign out",
-    "menu": "Menu"
+    "menu": "Menu",
+    "sections": {
+      "intelligence": "Intelligence",
+      "marketing": "Marketing",
+      "operations": "Operations"
+    }
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -99,7 +104,13 @@
     "noBranchSales": "No branch sales data yet",
     "noCategorySales": "No category sales data yet",
     "noInsights": "No insights for this period yet",
-    "orders": "orders"
+    "orders": "orders",
+    "kpiChatThreads": "AI chat threads",
+    "kpiChatMessages": "AI messages",
+    "kpiReviews": "Google Reviews",
+    "kpiSocial": "Social Listening",
+    "kpiComingSoon": "Coming in Phase 9–10",
+    "kpiSection": "Other KPIs"
   },
   "analyticsPage": {
     "title": "Analytics",
@@ -116,7 +127,9 @@
     "noProducts": "No top product data yet",
     "noCampaigns": "No campaigns yet",
     "emptyData": "No sales data in this period. Generate sample data to see it in action.",
-    "generateSample": "Generate Sample Data"
+    "generateSample": "Generate Sample Data",
+    "filterBranch": "Filter by branch",
+    "allBranches": "All branches"
   },
   "locale": {
     "label": "Language",
@@ -258,7 +271,7 @@
     "planChanged": "Plan updated successfully",
     "planAiTokens": "{count} AI tokens/month",
     "planUsers": "Up to {count} users",
-    "paymentNote": "Real payments will be integrated later — plan changes are mock for now",
+    "paymentNote": "Pay via bank transfer or PromptPay, then mark as paid with reference number",
     "invoices": "Invoices",
     "noInvoices": "No invoices yet",
     "invoiceDate": "Date",
@@ -267,6 +280,14 @@
     "invoiceActions": "Actions",
     "payInvoice": "Pay",
     "voidInvoice": "Void",
+    "paymentMethod": "Payment method",
+    "paymentReference": "Reference / slip no.",
+    "paymentReferencePlaceholder": "e.g. transfer slip ID",
+    "paymentMethods": {
+      "bank_transfer": "Bank transfer",
+      "promptpay": "PromptPay",
+      "manual": "Manual"
+    },
     "invoicePaid": "Invoice paid successfully",
     "invoiceVoided": "Invoice voided successfully",
     "invoiceStatuses": {

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { AuditSkip } from '../../common/decorators/audit-skip.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
@@ -9,6 +10,7 @@ import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
+@AuditSkip()
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}

@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength, Matches, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsPositive, IsString, MaxLength, Matches, MinLength } from 'class-validator';
 import { CampaignStatus } from '../../../database/entities';
 
 const STATUS: CampaignStatus[] = ['draft', 'scheduled', 'running', 'completed', 'archived'];
@@ -31,4 +31,9 @@ export class CreateCampaignDto {
   @IsOptional()
   @Matches(DATE_RE, { message: 'endDate ต้องเป็นรูปแบบ YYYY-MM-DD' })
   endDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  branchId?: number;
 }

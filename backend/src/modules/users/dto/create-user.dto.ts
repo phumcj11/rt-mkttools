@@ -3,7 +3,9 @@ import {
   IsArray,
   IsEmail,
   IsIn,
+  IsInt,
   IsOptional,
+  IsPositive,
   IsString,
   MaxLength,
   MinLength,
@@ -31,4 +33,9 @@ export class CreateUserDto {
   @ArrayNotEmpty()
   @IsIn(ROLE_VALUES, { each: true })
   roles: RoleName[];
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  branchId?: number;
 }

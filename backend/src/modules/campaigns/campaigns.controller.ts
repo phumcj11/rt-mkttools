@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -22,8 +23,8 @@ export class CampaignsController {
   constructor(private readonly campaignsService: CampaignsService) {}
 
   @Get()
-  findAll(@CurrentUser() user: AuthUser) {
-    return this.campaignsService.findAll(user.tenantId);
+  findAll(@CurrentUser() user: AuthUser, @Query('branchId') branchId?: string) {
+    return this.campaignsService.findAll(user.tenantId, this.parseBranch(branchId));
   }
 
   @Get(':id')
@@ -53,5 +54,11 @@ export class CampaignsController {
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     await this.campaignsService.remove(user.tenantId, id);
     return { message: 'ลบแคมเปญเรียบร้อย' };
+  }
+
+  private parseBranch(branchId?: string): number | undefined {
+    if (branchId === undefined || branchId === '' || branchId === 'all') return undefined;
+    const n = Number(branchId);
+    return Number.isNaN(n) ? undefined : n;
   }
 }

@@ -12,7 +12,7 @@
 | 4 | Marketing Modules | Products, Campaigns, Promotions, scheduling | ✅ เสร็จ |
 | 5 | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ✅ เสร็จ |
 | 6 | Analytics | Dashboards, sales metrics, reports, export | ✅ เสร็จ |
-| 7 | Billing + Executive Dashboard + Branch | Billing จริง, branch model, executive dashboard v2, audit logs | ⏳ กำลังทำ |
+| 7 | Billing + Executive Dashboard + Branch + ERP | Billing, branch, executive dashboard v2, audit, ChangSiam ERP | ✅ เสร็จ (production MVP) |
 | 8 | AI POSM Generator + Content Factory Expansion | POSM studio (export PNG/JPG/PDF), content types/languages เพิ่ม | ⏳ |
 | 9 | Google Review Center + Omnichannel Chat | review ingestion/analysis + reward, shared inbox + channel connectors | ⏳ |
 | 10 | Social Listening + AI Agent Center + Hardening | mentions/competitors, agent center, tests/monitoring/backup | ⏳ |
@@ -33,7 +33,7 @@
 ### Phase 1 — Core Backend ✅
 - [x] NestJS project (config + Joi env validation + logging)
 - [x] เชื่อม MySQL ผ่าน TypeORM (entities: tenants/users/roles/refresh_tokens/password_resets)
-- [x] โมดูล `auth` (register/login/refresh/logout/me) ด้วย JWT + refresh token rotation
+- [x] โมดูล `auth` (register/login/refresh/logout/me/forgot-password/reset-password) ด้วย JWT + refresh token rotation
 - [x] โมดูล `users` (CRUD) + `tenants` (get/update) + RBAC guards
 - [x] i18n backend (th/en error messages) + response envelope มาตรฐาน
 - [x] Global JwtAuthGuard + RolesGuard + ValidationPipe + ExceptionFilter + TransformInterceptor
@@ -42,7 +42,7 @@
 - [x] Next.js (App Router) + Tailwind + Shadcn UI (button/input/label/card)
 - [x] ธีม: Kanit, primary `#E60012`, accent gold, mobile first
 - [x] i18n locale routing `/[locale]/` (default th) ด้วย next-intl + locale switcher
-- [x] หน้า Auth (login/register) เชื่อม backend จริง + จัดการ token/refresh
+- [x] หน้า Auth (login/register/forgot-password/reset-password) เชื่อม backend จริง + จัดการ token/refresh
 - [x] AppShell: Sidebar + Topbar + Dashboard (การ์ดสถิติ) + protected route
 - [x] หน้า placeholder สำหรับ content/campaigns/products/analytics/chat/settings
 
@@ -76,29 +76,40 @@
 - [x] Export รายงานยอดขายเป็น CSV (รองรับภาษาไทยด้วย BOM)
 - [x] Dashboard เชื่อมตัวเลขจริง (ยอดขาย, แคมเปญที่ใช้งาน, สินค้า, โทเค็น AI)
 
-### Phase 7 — Billing + Executive Dashboard + Branch ⏳
+### Phase 7 — Billing + Executive Dashboard + Branch + ERP ✅
 ปิดงาน billing ให้พร้อม production และวางรากฐานหลายสาขา + dashboard เชิงผู้บริหารตาม PDF
 
-Billing (ต่อจากที่ทำไว้):
+Billing:
 - [x] Entities: `plans`, `subscriptions`, `invoices` + BillingModule (REST API)
 - [x] สมัครสมาชิก → สร้าง subscription แพ็ก `free` อัตโนมัติ
 - [x] บังคับ AI quota / user limit ตามแพ็กเกจ
-- [x] Frontend: หน้า Settings/Billing (เปรียบเทียบแพ็ก, upgrade mock, invoices)
-- [ ] Invoice lifecycle (open/paid/void) + payment status model
-- [ ] Plan enforcement ระดับ feature (ไม่ใช่แค่ token/user)
+- [x] Frontend: หน้า Settings/Billing (เปรียบเทียบแพ็ก, upgrade, invoices)
+- [x] Invoice lifecycle (open/paid/void) + payment method/reference model
+- [x] Plan enforcement ระดับ feature (`erp`, `executive`, `audit` ตามแพ็กเกจ)
+- [x] Payment flow: manual/bank transfer (MVP) + hook สำหรับ gateway ภายนอกในอนาคต
 
 Branch Foundation:
-- [ ] ตาราง `branches` + entity (tenant-scoped)
-- [ ] ผูก `users` / `sales_records` / `campaigns` กับ `branch_id`
-- [ ] ตัวกรองตามสาขาใน API analytics
+- [x] ตาราง `branches` + entity (tenant-scoped) — migration `2026_06_phase7_branches.sql`
+- [x] ผูก `users` / `sales_records` / `campaigns` กับ `branch_id`
+- [x] ตัวกรองตามสาขาใน API analytics + UI filter
+- [x] Frontend: หน้า Branches CRUD
 
 Executive Dashboard v2 (ตาม PDF MODULE 2):
-- [ ] ยอดขายรวม / รายสาขา / รายหมวด / สินค้าขายดี
-- [ ] KPI chat (จาก conversations) + placeholder KPI review/social
-- [ ] AI Insight layer (เช่น "ยอดขายยาดมลดลง 12% แนะนำให้สร้าง TikTok")
+- [x] ยอดขายรวม / รายสาขา / รายหมวด / สินค้าขายดี (Dashboard + Analytics)
+- [x] KPI chat + placeholder KPI review/social (Phase 9/10)
+- [x] AI Insight layer (heuristic insights บน dashboard + ERP AI insights)
 
 Audit:
-- [ ] `audit_logs` จริง + interceptor บันทึก action สำคัญ
+- [x] `audit_logs` + AuditModule (REST list) + AuditInterceptor บันทึก mutation สำคัญ
+- [x] Frontend: หน้า Activity Log (`/audit`)
+
+ChangSiam ERP Integration (เพิ่มนอก PDF ต้นฉบับ):
+- [x] โมดูล `erp` — proxy ข้อมูลยอดขายจริงจาก ChangSiam API
+- [x] `erp_sales_daily` sync + alerts + AI insights
+- [x] Frontend: หน้า ข้อมูลจริง (ERP) (`/erp`)
+
+Auth (เพิ่มใน Phase 7 session):
+- [x] Forgot password / reset password (token ใน `password_resets`, แสดงลิงก์เมื่อยังไม่มี SMTP)
 
 ### Phase 8 — AI POSM Generator + Content Factory Expansion
 โมดูลใหม่ใหญ่จาก PDF (MODULE 3 + MODULE 4)

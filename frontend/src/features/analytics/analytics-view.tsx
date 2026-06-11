@@ -26,8 +26,10 @@ import {
   getTopProducts,
   listSalesRecords,
 } from '@/lib/analytics-api';
+import { listBranches } from '@/lib/branches-api';
 import type {
   AnalyticsSummary,
+  Branch,
   CampaignStatusCount,
   SalesPoint,
   TopProduct,
@@ -52,6 +54,8 @@ export function AnalyticsView() {
   const tc = useTranslations('campaigns.statusValues');
 
   const [days, setDays] = useState(30);
+  const [branchId, setBranchId] = useState<number | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [series, setSeries] = useState<SalesPoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -66,9 +70,9 @@ export function AnalyticsView() {
     setError(null);
     try {
       const [s, ser, tp, cs] = await Promise.all([
-        getAnalyticsSummary(days),
-        getSalesSeries(days),
-        getTopProducts(days, 5),
+        getAnalyticsSummary(days, branchId),
+        getSalesSeries(days, branchId),
+        getTopProducts(days, 5, branchId),
         getCampaignStatus(),
       ]);
       setSummary(s);
@@ -80,7 +84,13 @@ export function AnalyticsView() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, branchId]);
+
+  useEffect(() => {
+    listBranches()
+      .then(setBranches)
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -102,7 +112,7 @@ export function AnalyticsView() {
   async function onExport() {
     setExporting(true);
     try {
-      const rows = await listSalesRecords(days);
+      const rows = await listSalesRecords(days, branchId);
       const header = ['id', 'soldAt', 'productId', 'campaignId', 'quantity', 'amount'];
       const lines = [
         header.join(','),
@@ -178,7 +188,20 @@ export function AnalyticsView() {
           <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
           <p className="text-muted-foreground">{t('subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <NativeSelect
+            value={branchId ?? ''}
+            onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : null)}
+            className="w-auto max-w-[180px]"
+            aria-label={t('filterBranch')}
+          >
+            <option value="">{t('allBranches')}</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </NativeSelect>
           <NativeSelect
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}

@@ -8,6 +8,8 @@ import {
 } from '../../common/exceptions/app.exception';
 import { AiUsage, Invoice, Plan, PlanCode, Subscription, User } from '../../database/entities';
 import { AuditService } from '../audit/audit.service';
+import { PayInvoiceDto } from './dto/pay-invoice.dto';
+import { PlanFeature, planIncludesFeature } from './plan-features';
 
 export interface PlanSummary {
   id: number;
@@ -134,13 +136,20 @@ export class BillingService {
     return invoices.map((inv) => this.serializeInvoice(inv));
   }
 
-  async payInvoice(tenantId: number, invoiceId: number, actorUserId?: number) {
+  async payInvoice(
+    tenantId: number,
+    invoiceId: number,
+    dto: PayInvoiceDto,
+    actorUserId?: number,
+  ) {
     const invoice = await this.getInvoice(tenantId, invoiceId);
     if (invoice.status !== 'open') {
       throw new AppException('billing.invoiceNotPayable', HttpStatus.BAD_REQUEST);
     }
     invoice.status = 'paid';
     invoice.paidAt = new Date();
+    invoice.paymentMethod = dto.paymentMethod;
+    invoice.paymentReference = dto.paymentReference?.trim() || null;
     await this.invoiceRepo.save(invoice);
 
     // เมื่อชำระแล้ว ต่ออายุรอบบิลและคง subscription เป็น active
@@ -161,7 +170,11 @@ export class BillingService {
       action: 'billing.invoice_paid',
       entity: 'invoice',
       entityId: invoice.id,
-      metadata: { amount: parseFloat(invoice.amount) },
+      metadata: {
+        amount: parseFloat(invoice.amount),
+        paymentMethod: dto.paymentMethod,
+        paymentReference: dto.paymentReference ?? null,
+      },
     });
 
     return this.serializeInvoice(invoice);
@@ -204,6 +217,19 @@ export class BillingService {
     }
   }
 
+  async assertFeature(tenantId: number, feature: PlanFeature): Promise<void> {
+    const subscription = await this.getActiveSubscription(tenantId);
+    const code = subscription.plan?.code ?? 'free';
+    if (!planIncludesFeature(code, feature)) {
+      throw new AppException('billing.featureNotAvailable', HttpStatus.FORBIDDEN);
+    }
+  }
+
+  async getPlanCode(tenantId: number): Promise<PlanCode> {
+    const subscription = await this.getActiveSubscription(tenantId);
+    return subscription.plan.code;
+  }
+
   // ---------- helpers ----------
 
   private async getActiveSubscription(tenantId: number): Promise<Subscription> {
@@ -232,6 +258,8 @@ export class BillingService {
       amount: parseFloat(inv.amount),
       currency: inv.currency,
       status: inv.status,
+      paymentMethod: inv.paymentMethod,
+      paymentReference: inv.paymentReference,
       issuedAt: inv.issuedAt,
       paidAt: inv.paidAt,
     };

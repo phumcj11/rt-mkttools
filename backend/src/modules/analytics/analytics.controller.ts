@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequiresFeature } from '../../common/decorators/requires-feature.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { AnalyticsService } from './analytics.service';
@@ -69,6 +70,7 @@ export class AnalyticsController {
   }
 
   @Get('executive')
+  @RequiresFeature('executive')
   executive(
     @CurrentUser() user: AuthUser,
     @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,

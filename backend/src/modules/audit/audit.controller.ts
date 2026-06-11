@@ -6,6 +6,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequiresFeature } from '../../common/decorators/requires-feature.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { AuditService } from './audit.service';
@@ -16,6 +17,7 @@ export class AuditController {
 
   @Get()
   @Roles('owner', 'admin')
+  @RequiresFeature('audit')
   list(
     @CurrentUser() user: AuthUser,
     @Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number,

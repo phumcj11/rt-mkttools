@@ -57,6 +57,7 @@ export class UsersService {
         locale: defaultLocale,
         status: 'active',
         roles,
+        branchId: dto.branchId ?? null,
       }),
     );
     return this.serialize(user);
@@ -69,6 +70,7 @@ export class UsersService {
     if (dto.locale !== undefined) user.locale = dto.locale;
     if (dto.status !== undefined) user.status = dto.status;
     if (dto.roles !== undefined) user.roles = await this.resolveRoles(dto.roles);
+    if (dto.branchId !== undefined) user.branchId = dto.branchId;
 
     const saved = await this.userRepo.save(user);
     return this.serialize(saved);
@@ -107,6 +109,7 @@ export class UsersService {
       locale: user.locale,
       status: user.status,
       roles: (user.roles ?? []).map((r) => r.name),
+      branchId: user.branchId,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
     };

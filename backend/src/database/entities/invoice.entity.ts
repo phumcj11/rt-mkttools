@@ -8,6 +8,7 @@ import {
 import { Tenant } from './tenant.entity';
 
 export type InvoiceStatus = 'open' | 'paid' | 'void';
+export type PaymentMethod = 'manual' | 'bank_transfer' | 'promptpay';
 
 @Entity('invoices')
 export class Invoice {
@@ -28,6 +29,12 @@ export class Invoice {
 
   @Column({ type: 'enum', enum: ['open', 'paid', 'void'], default: 'open' })
   status: InvoiceStatus;
+
+  @Column({ name: 'payment_method', type: 'varchar', length: 40, nullable: true })
+  paymentMethod: PaymentMethod | null;
+
+  @Column({ name: 'payment_reference', type: 'varchar', length: 120, nullable: true })
+  paymentReference: string | null;
 
   @Column({ name: 'issued_at', type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   issuedAt: Date;

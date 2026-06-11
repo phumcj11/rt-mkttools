@@ -8,8 +8,11 @@ import {
   Lightbulb,
   Loader2,
   Megaphone,
+  MessageCircle,
   Package,
+  Radio,
   Sparkles,
+  Star,
   TrendingDown,
   TrendingUp,
   type LucideIcon,
@@ -262,6 +265,57 @@ export function DashboardView() {
                 barClass="bg-gold"
               />
             )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">{t('kpiSection')}</h2>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('kpiChatThreads')}
+            </CardTitle>
+            <MessageCircle className="h-5 w-5 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : (
+                (executive?.kpis.chatThreads ?? 0).toLocaleString('th-TH')
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {(executive?.kpis.chatMessages ?? 0).toLocaleString('th-TH')} {t('kpiChatMessages')}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="opacity-90">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('kpiReviews')}
+            </CardTitle>
+            <Star className="h-5 w-5 text-gold" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-muted-foreground">—</div>
+            <p className="text-xs text-muted-foreground">{t('kpiComingSoon')}</p>
+          </CardContent>
+        </Card>
+        <Card className="opacity-90">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t('kpiSocial')}
+            </CardTitle>
+            <Radio className="h-5 w-5 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-muted-foreground">—</div>
+            <p className="text-xs text-muted-foreground">{t('kpiComingSoon')}</p>
           </CardContent>
         </Card>
       </div>

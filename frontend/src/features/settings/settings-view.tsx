@@ -6,6 +6,9 @@ import { Check, CreditCard, Loader2, Sparkles, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -23,7 +26,7 @@ import {
   payInvoice,
   voidInvoice,
 } from '@/lib/billing-api';
-import type { InvoiceItem, PlanCode, PlanSummary, SubscriptionSummary } from '@/lib/types';
+import type { InvoiceItem, PlanCode, PlanSummary, PaymentMethod, SubscriptionSummary } from '@/lib/types';
 
 const PLAN_ORDER: PlanCode[] = ['free', 'pro', 'business'];
 
@@ -47,6 +50,9 @@ export function SettingsView() {
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<PlanCode | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState<number | null>(null);
+  const [payTargetId, setPayTargetId] = useState<number | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bank_transfer');
+  const [paymentReference, setPaymentReference] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -97,10 +103,15 @@ export function SettingsView() {
     setError(null);
     setMessage(null);
     try {
-      await payInvoice(id);
+      await payInvoice(id, {
+        paymentMethod,
+        paymentReference: paymentReference.trim() || undefined,
+      });
       const [inv, sub] = await Promise.all([listInvoices(), getSubscription()]);
       setInvoices(inv);
       setSubscription(sub);
+      setPayTargetId(null);
+      setPaymentReference('');
       setMessage(t('invoicePaid'));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : te('generic'));
@@ -292,26 +303,74 @@ export function SettingsView() {
                     </TableCell>
                     <TableCell className="text-right">
                       {inv.status === 'open' ? (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            disabled={invoiceBusy !== null}
-                            onClick={() => void handlePayInvoice(inv.id)}
-                          >
-                            {invoiceBusy === inv.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              t('payInvoice')
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={invoiceBusy !== null}
-                            onClick={() => void handleVoidInvoice(inv.id)}
-                          >
-                            {t('voidInvoice')}
-                          </Button>
+                        <div className="flex flex-col items-end gap-2">
+                          {payTargetId === inv.id ? (
+                            <div className="w-full min-w-[220px] space-y-2 rounded-md border bg-muted/30 p-2 text-left">
+                              <div className="space-y-1">
+                                <Label className="text-xs">{t('paymentMethod')}</Label>
+                                <NativeSelect
+                                  value={paymentMethod}
+                                  onChange={(e) =>
+                                    setPaymentMethod(e.target.value as PaymentMethod)
+                                  }
+                                  className="h-8 w-full"
+                                >
+                                  <option value="bank_transfer">
+                                    {t('paymentMethods.bank_transfer')}
+                                  </option>
+                                  <option value="promptpay">{t('paymentMethods.promptpay')}</option>
+                                  <option value="manual">{t('paymentMethods.manual')}</option>
+                                </NativeSelect>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">{t('paymentReference')}</Label>
+                                <Input
+                                  value={paymentReference}
+                                  onChange={(e) => setPaymentReference(e.target.value)}
+                                  placeholder={t('paymentReferencePlaceholder')}
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setPayTargetId(null)}
+                                >
+                                  {tc('cancel')}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  disabled={invoiceBusy !== null}
+                                  onClick={() => void handlePayInvoice(inv.id)}
+                                >
+                                  {invoiceBusy === inv.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    t('payInvoice')
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                disabled={invoiceBusy !== null}
+                                onClick={() => setPayTargetId(inv.id)}
+                              >
+                                {t('payInvoice')}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={invoiceBusy !== null}
+                                onClick={() => void handleVoidInvoice(inv.id)}
+                              >
+                                {t('voidInvoice')}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span className="text-muted-foreground">—</span>

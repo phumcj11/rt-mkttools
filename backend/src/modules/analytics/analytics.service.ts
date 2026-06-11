@@ -6,6 +6,8 @@ import {
   Branch,
   Campaign,
   Category,
+  ChatMessage,
+  ChatThread,
   Product,
   SalesRecord,
 } from '../../database/entities';
@@ -62,6 +64,12 @@ export interface ExecutiveSummary {
   topBranch: BranchSalesPoint | null;
   insights: string[];
   periodDays: number;
+  kpis: {
+    chatThreads: number;
+    chatMessages: number;
+    reviews: { count: number; avgRating: number | null; placeholder: boolean };
+    social: { mentions: number; placeholder: boolean };
+  };
 }
 
 @Injectable()
@@ -72,6 +80,8 @@ export class AnalyticsService {
     @InjectRepository(Campaign) private readonly campaignRepo: Repository<Campaign>,
     @InjectRepository(AiUsage) private readonly usageRepo: Repository<AiUsage>,
     @InjectRepository(Branch) private readonly branchRepo: Repository<Branch>,
+    @InjectRepository(ChatThread) private readonly chatThreadRepo: Repository<ChatThread>,
+    @InjectRepository(ChatMessage) private readonly chatMessageRepo: Repository<ChatMessage>,
   ) {}
 
   async summary(tenantId: number, days = 30, branchId?: number): Promise<AnalyticsSummary> {
@@ -308,6 +318,13 @@ export class AnalyticsService {
     const growthSales = this.growthPct(curSales, prevSales);
     const growthOrders = this.growthPct(curOrders, prevOrders);
 
+    const chatThreads = await this.chatThreadRepo.count({ where: { tenantId } });
+    const chatMessages = await this.chatMessageRepo
+      .createQueryBuilder('m')
+      .innerJoin(ChatThread, 't', 't.id = m.thread_id')
+      .where('t.tenant_id = :tenantId', { tenantId })
+      .getCount();
+
     return {
       current: { totalSales: curSales, totalOrders: curOrders, aiTokens: Number(usage?.totalTokens ?? 0) },
       previous: { totalSales: prevSales, totalOrders: prevOrders },
@@ -322,8 +339,15 @@ export class AnalyticsService {
         growthOrders,
         topBranch,
         branchCount,
+        chatThreads,
       }),
       periodDays: days,
+      kpis: {
+        chatThreads,
+        chatMessages,
+        reviews: { count: 0, avgRating: null, placeholder: true },
+        social: { mentions: 0, placeholder: true },
+      },
     };
   }
 
@@ -391,6 +415,7 @@ export class AnalyticsService {
     growthOrders: number;
     topBranch: BranchSalesPoint | null;
     branchCount: number;
+    chatThreads: number;
   }): string[] {
     const insights: string[] = [];
 
@@ -416,6 +441,12 @@ export class AnalyticsService {
     if (d.growthOrders < 0 && d.growthSales >= 0) {
       insights.push('จำนวนออเดอร์ลดลงแต่ยอดขายไม่ลด — มูลค่าต่อออเดอร์สูงขึ้น ลองดันสินค้า/บันเดิลราคาสูงต่อ');
     }
+
+    if (d.chatThreads > 0) {
+      insights.push(`มีการใช้ผู้ช่วย AI ${d.chatThreads} ห้องสนทนา — ใช้ข้อมูลจาก chat ช่วยวางแผน content/campaign ได้`);
+    }
+
+    insights.push('Google Review และ Social Listening จะพร้อมใน Phase 9–10');
 
     return insights;
   }
