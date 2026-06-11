@@ -54,6 +54,10 @@ pm2 save
 bash deploy/scripts/deploy.sh   # pull + build + pm2 reload
 ```
 
+### 7. Auto-deploy (GitHub Actions)
+เมื่อ push ไป `main` และ CI ผ่าน จะ deploy อัตโนมัติผ่าน SSH  
+ตั้งค่า Secrets + SSH key: [`../deploy/GITHUB-ACTIONS-DEPLOY.md`](../deploy/GITHUB-ACTIONS-DEPLOY.md)
+
 ## สถาปัตยกรรม Runtime
 ```
 Internet → Nginx (443/SSL)
@@ -64,7 +68,7 @@ Internet → Nginx (443/SSL)
 ```
 
 ## แนวทางเพิ่มเติม (เฟส 8)
-- CI/CD ด้วย GitHub Actions (build + ssh deploy)
+- ~~CI/CD ด้วย GitHub Actions (build + ssh deploy)~~ → มี workflow `deploy.yml` แล้ว (ต้องตั้ง GitHub Secrets)
 - Monitoring: `pm2 monit` / logrotate
 - Backup MySQL อัตโนมัติ (cron → `database/backups/`)
 - Firewall: เปิดเฉพาะ 80/443/22

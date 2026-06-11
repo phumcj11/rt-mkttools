@@ -36,6 +36,10 @@ sudo bash /tmp/bootstrap.sh
 
 สคริปต์เป็น **idempotent** — รันซ้ำได้ ใช้เป็น deploy รอบถัดไปก็ได้
 
+## Auto-deploy (GitHub Actions) ⭐
+หลัง push ไป `main` และ CI ผ่าน → deploy ขึ้น VPS อัตโนมัติ  
+คู่มือตั้งค่า: [`GITHUB-ACTIONS-DEPLOY.md`](GITHUB-ACTIONS-DEPLOY.md)
+
 ## ทำให้ออนไลน์ที่ rt.k-mkt.com (เช็คลิสต์)
 1. **DNS**: เพิ่ม A record `rt.k-mkt.com → <IP ของ VPS>` (ที่ผู้ให้บริการโดเมน/DirectAdmin DNS)
 2. **bootstrap**: รันสคริปต์ด้านบนให้แอปขึ้น PM2

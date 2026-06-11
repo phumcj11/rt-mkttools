@@ -5,7 +5,7 @@
 # ============================================================
 set -euo pipefail
 
-APP_DIR="/var/www/rt_mkttools"
+APP_DIR="${APP_DIR:-/var/www/rt_mkttools}"
 cd "$APP_DIR"
 
 echo "==> Pulling latest from GitHub"

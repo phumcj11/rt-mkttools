@@ -46,7 +46,23 @@ ssh root@119.59.102.235
 > ต้องตั้ง reverse proxy ไปยังพอร์ต Node (3000/4000) หรือปิด vhost ของ panel
 > แล้วใช้ Nginx config ใน `deploy/nginx/rt_mkttools.conf` แทน
 
-## ขั้นตอน Deploy
+## Auto-deploy (GitHub Actions)
+เมื่อ push ไป `main` และ CI ผ่าน → workflow **Deploy to VPS** จะ SSH เข้าเครื่องแล้วรัน `deploy/scripts/deploy.sh`
+
+ตั้งค่า Secrets ที่ GitHub repo → **Settings → Secrets and variables → Actions**:
+
+| Secret | ตัวอย่าง |
+| --- | --- |
+| `VPS_HOST` | `119.59.102.235` |
+| `VPS_USER` | `root` |
+| `VPS_SSH_KEY` | private key (SSH key สำหรับ deploy — **ไม่ใช่** password) |
+| `VPS_PORT` | `22` (optional) |
+| `VPS_APP_DIR` | `/var/www/rt_mkttools` (optional) |
+
+สร้าง SSH key: `bash deploy/scripts/setup-github-actions-ssh.sh`  
+คู่มือเต็ม: [`GITHUB-ACTIONS-DEPLOY.md`](GITHUB-ACTIONS-DEPLOY.md)
+
+## ขั้นตอน Deploy (manual)
 ดู [`README.md`](README.md) และ [`../docs/07-deployment.md`](../docs/07-deployment.md)
 ```bash
 bash deploy/scripts/provision.sh   # ครั้งแรก
