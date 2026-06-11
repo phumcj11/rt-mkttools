@@ -8,7 +8,8 @@ module.exports = {
       name: 'mkttools-backend',
       cwd: './backend',
       script: 'dist/main.js',
-      instances: 'max',
+      // ใช้ 2 instance พอ (เครื่อง shared/DirectAdmin) — ปรับเพิ่มได้ภายหลัง
+      instances: 2,
       exec_mode: 'cluster',
       autorestart: true,
       max_memory_restart: '512M',
