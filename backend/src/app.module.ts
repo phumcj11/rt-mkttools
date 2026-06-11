@@ -19,6 +19,7 @@ import { BranchesModule } from './modules/branches/branches.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { ContentModule } from './modules/content/content.module';
+import { ErpModule } from './modules/erp/erp.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProductsModule } from './modules/products/products.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
@@ -46,6 +47,7 @@ import { UsersModule } from './modules/users/users.module';
     CampaignsModule,
     BillingModule,
     BranchesModule,
+    ErpModule,
     NotificationsModule,
     ChatModule,
     RealtimeModule,

@@ -32,4 +32,10 @@ export const validationSchema = Joi.object({
 
   SOCKET_PATH: Joi.string().default('/socket.io'),
   SOCKET_CORS_ORIGINS: Joi.string().allow('').optional(),
+
+  ERP_API_BASE_URL: Joi.string().default(
+    'https://dev.changsiamthailand.com/webservice/api.php',
+  ),
+  ERP_API_KEY: Joi.string().allow('').default(''),
+  ERP_API_TIMEOUT_MS: Joi.number().default(20000),
 }).unknown(true);

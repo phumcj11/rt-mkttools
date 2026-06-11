@@ -336,3 +336,63 @@ export interface InvoiceItem {
   issuedAt: string;
   paidAt: string | null;
 }
+
+// ----- ERP integration (read-only, live from ChangSiam) -----
+
+export interface ErpTrendPoint {
+  date: string;
+  revenue: number;
+  orders: number;
+}
+
+export interface ErpDashboard {
+  revenue: { today: number; week: number; month: number; year: number };
+  ordersToday: number;
+  counts: { products: number; branches: number; customers: number; suppliers: number };
+  trend30: ErpTrendPoint[];
+}
+
+export interface ErpSalesSummary {
+  orders: number;
+  revenue: number;
+  gross: number;
+  discount: number;
+  avgTicket: number;
+}
+
+export interface ErpBranchSales {
+  id: number;
+  code: string;
+  name: string;
+  shortcode: string;
+  orders: number;
+  revenue: number;
+  avgTicket: number;
+}
+
+export interface ErpTopProduct {
+  id: number;
+  sku: string;
+  name: string;
+  category: string;
+  brand: string;
+  qtySold: number;
+  revenue: number;
+  gpBaht: number;
+  gpPct: number;
+  abcCompany: string;
+  imageUrl: string;
+}
+
+export interface ErpPromotion {
+  id: number;
+  code: string;
+  name: string;
+  type: string;
+  typeName: string;
+  dateStart: string;
+  dateStop: string;
+  price: number;
+  productCount: number;
+  freeItemCount: number;
+}

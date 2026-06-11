@@ -40,12 +40,19 @@ export interface RealtimeConfig {
   corsOrigins: string[];
 }
 
+export interface ErpConfig {
+  baseUrl: string;
+  apiKey: string;
+  timeoutMs: number;
+}
+
 export interface RootConfig {
   app: AppConfig;
   database: DatabaseConfig;
   jwt: JwtConfig;
   ai: AiConfig;
   realtime: RealtimeConfig;
+  erp: ErpConfig;
 }
 
 const toBool = (value: string | undefined, fallback = false): boolean => {
@@ -102,5 +109,12 @@ export default (): RootConfig => ({
       process.env.SOCKET_CORS_ORIGINS ?? process.env.CORS_ORIGINS,
       ['http://localhost:3000'],
     ),
+  },
+  erp: {
+    baseUrl:
+      process.env.ERP_API_BASE_URL ??
+      'https://dev.changsiamthailand.com/webservice/api.php',
+    apiKey: process.env.ERP_API_KEY ?? '',
+    timeoutMs: parseInt(process.env.ERP_API_TIMEOUT_MS ?? '20000', 10),
   },
 });

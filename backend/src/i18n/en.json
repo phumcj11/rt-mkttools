@@ -28,5 +28,8 @@
     "invoiceNotFound": "Invoice not found",
     "invoiceNotPayable": "This invoice cannot be paid",
     "invoiceNotVoidable": "This invoice cannot be voided"
+  },
+  "erp": {
+    "unavailable": "Could not reach the ERP system, please try again later"
   }
 }

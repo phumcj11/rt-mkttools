@@ -21,6 +21,7 @@
     "campaigns": "แคมเปญ",
     "products": "สินค้า",
     "analytics": "วิเคราะห์ข้อมูล",
+    "erp": "ข้อมูลจริง (ERP)",
     "branches": "สาขา",
     "chat": "ผู้ช่วย AI",
     "audit": "บันทึกกิจกรรม",
@@ -306,6 +307,56 @@
       "branch.created": "สร้างสาขา",
       "branch.updated": "แก้ไขสาขา",
       "branch.deleted": "ลบสาขา"
+    }
+  },
+  "erp": {
+    "title": "ข้อมูลจริง (ERP)",
+    "subtitle": "ยอดขาย สาขา และสินค้าจริง ดึงสดจากระบบ ChangSiam ERP",
+    "refresh": "รีเฟรช",
+    "asOf": "ข้อมูล ณ",
+    "rangeLabel": "ช่วงเวลา",
+    "ranges": { "7": "7 วัน", "30": "30 วัน", "90": "90 วัน" },
+    "unavailable": "เชื่อมต่อระบบ ERP ไม่สำเร็จ กรุณาลองใหม่ภายหลัง",
+    "kpi": {
+      "revenueToday": "ยอดขายวันนี้",
+      "revenueWeek": "ยอดขายสัปดาห์นี้",
+      "revenueMonth": "ยอดขายเดือนนี้",
+      "revenueYear": "ยอดขายปีนี้",
+      "ordersToday": "จำนวนบิลวันนี้",
+      "products": "สินค้า",
+      "branches": "สาขา",
+      "customers": "ลูกค้า"
+    },
+    "rangeSummary": {
+      "title": "ยอดขายในช่วงที่เลือก",
+      "orders": "จำนวนบิล",
+      "revenue": "ยอดขาย",
+      "gross": "ยอดก่อนหักส่วนลด",
+      "discount": "ส่วนลด",
+      "avgTicket": "เฉลี่ย/บิล"
+    },
+    "trend": { "title": "แนวโน้มยอดขาย 30 วัน" },
+    "byBranch": {
+      "title": "ยอดขายแยกตามสาขา",
+      "branch": "สาขา",
+      "orders": "จำนวนบิล",
+      "revenue": "ยอดขาย",
+      "avgTicket": "เฉลี่ย/บิล"
+    },
+    "topProducts": {
+      "title": "สินค้าขายดี",
+      "product": "สินค้า",
+      "category": "หมวดหมู่",
+      "qty": "จำนวนที่ขาย",
+      "revenue": "ยอดขาย",
+      "gp": "GP %"
+    },
+    "promotions": {
+      "title": "โปรโมชันที่กำลังใช้งาน",
+      "name": "โปรโมชัน",
+      "type": "ประเภท",
+      "period": "ช่วงเวลา",
+      "products": "สินค้า"
     }
   }
 }
