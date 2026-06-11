@@ -14,6 +14,15 @@ git pull origin main
 echo "==> Installing dependencies"
 npm install
 
+# Next.js ฝัง NEXT_PUBLIC_* ตอน build — ต้องโหลด .env ก่อน build frontend
+if [ -f .env ]; then
+  echo "==> Loading .env for build"
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
 echo "==> Building backend (NestJS)"
 npm run build:backend
 
