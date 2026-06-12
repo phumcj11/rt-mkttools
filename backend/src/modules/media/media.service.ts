@@ -327,38 +327,46 @@ export class MediaService {
     data: Record<string, unknown>,
     referenceImageUrl?: string,
   ): Promise<PromoGptResult> {
-    const label = PROMO_TYPE_LABELS[promoType] ?? promoType;
-    this.logger.log(`GPT Image promo generating: ${promoType} (template reference)…`);
-
-    const hasProductRef = !!referenceImageUrl?.startsWith('http');
-    const imagePrompt = await this.craftPromoImagePrompt(promoType, label, data, referenceImageUrl);
-
-    let imageResult;
     try {
-      const templateBuffer = this.loadPromoTemplate(promoType);
-      imageResult = await this.openAi.editGptImage(imagePrompt, templateBuffer, 'image/png', {
-        size: '1536x1024',
-      });
-    } catch (err) {
-      this.logger.warn(`Promo template edit failed, falling back to generate: ${String(err)}`);
-      imageResult = await this.openAi.generateGptImage(imagePrompt, { size: '1536x1024' });
+      const label = PROMO_TYPE_LABELS[promoType] ?? promoType;
+      this.logger.log(`GPT Image promo generating: ${promoType} (template reference)…`);
+
+      let imagePrompt = await this.craftPromoImagePrompt(promoType, label, data, referenceImageUrl);
+      if (imagePrompt.length > 3500) {
+        imagePrompt = imagePrompt.slice(0, 3500);
+      }
+
+      let imageResult;
+      try {
+        const templateBuffer = this.loadPromoTemplate(promoType);
+        imageResult = await this.openAi.editGptImage(imagePrompt, templateBuffer, 'image/png', {
+          size: '1536x1024',
+        });
+      } catch (err) {
+        this.logger.warn(`Promo template edit failed, falling back to generate: ${String(err)}`);
+        imageResult = await this.openAi.generateGptImage(imagePrompt, { size: '1536x1024' });
+      }
+
+      const safeType = promoType.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `promo-gpt-${safeType}-${Date.now()}.png`;
+      const localPath = path.join(this.uploadsDir, filename);
+      fs.writeFileSync(localPath, imageResult.buffer);
+
+      this.logger.log(`Promo GPT Image saved ${filename} (model: ${imageResult.model})`);
+
+      return {
+        imageUrl: `/media/serve/${filename}`,
+        filename,
+        model: imageResult.model,
+        promptUsed: imagePrompt,
+        generatedAt: new Date().toISOString(),
+        source: 'gpt_image',
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Promo GPT Image failed: ${msg}`);
+      throw new BadRequestException(msg || 'สร้างโปสเตอร์ไม่สำเร็จ');
     }
-
-    const safeType = promoType.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filename = `promo-gpt-${safeType}-${Date.now()}.png`;
-    const localPath = path.join(this.uploadsDir, filename);
-    fs.writeFileSync(localPath, imageResult.buffer);
-
-    this.logger.log(`Promo GPT Image saved ${filename} (model: ${imageResult.model})`);
-
-    return {
-      imageUrl: `/media/serve/${filename}`,
-      filename,
-      model: imageResult.model,
-      promptUsed: imagePrompt,
-      generatedAt: new Date().toISOString(),
-      source: 'gpt_image',
-    };
   }
 
   /** Load official promo template PNG from backend assets */
@@ -368,6 +376,9 @@ export class MediaService {
 
     const candidates = [
       path.join(process.cwd(), 'assets', 'promo-templates', filename),
+      path.join(process.cwd(), 'dist', 'promo-templates', filename),
+      path.join(process.cwd(), 'dist', 'assets', 'promo-templates', filename),
+      path.join(__dirname, '..', '..', 'promo-templates', filename),
       path.join(process.cwd(), '..', 'frontend', 'public', 'templates', filename),
     ];
     for (const p of candidates) {
@@ -376,7 +387,9 @@ export class MediaService {
         return fs.readFileSync(p);
       }
     }
-    throw new Error(`Template PNG not found for ${promoType} — check assets/promo-templates/`);
+    throw new Error(
+      `ไม่พบไฟล์ Template PNG สำหรับ ${promoType} — รัน npm run build ใน backend หรือตรวจสอบ assets/promo-templates/`,
+    );
   }
 
   /** AI writes the GPT Image edit prompt — fills placeholders on the template PNG */
@@ -392,11 +405,14 @@ export class MediaService {
     let productVisualHint = '';
     if (referenceImageUrl?.startsWith('http')) {
       try {
+        const { buffer, contentType } = await this.proxyImage(referenceImageUrl);
+        const dataUrl = `data:${contentType};base64,${buffer.toString('base64')}`;
         productVisualHint = await this.openAi.analyzeImage(
-          referenceImageUrl,
+          dataUrl,
           'Describe this product packaging briefly (color, shape, label text) for reproducing it accurately in a marketing poster product photo area. Max 3 sentences in English.',
         );
-      } catch {
+      } catch (err) {
+        this.logger.warn(`Product vision analysis skipped: ${String(err)}`);
         productVisualHint = 'Use the product name from the form data to render an accurate product photo.';
       }
     }

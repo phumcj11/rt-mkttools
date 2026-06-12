@@ -150,6 +150,33 @@ export class OpenAiService {
   }
 
   /**
+   * Parse GPT Image API response — supports b64_json or url.
+   */
+  private async parseGptImageResponse(
+    img: { b64_json?: string | null; url?: string | null; revised_prompt?: string | null } | undefined,
+    model: string,
+  ): Promise<GptImageResult | null> {
+    if (!img) return null;
+    if (img.b64_json) {
+      return {
+        buffer: Buffer.from(img.b64_json, 'base64'),
+        model,
+        revisedPrompt: img.revised_prompt ?? undefined,
+      };
+    }
+    if (img.url) {
+      const res = await fetch(img.url, { signal: AbortSignal.timeout(60_000) });
+      if (!res.ok) return null;
+      return {
+        buffer: Buffer.from(await res.arrayBuffer()),
+        model,
+        revisedPrompt: img.revised_prompt ?? undefined,
+      };
+    }
+    return null;
+  }
+
+  /**
    * Generate image with GPT Image models (returns PNG buffer).
    * Falls back across gpt-image-1.5 → gpt-image-1.
    */
@@ -159,35 +186,29 @@ export class OpenAiService {
   ): Promise<GptImageResult> {
     const client = await this.ensureClient();
     const models = await this.imageModelChain();
+    const size = options.size ?? '1024x1024';
     let lastErr: unknown;
 
     for (const model of models) {
-      try {
-        const response = await client.images.generate({
-          model,
-          prompt,
-          n: 1,
-          size: options.size ?? '1024x1024',
-          quality: 'medium',
-          response_format: 'b64_json',
-        });
-        const img = response.data?.[0];
-        if (!img?.b64_json) continue;
-        return {
-          buffer: Buffer.from(img.b64_json, 'base64'),
-          model,
-          revisedPrompt: img.revised_prompt ?? undefined,
-        };
-      } catch (err) {
-        lastErr = err;
-        this.logger.warn(`GPT Image generate failed (${model}): ${String(err)}`);
+      for (const params of [
+        { model, prompt, n: 1 as const, size },
+        { model, prompt, n: 1 as const, size, quality: 'medium' as const, response_format: 'b64_json' as const },
+      ]) {
+        try {
+          const response = await client.images.generate(params);
+          const parsed = await this.parseGptImageResponse(response.data?.[0], model);
+          if (parsed) return parsed;
+        } catch (err) {
+          lastErr = err;
+          this.logger.warn(`GPT Image generate failed (${model}): ${String(err)}`);
+        }
       }
     }
     throw this.wrapImageError(lastErr);
   }
 
   /**
-   * Edit/reference image with GPT Image — uses ERP product photo as input.
+   * Edit/reference image with GPT Image — uses template or product photo as input.
    */
   async editGptImage(
     prompt: string,
@@ -198,30 +219,24 @@ export class OpenAiService {
     const client = await this.ensureClient();
     const { toFile } = await import('openai');
     const ext = mimeType.includes('png') ? 'png' : 'jpg';
-    const file = await toFile(imageBuffer, `product.${ext}`, { type: mimeType });
+    const file = await toFile(imageBuffer, `input.${ext}`, { type: mimeType });
     const models = await this.imageModelChain();
+    const size = options.size ?? '1024x1024';
     let lastErr: unknown;
 
     for (const model of models) {
-      try {
-        const response = await client.images.edit({
-          model,
-          image: file,
-          prompt,
-          n: 1,
-          size: options.size ?? '1024x1024',
-          response_format: 'b64_json',
-        });
-        const img = response.data?.[0];
-        if (!img?.b64_json) continue;
-        return {
-          buffer: Buffer.from(img.b64_json, 'base64'),
-          model,
-          revisedPrompt: img.revised_prompt ?? undefined,
-        };
-      } catch (err) {
-        lastErr = err;
-        this.logger.warn(`GPT Image edit failed (${model}): ${String(err)}`);
+      for (const params of [
+        { model, image: file, prompt, n: 1 as const, size },
+        { model, image: file, prompt, n: 1 as const, size, response_format: 'b64_json' as const },
+      ]) {
+        try {
+          const response = await client.images.edit(params);
+          const parsed = await this.parseGptImageResponse(response.data?.[0], model);
+          if (parsed) return parsed;
+        } catch (err) {
+          lastErr = err;
+          this.logger.warn(`GPT Image edit failed (${model}): ${String(err)}`);
+        }
       }
     }
     throw this.wrapImageError(lastErr);
