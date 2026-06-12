@@ -12,6 +12,10 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const appConfig = config.getOrThrow<AppConfig>('app');
 
+  // Poster uploads send base64 PNG in JSON — default 100kb limit is too small
+  app.useBodyParser('json', { limit: '15mb' });
+  app.useBodyParser('urlencoded', { limit: '15mb', extended: true });
+
   // Serve uploaded media files
   app.useStaticAssets(path.join(process.cwd(), 'uploads'), { prefix: '/uploads' });
 

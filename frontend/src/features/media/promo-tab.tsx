@@ -318,6 +318,27 @@ function ClearanceSaleForm({
 // Main PromoTab component
 // ---------------------------------------------------------------------------
 
+/** Wait for all img elements inside root to finish loading before capture */
+function waitForImages(root: HTMLElement, timeoutMs = 8000): Promise<void> {
+  const imgs = Array.from(root.querySelectorAll('img'));
+  if (imgs.length === 0) return Promise.resolve();
+  return Promise.all(
+    imgs.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          if (img.complete && img.naturalWidth > 0) {
+            resolve();
+            return;
+          }
+          const done = () => resolve();
+          img.addEventListener('load', done, { once: true });
+          img.addEventListener('error', done, { once: true });
+          setTimeout(done, timeoutMs);
+        }),
+    ),
+  ).then(() => undefined);
+}
+
 export function PromoTab({ products }: { products: ErpProduct[] }) {
   const [promoType, setPromoType] = useState<PromoType>('spend_free_gift');
   const [promoData, setPromoData] = useState<PromoData>(() => emptyPromoData('spend_free_gift'));
@@ -339,6 +360,7 @@ export function PromoTab({ products }: { products: ErpProduct[] }) {
     const timer = setTimeout(() => {
       void (async () => {
         try {
+          await waitForImages(promoRef.current!);
           const { width, height } = getPromoDimensions(promoRender.type);
           const dataUrl = await toPng(promoRef.current!, {
             pixelRatio: 1,
@@ -355,7 +377,7 @@ export function PromoTab({ products }: { products: ErpProduct[] }) {
           setPromoRender(null);
         }
       })();
-    }, 700);
+    }, 300);
     return () => clearTimeout(timer);
   }, [promoRender]);
 

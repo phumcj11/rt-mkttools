@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ErpProductCache } from '../../database/entities/erp-product-cache.entity';
@@ -71,11 +71,17 @@ export class MediaService {
   /** Save client-rendered benefit poster PNG */
   async savePosterImage(sku: string, dataUrl: string): Promise<{ imageUrl: string; filename: string }> {
     const match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
-    if (!match) throw new Error('Invalid image data');
+    if (!match) throw new BadRequestException('Invalid image data');
 
     const filename = `product-${this.safeFilename(sku)}-${Date.now()}.png`;
     const localPath = path.join(this.uploadsDir, filename);
-    fs.writeFileSync(localPath, Buffer.from(match[1], 'base64'));
+
+    try {
+      fs.writeFileSync(localPath, Buffer.from(match[1], 'base64'));
+    } catch (err) {
+      this.logger.error(`Failed to save poster image: ${String(err)}`);
+      throw new BadRequestException('Cannot write image file — check server uploads directory permissions');
+    }
 
     return { imageUrl: `/media/serve/${filename}`, filename };
   }
@@ -251,12 +257,18 @@ export class MediaService {
     dataUrl: string,
   ): Promise<{ imageUrl: string; filename: string }> {
     const match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
-    if (!match) throw new Error('Invalid image data');
+    if (!match) throw new BadRequestException('Invalid image data');
 
     const safeType = promoType.replace(/[^a-zA-Z0-9_-]/g, '_');
     const filename = `promo-${safeType}-${Date.now()}.png`;
     const localPath = path.join(this.uploadsDir, filename);
-    fs.writeFileSync(localPath, Buffer.from(match[1], 'base64'));
+
+    try {
+      fs.writeFileSync(localPath, Buffer.from(match[1], 'base64'));
+    } catch (err) {
+      this.logger.error(`Failed to save promo image: ${String(err)}`);
+      throw new BadRequestException('Cannot write image file — check server uploads directory permissions');
+    }
 
     return { imageUrl: `/media/serve/${filename}`, filename };
   }
