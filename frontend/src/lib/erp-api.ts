@@ -10,36 +10,44 @@ import type {
   ErpTopProduct,
 } from './types';
 
-function range(days: number): string {
+export interface ErpRangeOpts {
+  from?: string;
+  to?: string;
+  force?: boolean;
+}
+
+function rangeParams(days: number, opts?: ErpRangeOpts): string {
+  const f = opts?.force ? '&force=true' : '';
+  if (opts?.from && opts?.to) return `from=${opts.from}&to=${opts.to}${f}`;
   const to = new Date();
   const from = new Date();
   from.setDate(from.getDate() - (days - 1));
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  return `from=${fmt(from)}&to=${fmt(to)}`;
+  return `from=${fmt(from)}&to=${fmt(to)}${f}`;
 }
 
-export function getErpDashboard() {
-  return apiRequest<ErpDashboard>('/erp/dashboard');
+export function getErpDashboard(force = false) {
+  return apiRequest<ErpDashboard>(`/erp/dashboard${force ? '?force=true' : ''}`);
 }
 
-export function getErpSalesSummary(days = 30) {
-  return apiRequest<ErpSalesSummary>(`/erp/sales-summary?${range(days)}`);
+export function getErpSalesSummary(days = 30, opts?: ErpRangeOpts) {
+  return apiRequest<ErpSalesSummary>(`/erp/sales-summary?${rangeParams(days, opts)}`);
 }
 
-export function getErpSalesByBranch(days = 30) {
-  return apiRequest<ErpBranchSales[]>(`/erp/sales-by-branch?${range(days)}`);
+export function getErpSalesByBranch(days = 30, opts?: ErpRangeOpts) {
+  return apiRequest<ErpBranchSales[]>(`/erp/sales-by-branch?${rangeParams(days, opts)}`);
 }
 
-export function getErpTopProducts(days = 30, limit = 10) {
-  return apiRequest<ErpTopProduct[]>(`/erp/top-products?${range(days)}&limit=${limit}`);
+export function getErpTopProducts(days = 30, limit = 10, opts?: ErpRangeOpts) {
+  return apiRequest<ErpTopProduct[]>(`/erp/top-products?${rangeParams(days, opts)}&limit=${limit}`);
 }
 
-export function getErpPromotions(limit = 12) {
-  return apiRequest<ErpPromotion[]>(`/erp/promotions?limit=${limit}`);
+export function getErpPromotions(limit = 12, force = false) {
+  return apiRequest<ErpPromotion[]>(`/erp/promotions?limit=${limit}${force ? '&force=true' : ''}`);
 }
 
-export function getErpAiInsights(days = 30) {
-  return apiRequest<ErpInsights>(`/erp/ai-insights?days=${days}`);
+export function getErpAiInsights(days = 30, force = false) {
+  return apiRequest<ErpInsights>(`/erp/ai-insights?days=${days}${force ? '&force=true' : ''}`);
 }
 
 export function getErpAlerts() {

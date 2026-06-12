@@ -11,24 +11,51 @@ interface ErpEnvelope<T> {
   meta?: Record<string, unknown>;
 }
 
+interface CacheEntry<T> { data: T; expiry: number }
+
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? 0));
   return Number.isFinite(n) ? n : 0;
 };
 
+// Default TTLs (ms)
+const TTL_DASHBOARD  = 5  * 60 * 1_000; // 5 min — today/week/month totals
+const TTL_SALES      = 5  * 60 * 1_000; // 5 min — date-range summaries
+const TTL_STATIC     = 30 * 60 * 1_000; // 30 min — counts, branches, promotions
+
 @Injectable()
 export class ErpService {
   private readonly logger = new Logger(ErpService.name);
   private readonly cfg: ErpConfig;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly cache = new Map<string, CacheEntry<any>>();
 
   constructor(private readonly config: ConfigService) {
     this.cfg = this.config.getOrThrow<ErpConfig>('erp');
   }
 
+  private cacheGet<T>(key: string): T | undefined {
+    const entry = this.cache.get(key) as CacheEntry<T> | undefined;
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiry) { this.cache.delete(key); return undefined; }
+    return entry.data;
+  }
+
+  private cacheSet<T>(key: string, data: T, ttlMs: number) {
+    this.cache.set(key, { data, expiry: Date.now() + ttlMs });
+  }
+
+  clearCache(pattern?: string) {
+    if (!pattern) { this.cache.clear(); return; }
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(pattern)) this.cache.delete(key);
+    }
+  }
+
   // ---------- public API (normalized) ----------
 
-  async dashboardSummary() {
-    const d = await this.call<any>('dashboard', 'summary');
+  async dashboardSummary(force = false) {
+    const d = await this.call<any>('dashboard', 'summary', {}, force, TTL_DASHBOARD);
     const row = Array.isArray(d) ? d[0] : d;
     return {
       revenue: {
@@ -54,8 +81,8 @@ export class ErpService {
     };
   }
 
-  async salesSummary(from: string, to: string, branchId?: number) {
-    const d = await this.call<any>('sales', 'summary', { from, to, branch_id: branchId });
+  async salesSummary(from: string, to: string, branchId?: number, force = false) {
+    const d = await this.call<any>('sales', 'summary', { from, to, branch_id: branchId }, force, TTL_SALES);
     const row = Array.isArray(d) ? d[0] : d;
     return {
       orders: num(row?.orders),
@@ -66,8 +93,8 @@ export class ErpService {
     };
   }
 
-  async salesByBranch(from: string, to: string) {
-    const d = await this.call<any[]>('sales', 'by_branch', { from, to });
+  async salesByBranch(from: string, to: string, force = false) {
+    const d = await this.call<any[]>('sales', 'by_branch', { from, to }, force, TTL_SALES);
     return (d ?? []).map((b) => ({
       id: num(b.id),
       code: String(b.code ?? ''),
@@ -79,13 +106,10 @@ export class ErpService {
     }));
   }
 
-  async topProducts(from: string, to: string, limit = 10, branchId?: number) {
+  async topProducts(from: string, to: string, limit = 10, branchId?: number, force = false) {
     const d = await this.call<any[]>('sales', 'top_products', {
-      from,
-      to,
-      limit,
-      branch_id: branchId,
-    });
+      from, to, limit, branch_id: branchId,
+    }, force, TTL_SALES);
     return (d ?? []).map((p) => ({
       id: num(p.id),
       sku: String(p.sku ?? ''),
@@ -101,13 +125,10 @@ export class ErpService {
     }));
   }
 
-  async timeseries(from: string, to: string, bucket: 'day' | 'week' | 'month', branchId?: number) {
+  async timeseries(from: string, to: string, bucket: 'day' | 'week' | 'month', branchId?: number, force = false) {
     const d = await this.call<any[]>('sales', 'timeseries', {
-      from,
-      to,
-      bucket,
-      branch_id: branchId,
-    });
+      from, to, bucket, branch_id: branchId,
+    }, force, TTL_SALES);
     return (d ?? []).map((t) => ({
       date: String(t.d),
       revenue: num(t.revenue),
@@ -115,11 +136,11 @@ export class ErpService {
     }));
   }
 
-  async branches() {
+  async branches(force = false) {
     const d = await this.call<any[]>('branches', 'list', {
       exclude_internal: 1,
       status: 'ACTIVE',
-    });
+    }, force, TTL_STATIC);
     return (d ?? []).map((b) => ({
       id: num(b.id),
       code: String(b.code ?? ''),
@@ -132,8 +153,8 @@ export class ErpService {
     }));
   }
 
-  async topBuyers(from: string, to: string, limit = 10) {
-    const d = await this.call<any[]>('customers', 'top_buyers', { from, to, limit });
+  async topBuyers(from: string, to: string, limit = 10, force = false) {
+    const d = await this.call<any[]>('customers', 'top_buyers', { from, to, limit }, force, TTL_SALES);
     return (d ?? []).map((c) => ({
       id: num(c.id),
       code: String(c.code ?? ''),
@@ -144,8 +165,8 @@ export class ErpService {
     }));
   }
 
-  async promotions(limit = 20) {
-    const d = await this.call<any[]>('promotions', 'list', { active_only: 1, limit });
+  async promotions(limit = 20, force = false) {
+    const d = await this.call<any[]>('promotions', 'list', { active_only: 1, limit }, force, TTL_STATIC);
     return (d ?? []).map((p) => ({
       id: num(p.id),
       code: String(p.code ?? ''),
@@ -160,9 +181,25 @@ export class ErpService {
     }));
   }
 
-  // ---------- low-level HTTP ----------
+  // ---------- low-level HTTP (with cache) ----------
 
-  private async call<T>(resource: string, action: string, params: Query = {}): Promise<T> {
+  private async call<T>(
+    resource: string,
+    action: string,
+    params: Query = {},
+    force = false,
+    ttlMs = TTL_SALES,
+  ): Promise<T> {
+    const cacheKey = `${resource}:${action}:${JSON.stringify(params)}`;
+
+    if (!force) {
+      const cached = this.cacheGet<T>(cacheKey);
+      if (cached !== undefined) {
+        this.logger.debug(`ERP cache hit: ${cacheKey}`);
+        return cached;
+      }
+    }
+
     const url = new URL(this.cfg.baseUrl);
     url.searchParams.set('resource', resource);
     url.searchParams.set('action', action);
@@ -185,6 +222,7 @@ export class ErpService {
       if (!json.ok) {
         throw new Error('ERP responded ok=false');
       }
+      this.cacheSet(cacheKey, json.data, ttlMs);
       return json.data;
     } catch (err) {
       this.logger.warn(`ERP call ${resource}/${action} failed: ${(err as Error).message}`);

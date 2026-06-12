@@ -21,6 +21,8 @@ function defaultRange(): { from: string; to: string } {
   return { from: fmt(from), to: fmt(to) };
 }
 
+const isForce = (v?: string) => v === 'true' || v === '1';
+
 @Controller('erp')
 export class ErpController {
   constructor(
@@ -30,8 +32,8 @@ export class ErpController {
   ) {}
 
   @Get('dashboard')
-  dashboard() {
-    return this.erp.dashboardSummary();
+  dashboard(@Query('force') force?: string) {
+    return this.erp.dashboardSummary(isForce(force));
   }
 
   @Get('sales-summary')
@@ -39,15 +41,20 @@ export class ErpController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
+    @Query('force') force?: string,
   ) {
     const r = defaultRange();
-    return this.erp.salesSummary(from || r.from, to || r.to, this.toInt(branchId));
+    return this.erp.salesSummary(from || r.from, to || r.to, this.toInt(branchId), isForce(force));
   }
 
   @Get('sales-by-branch')
-  salesByBranch(@Query('from') from?: string, @Query('to') to?: string) {
+  salesByBranch(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('force') force?: string,
+  ) {
     const r = defaultRange();
-    return this.erp.salesByBranch(from || r.from, to || r.to);
+    return this.erp.salesByBranch(from || r.from, to || r.to, isForce(force));
   }
 
   @Get('top-products')
@@ -56,9 +63,10 @@ export class ErpController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
+    @Query('force') force?: string,
   ) {
     const r = defaultRange();
-    return this.erp.topProducts(from || r.from, to || r.to, limit, this.toInt(branchId));
+    return this.erp.topProducts(from || r.from, to || r.to, limit, this.toInt(branchId), isForce(force));
   }
 
   @Get('timeseries')
@@ -67,15 +75,16 @@ export class ErpController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
+    @Query('force') force?: string,
   ) {
     const r = defaultRange();
     const b = bucket === 'week' || bucket === 'month' ? bucket : 'day';
-    return this.erp.timeseries(from || r.from, to || r.to, b, this.toInt(branchId));
+    return this.erp.timeseries(from || r.from, to || r.to, b, this.toInt(branchId), isForce(force));
   }
 
   @Get('branches')
-  branches() {
-    return this.erp.branches();
+  branches(@Query('force') force?: string) {
+    return this.erp.branches(isForce(force));
   }
 
   @Get('top-buyers')
@@ -83,22 +92,27 @@ export class ErpController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('force') force?: string,
   ) {
     const r = defaultRange();
-    return this.erp.topBuyers(from || r.from, to || r.to, limit);
+    return this.erp.topBuyers(from || r.from, to || r.to, limit, isForce(force));
   }
 
   @Get('promotions')
-  promotions(@Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number) {
-    return this.erp.promotions(limit);
+  promotions(
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('force') force?: string,
+  ) {
+    return this.erp.promotions(limit, isForce(force));
   }
 
   @Get('ai-insights')
   aiInsights(
     @CurrentUser() user: AuthUser,
     @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+    @Query('force') force?: string,
   ) {
-    return this.insights.analyze(user, days);
+    return this.insights.analyze(user, days, isForce(force));
   }
 
   @Get('history')

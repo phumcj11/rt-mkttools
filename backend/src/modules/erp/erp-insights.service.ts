@@ -9,13 +9,17 @@ export interface ErpInsightsResult {
   insights: string[];
   text: string;
   generatedAt: string;
+  cachedAt?: string;
 }
+
+const INSIGHTS_TTL_MS = 20 * 60 * 1_000; // 20 minutes
 
 const baht = (v: number) => `฿${Math.round(v).toLocaleString('th-TH')}`;
 
 @Injectable()
 export class ErpInsightsService {
   private readonly logger = new Logger(ErpInsightsService.name);
+  private readonly cache = new Map<string, { result: ErpInsightsResult; expiry: number }>();
 
   constructor(
     private readonly erp: ErpService,
@@ -23,7 +27,15 @@ export class ErpInsightsService {
     private readonly openai: OpenAiService,
   ) {}
 
-  async analyze(user: AuthUser, days = 30): Promise<ErpInsightsResult> {
+  async analyze(user: AuthUser, days = 30, force = false): Promise<ErpInsightsResult> {
+    const cacheKey = `${user.tenantId}:${days}`;
+
+    if (!force) {
+      const cached = this.cache.get(cacheKey);
+      if (cached && Date.now() <= cached.expiry) {
+        return { ...cached.result, cachedAt: new Date(cached.expiry - INSIGHTS_TTL_MS).toISOString() };
+      }
+    }
     const to = new Date();
     const from = new Date();
     from.setDate(from.getDate() - (days - 1));
@@ -81,24 +93,28 @@ export class ErpInsightsService {
           .split('\n')
           .map((l) => l.replace(/^[-*•]\s*/, '').trim())
           .filter(Boolean);
-        return {
+        const aiResult: ErpInsightsResult = {
           source: 'ai',
           insights,
           text: result.content,
           generatedAt: new Date().toISOString(),
         };
+        this.cache.set(cacheKey, { result: aiResult, expiry: Date.now() + INSIGHTS_TTL_MS });
+        return aiResult;
       } catch (err) {
         this.logger.warn(`AI insight failed, falling back to heuristic: ${(err as Error).message}`);
       }
     }
 
-    const insights = this.heuristic(facts);
-    return {
+    const hInsights = this.heuristic(facts);
+    const hResult: ErpInsightsResult = {
       source: 'heuristic',
-      insights,
-      text: insights.map((i) => `- ${i}`).join('\n'),
+      insights: hInsights,
+      text: hInsights.map((i) => `- ${i}`).join('\n'),
       generatedAt: new Date().toISOString(),
     };
+    this.cache.set(cacheKey, { result: hResult, expiry: Date.now() + INSIGHTS_TTL_MS });
+    return hResult;
   }
 
   private heuristic(f: {
