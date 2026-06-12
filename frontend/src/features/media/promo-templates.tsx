@@ -129,6 +129,40 @@ export type PromoData =
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+/** Opaque rectangle to hide baked-in [PLACEHOLDER] text from template PNG */
+function Mask({
+  left,
+  top,
+  width,
+  height,
+  color = '#ffffff',
+  borderRadius = 0,
+  zIndex = 1,
+}: {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  color?: string;
+  borderRadius?: number;
+  zIndex?: number;
+}) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left,
+        top,
+        width,
+        height,
+        background: color,
+        borderRadius,
+        zIndex,
+      }}
+    />
+  );
+}
+
 function PromoImg({
   src,
   style,
@@ -148,11 +182,14 @@ function PromoImg({
   );
 }
 
-function Overlay({
+/** Mask placeholder area then render content on top */
+function Slot({
   left,
   top,
   width,
   height,
+  maskColor = '#ffffff',
+  borderRadius = 0,
   style,
   children,
 }: {
@@ -160,26 +197,32 @@ function Overlay({
   top: number;
   width: number;
   height: number;
+  maskColor?: string;
+  borderRadius?: number;
   style?: React.CSSProperties;
   children?: React.ReactNode;
 }) {
   return (
-    <div
-      style={{
-        position: 'absolute',
-        left,
-        top,
-        width,
-        height,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
-        ...style,
-      }}
-    >
-      {children}
-    </div>
+    <>
+      <Mask left={left} top={top} width={width} height={height} color={maskColor} borderRadius={borderRadius} />
+      <div
+        style={{
+          position: 'absolute',
+          left,
+          top,
+          width,
+          height,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          zIndex: 2,
+          ...style,
+        }}
+      >
+        {children}
+      </div>
+    </>
   );
 }
 
@@ -190,38 +233,37 @@ function Overlay({
 function SpendFreeGiftTemplate({ data }: { data: SpendFreeGiftData }) {
   return (
     <div style={{ width: 1024, height: 729, position: 'relative', fontFamily: FONT, overflow: 'hidden' }}>
-      {/* Background */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/templates/promo-spend-free-gift.png" alt="" crossOrigin="anonymous"
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 
-      {/* [PRODUCT_IMAGE] — left dashed box */}
-      <Overlay left={25} top={95} width={338} height={515}>
+      {/* [PRODUCT_IMAGE] — mask dashed box + product */}
+      <Slot left={32} top={102} width={326} height={498} maskColor="#ffffff" borderRadius={14}
+        style={{ padding: '16px 12px' }}>
         <PromoImg src={data.productImage} />
-      </Overlay>
+      </Slot>
 
-      {/* [PRICE] — white rounded box (right, upper) */}
-      <Overlay left={562} top={65} width={358} height={88}
-        style={{ flexDirection: 'column', gap: 0 }}>
-        <span style={{ fontSize: 52, fontWeight: 900, color: '#c41e1e', letterSpacing: -1 }}>
+      {/* [PRICE] — white rounded box between SPEND and THB */}
+      <Slot left={548} top={54} width={352} height={96} maskColor="#ffffff" borderRadius={18}>
+        <span style={{ fontSize: 68, fontWeight: 900, color: '#c41e1e', lineHeight: 1, letterSpacing: -2 }}>
           {data.spendAmount}
         </span>
-      </Overlay>
+      </Slot>
 
-      {/* [FREE_GIFT] — yellow/gold box */}
-      <Overlay left={508} top={370} width={466} height={210}
-        style={{ flexDirection: 'column', padding: '8px 24px' }}>
-        <span style={{ fontSize: 30, fontWeight: 800, color: '#c41e1e', textAlign: 'center', lineHeight: 1.3 }}>
+      {/* [FREE_GIFT] — yellow parallelogram area */}
+      <Slot left={488} top={348} width={502} height={232} maskColor="#ffd028" borderRadius={4}
+        style={{ padding: '12px 28px' }}>
+        <span style={{ fontSize: 34, fontWeight: 900, color: '#b91c1c', textAlign: 'center', lineHeight: 1.25, textTransform: 'uppercase' }}>
           {data.freeGift}
         </span>
-      </Overlay>
+      </Slot>
 
-      {/* [VALID_DATE] — bottom bar */}
-      <Overlay left={450} top={645} width={510} height={52}>
-        <span style={{ fontSize: 22, fontWeight: 700, color: '#333', textAlign: 'center' }}>
+      {/* [VALID_DATE] — bottom white pill */}
+      <Slot left={432} top={636} width={538} height={58} maskColor="#ffffff" borderRadius={28}>
+        <span style={{ fontSize: 24, fontWeight: 700, color: '#1e293b', textAlign: 'center' }}>
           {data.validDate}
         </span>
-      </Overlay>
+      </Slot>
     </div>
   );
 }
@@ -237,47 +279,36 @@ function BuyXGetYTemplate({ data }: { data: BuyXGetYData }) {
       <img src="/templates/promo-buy-x-get-y.png" alt="" crossOrigin="anonymous"
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 
-      {/* [PRODUCT_IMAGE] — main left product */}
-      <Overlay left={20} top={140} width={383} height={540}>
+      <Slot left={22} top={142} width={378} height={532} maskColor="#ffffff" borderRadius={14}
+        style={{ padding: '12px' }}>
         <PromoImg src={data.mainProductImage} />
-      </Overlay>
+      </Slot>
 
-      {/* [BUY_PRODUCT] — lower right BUY box */}
-      <Overlay left={487} top={460} width={210} height={218}
-        style={{ flexDirection: 'column', gap: 6, padding: 8 }}>
+      <Slot left={490} top={462} width={206} height={210} maskColor="#ffffff" borderRadius={12}
+        style={{ flexDirection: 'column', gap: 4, padding: 8 }}>
         {data.buyProductImage
-          ? <PromoImg src={data.buyProductImage} style={{ objectFit: 'contain' }} />
-          : <span style={{ fontSize: 20, fontWeight: 700, color: '#c41e1e', textAlign: 'center' }}>
-              {data.buyProductName}
-            </span>}
-        {data.buyProductImage && (
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#c41e1e', textAlign: 'center', marginTop: 4 }}>
-            {data.buyProductName}
-          </span>
-        )}
-      </Overlay>
+          ? <PromoImg src={data.buyProductImage} />
+          : null}
+        <span style={{ fontSize: 17, fontWeight: 800, color: '#b91c1c', textAlign: 'center', lineHeight: 1.2 }}>
+          {data.buyProductName}
+        </span>
+      </Slot>
 
-      {/* [GET_PRODUCT] — lower right GET box */}
-      <Overlay left={710} top={460} width={248} height={218}
-        style={{ flexDirection: 'column', gap: 6, padding: 8 }}>
+      <Slot left={712} top={462} width={244} height={210} maskColor="#ffffff" borderRadius={12}
+        style={{ flexDirection: 'column', gap: 4, padding: 8 }}>
         {data.getProductImage
-          ? <PromoImg src={data.getProductImage} style={{ objectFit: 'contain' }} />
-          : <span style={{ fontSize: 20, fontWeight: 700, color: '#c41e1e', textAlign: 'center' }}>
-              {data.getProductName}
-            </span>}
-        {data.getProductImage && (
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#c41e1e', textAlign: 'center', marginTop: 4 }}>
-            {data.getProductName}
-          </span>
-        )}
-      </Overlay>
+          ? <PromoImg src={data.getProductImage} />
+          : null}
+        <span style={{ fontSize: 17, fontWeight: 800, color: '#b91c1c', textAlign: 'center', lineHeight: 1.2 }}>
+          {data.getProductName}
+        </span>
+      </Slot>
 
-      {/* [VALID_DATE] — bottom bar */}
-      <Overlay left={468} top={685} width={492} height={50}>
-        <span style={{ fontSize: 22, fontWeight: 700, color: '#333', textAlign: 'center' }}>
+      <Slot left={462} top={682} width={498} height={52} maskColor="#ffffff" borderRadius={26}>
+        <span style={{ fontSize: 24, fontWeight: 700, color: '#1e293b', textAlign: 'center' }}>
           {data.validDate}
         </span>
-      </Overlay>
+      </Slot>
     </div>
   );
 }
@@ -293,53 +324,45 @@ function BundleDealTemplate({ data }: { data: BundleDealData }) {
       <img src="/templates/promo-bundle-deal.png" alt="" crossOrigin="anonymous"
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 
-      {/* [PRODUCT_1_IMAGE] — large left */}
-      <Overlay left={20} top={130} width={358} height={515}>
+      <Slot left={22} top={132} width={354} height={500} maskColor="#ffffff" borderRadius={14}
+        style={{ padding: '12px' }}>
         <PromoImg src={data.product1Image} />
-      </Overlay>
-
-      {/* [PRODUCT_1_NAME] — left bottom label */}
-      <Overlay left={20} top={645} width={358} height={40}>
-        <span style={{ fontSize: 18, fontWeight: 800, color: '#c41e1e', textAlign: 'center', background: 'rgba(255,255,255,0.85)', padding: '2px 12px', borderRadius: 6 }}>
+      </Slot>
+      <Slot left={22} top={638} width={354} height={44} maskColor="#dc2626" borderRadius={8}>
+        <span style={{ fontSize: 18, fontWeight: 800, color: '#fff', textAlign: 'center', padding: '0 8px' }}>
           {data.product1Name}
         </span>
-      </Overlay>
+      </Slot>
 
-      {/* [PRODUCT_2_IMAGE] — center */}
-      <Overlay left={388} top={205} width={295} height={420}>
+      <Slot left={390} top={208} width={288} height={408} maskColor="#ffffff" borderRadius={14}
+        style={{ padding: '10px' }}>
         <PromoImg src={data.product2Image} />
-      </Overlay>
-
-      {/* [PRODUCT_2_NAME] — center bottom label */}
-      <Overlay left={388} top={628} width={295} height={43}>
-        <span style={{ fontSize: 18, fontWeight: 800, color: '#c41e1e', textAlign: 'center', background: 'rgba(255,255,255,0.85)', padding: '2px 12px', borderRadius: 6 }}>
+      </Slot>
+      <Slot left={390} top={622} width={288} height={44} maskColor="#dc2626" borderRadius={8}>
+        <span style={{ fontSize: 18, fontWeight: 800, color: '#fff', textAlign: 'center', padding: '0 8px' }}>
           {data.product2Name}
         </span>
-      </Overlay>
+      </Slot>
 
-      {/* [PRICE] — starburst right center */}
-      <Overlay left={712} top={295} width={268} height={228}
-        style={{ flexDirection: 'column', gap: 2 }}>
-        <span style={{ fontSize: 52, fontWeight: 900, color: '#fff', lineHeight: 1, textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
+      <Slot left={718} top={300} width={258} height={218} maskColor="#dc2626" borderRadius={0}
+        style={{ flexDirection: 'column', gap: 0 }}>
+        <span style={{ fontSize: 58, fontWeight: 900, color: '#fde047', lineHeight: 1 }}>
           {data.bundlePrice}
         </span>
-        <span style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>THB</span>
-      </Overlay>
+      </Slot>
 
-      {/* [FREE_GIFT] — yellow box right */}
-      <Overlay left={700} top={530} width={285} height={135}
-        style={{ flexDirection: 'column', padding: '8px 16px' }}>
-        <span style={{ fontSize: 22, fontWeight: 800, color: '#c41e1e', textAlign: 'center', lineHeight: 1.3 }}>
+      <Slot left={698} top={532} width={288} height={138} maskColor="#ffd028" borderRadius={6}
+        style={{ padding: '8px 16px' }}>
+        <span style={{ fontSize: 24, fontWeight: 900, color: '#b91c1c', textAlign: 'center', lineHeight: 1.25 }}>
           {data.freeGiftName ?? ''}
         </span>
-      </Overlay>
+      </Slot>
 
-      {/* [VALID_DATE] — bottom bar */}
-      <Overlay left={445} top={680} width={515} height={52}>
-        <span style={{ fontSize: 22, fontWeight: 700, color: '#333', textAlign: 'center' }}>
+      <Slot left={442} top={678} width={518} height={54} maskColor="#ffffff" borderRadius={26}>
+        <span style={{ fontSize: 24, fontWeight: 700, color: '#1e293b', textAlign: 'center' }}>
           {data.validDate}
         </span>
-      </Overlay>
+      </Slot>
     </div>
   );
 }
@@ -350,10 +373,10 @@ function BundleDealTemplate({ data }: { data: BundleDealData }) {
 
 function NewArrivalTemplate({ data }: { data: NewArrivalData }) {
   const features = [data.feature1, data.feature2, data.feature3];
-  const featurePositions = [
-    { left: 480, top: 485, width: 146 },
-    { left: 638, top: 485, width: 147 },
-    { left: 797, top: 485, width: 178 },
+  const featureSlots = [
+    { left: 478, top: 488, width: 148, height: 188 },
+    { left: 636, top: 488, width: 149, height: 188 },
+    { left: 795, top: 488, width: 180, height: 188 },
   ];
 
   return (
@@ -362,33 +385,33 @@ function NewArrivalTemplate({ data }: { data: NewArrivalData }) {
       <img src="/templates/promo-new-arrival.png" alt="" crossOrigin="anonymous"
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 
-      {/* [PRODUCT_IMAGE] — left */}
-      <Overlay left={20} top={120} width={388} height={535}>
+      <Slot left={22} top={122} width={384} height={528} maskColor="#ffffff" borderRadius={14}
+        style={{ padding: '12px' }}>
         <PromoImg src={data.productImage} />
-      </Overlay>
+      </Slot>
 
-      {/* [FEATURE_1/2/3] — 3 boxes bottom right */}
       {features.map((feat, i) => (
-        <Overlay
+        <Slot
           key={i}
-          left={featurePositions[i].left}
-          top={featurePositions[i].top}
-          width={featurePositions[i].width}
-          height={195}
-          style={{ flexDirection: 'column', padding: '4px 6px', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 12 }}
+          left={featureSlots[i].left}
+          top={featureSlots[i].top}
+          width={featureSlots[i].width}
+          height={featureSlots[i].height}
+          maskColor="#ffffff"
+          borderRadius={10}
+          style={{ padding: '8px 6px', alignItems: 'flex-end', paddingBottom: 14 }}
         >
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#c41e1e', textAlign: 'center', lineHeight: 1.3 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#b91c1c', textAlign: 'center', lineHeight: 1.3 }}>
             {feat}
           </span>
-        </Overlay>
+        </Slot>
       ))}
 
-      {/* [VALID_DATE] — bottom bar */}
-      <Overlay left={445} top={683} width={530} height={52}>
-        <span style={{ fontSize: 22, fontWeight: 700, color: '#333', textAlign: 'center' }}>
+      <Slot left={442} top={681} width={528} height={54} maskColor="#ffffff" borderRadius={26}>
+        <span style={{ fontSize: 24, fontWeight: 700, color: '#1e293b', textAlign: 'center' }}>
           {data.validDate}
         </span>
-      </Overlay>
+      </Slot>
     </div>
   );
 }
@@ -398,13 +421,13 @@ function NewArrivalTemplate({ data }: { data: NewArrivalData }) {
 // ---------------------------------------------------------------------------
 
 function ClearanceSaleTemplate({ data }: { data: ClearanceSaleData }) {
-  const smallProductPositions = [
-    { left: 435, top: 400 },
-    { left: 628, top: 400 },
-    { left: 810, top: 400 },
+  const smallSlots = [
+    { left: 437, top: 402 },
+    { left: 630, top: 402 },
+    { left: 812, top: 402 },
   ];
-  const smallW = 188;
-  const smallH = 245;
+  const smallW = 186;
+  const smallImgH = 145;
 
   return (
     <div style={{ width: 1024, height: 742, position: 'relative', fontFamily: FONT, overflow: 'hidden' }}>
@@ -412,55 +435,48 @@ function ClearanceSaleTemplate({ data }: { data: ClearanceSaleData }) {
       <img src="/templates/promo-clearance-sale.png" alt="" crossOrigin="anonymous"
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 
-      {/* [MAIN_PRODUCT_IMAGE] — left large */}
-      <Overlay left={20} top={130} width={363} height={490}>
+      <Slot left={22} top={132} width={358} height={482} maskColor="#ffffff" borderRadius={14}
+        style={{ padding: '10px' }}>
         <PromoImg src={data.mainProductImage} />
-      </Overlay>
-
-      {/* [MAIN_PRODUCT_NAME] — left bottom black bar */}
-      <Overlay left={20} top={622} width={363} height={43}>
-        <span style={{ fontSize: 20, fontWeight: 800, color: '#fff', textAlign: 'center', background: 'rgba(0,0,0,0.75)', padding: '4px 14px', borderRadius: 6 }}>
+      </Slot>
+      <Slot left={22} top={618} width={358} height={44} maskColor="#0f172a" borderRadius={6}>
+        <span style={{ fontSize: 19, fontWeight: 800, color: '#fff', textAlign: 'center', padding: '0 10px' }}>
           {data.mainProductName}
         </span>
-      </Overlay>
+      </Slot>
 
-      {/* [DISCOUNT%] — starburst top right */}
-      <Overlay left={812} top={58} width={178} height={197}
-        style={{ flexDirection: 'column', gap: 0 }}>
-        <span style={{ fontSize: 52, fontWeight: 900, color: '#fbbf24', lineHeight: 1, textShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>
+      <Slot left={818} top={62} width={168} height={188} maskColor="#dc2626" borderRadius={0}>
+        <span style={{ fontSize: 56, fontWeight: 900, color: '#fde047', lineHeight: 1 }}>
           {data.discountPercent}
         </span>
-      </Overlay>
+      </Slot>
 
-      {/* 3 small products */}
       {data.products.slice(0, 3).map((p, i) => {
-        const pos = smallProductPositions[i];
+        const pos = smallSlots[i];
         return (
-          <div key={i} style={{ position: 'absolute', left: pos.left, top: pos.top, width: smallW, height: smallH }}>
-            {/* product image area */}
-            <div style={{ position: 'absolute', left: 0, top: 15, width: smallW, height: 148, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          <div key={i} style={{ position: 'absolute', left: pos.left, top: pos.top, width: smallW, zIndex: 2 }}>
+            <Mask left={0} top={12} width={smallW} height={smallImgH} color="#ffffff" borderRadius={10} />
+            <div style={{ position: 'absolute', left: 0, top: 12, width: smallW, height: smallImgH, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', zIndex: 3, padding: 6 }}>
               <PromoImg src={p.image} />
             </div>
-            {/* SAVE ribbon handled by background template */}
-            {/* price */}
-            <div style={{ position: 'absolute', left: 0, bottom: 68, width: smallW, textAlign: 'center' }}>
-              <span style={{ fontSize: 18, fontWeight: 800, color: '#c41e1e' }}>฿{p.price}</span>
+            <Mask left={0} top={smallImgH + 22} width={smallW} height={32} color="#ffffff" borderRadius={4} />
+            <div style={{ position: 'absolute', left: 0, top: smallImgH + 22, width: smallW, textAlign: 'center', zIndex: 3 }}>
+              <span style={{ fontSize: 18, fontWeight: 900, color: '#b91c1c' }}>฿{p.price}</span>
             </div>
-            {/* name */}
-            <div style={{ position: 'absolute', left: 0, bottom: 8, width: smallW, textAlign: 'center', background: 'rgba(0,0,0,0.8)', padding: '3px 6px' }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{p.name}</span>
+            <Mask left={0} top={smallImgH + 58} width={smallW} height={36} color="#0f172a" borderRadius={4} />
+            <div style={{ position: 'absolute', left: 0, top: smallImgH + 58, width: smallW, textAlign: 'center', zIndex: 3, padding: '4px 4px' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>{p.name}</span>
             </div>
           </div>
         );
       })}
 
-      {/* [VALID_DATE] — bottom bar */}
-      <Overlay left={408} top={650} width={567} height={55}
-        style={{ paddingLeft: 36 }}>
-        <span style={{ fontSize: 22, fontWeight: 700, color: '#333', textAlign: 'center' }}>
+      <Slot left={406} top={648} width={570} height={56} maskColor="#ffffff" borderRadius={26}
+        style={{ paddingLeft: 32 }}>
+        <span style={{ fontSize: 24, fontWeight: 700, color: '#1e293b', textAlign: 'center' }}>
           {data.validDate}
         </span>
-      </Overlay>
+      </Slot>
     </div>
   );
 }

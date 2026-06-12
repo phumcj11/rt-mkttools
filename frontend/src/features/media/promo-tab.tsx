@@ -432,6 +432,9 @@ export function PromoTab({ products }: { products: ErpProduct[] }) {
               </button>
             ))}
           </div>
+          <p className="mt-3 text-xs text-muted-foreground bg-muted/50 border rounded-md px-3 py-2">
+            ใช้ Template มาตรฐาน + ข้อมูลจากฟอร์ม — ไม่ใช้ AI ออกแบบใหม่ทุกครั้ง (AI มีแค่ปุ่ม Generate Features ใน New Arrival)
+          </p>
         </CardContent>
       </Card>
 
@@ -493,45 +496,42 @@ export function PromoTab({ products }: { products: ErpProduct[] }) {
           </CardContent>
         </Card>
 
-        {/* Result preview */}
+        {/* Live preview + saved result */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">ผลลัพธ์</CardTitle>
+            <CardTitle className="text-base">ตัวอย่าง (Live Preview)</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            <div className="overflow-hidden rounded-lg border bg-muted/30">
+              <div
+                style={{
+                  transform: `scale(${520 / getPromoDimensions(promoType).width})`,
+                  transformOrigin: 'top left',
+                  width: getPromoDimensions(promoType).width,
+                  height: getPromoDimensions(promoType).height,
+                }}
+              >
+                <PromoTemplateRenderer type={promoType} data={promoData} />
+              </div>
+              <div style={{ height: getPromoDimensions(promoType).height * (520 / getPromoDimensions(promoType).width) }} />
+            </div>
+
             {saving && (
-              <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="text-sm">กำลังสร้างโปสเตอร์...</p>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                กำลังบันทึก PNG...
               </div>
             )}
-            {!saving && resolvedResultUrl && (
-              <div className="space-y-3">
-                <img
-                  src={resolvedResultUrl}
-                  alt="promotion poster"
-                  className="w-full rounded-lg border shadow"
-                />
-                <div className="flex gap-2">
-                  <a
-                    href={resolvedResultUrl}
-                    download={resultFilename ?? 'promo-poster.png'}
-                    className="flex-1"
-                  >
-                    <Button variant="outline" className="w-full gap-1.5">
-                      <Download className="h-4 w-4" />
-                      ดาวน์โหลด PNG
-                    </Button>
-                  </a>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  บันทึกใน Files แล้ว — ดูที่แท็บ &quot;ไฟล์ที่สร้าง&quot;
-                </p>
-              </div>
-            )}
-            {!saving && !resolvedResultUrl && (
-              <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground/50">
-                <p className="text-sm">กรอกข้อมูลแล้วกด &quot;สร้างโปสเตอร์&quot;</p>
+
+            {resolvedResultUrl && !saving && (
+              <div className="space-y-2 pt-2 border-t">
+                <p className="text-xs font-medium text-green-700">บันทึกสำเร็จ</p>
+                <a href={resolvedResultUrl} download={resultFilename ?? 'promo-poster.png'}>
+                  <Button variant="outline" className="w-full gap-1.5">
+                    <Download className="h-4 w-4" />
+                    ดาวน์โหลด PNG
+                  </Button>
+                </a>
               </div>
             )}
           </CardContent>
