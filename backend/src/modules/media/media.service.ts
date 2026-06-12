@@ -37,6 +37,59 @@ const PROMO_TYPE_LABELS: Record<string, string> = {
   clearance_sale: 'Clearance Sale — ลดแรง สินค้าจำกัด',
 };
 
+const PROMO_TEMPLATE_FILES: Record<string, string> = {
+  spend_free_gift: 'promo-spend-free-gift.png',
+  buy_x_get_y: 'promo-buy-x-get-y.png',
+  bundle_deal: 'promo-bundle-deal.png',
+  new_arrival: 'promo-new-arrival.png',
+  clearance_sale: 'promo-clearance-sale.png',
+};
+
+/** Layout description per template — guides AI when editing the template PNG */
+const PROMO_TEMPLATE_LAYOUTS: Record<string, string> = {
+  spend_free_gift: [
+    'Template layout to preserve:',
+    '- LEFT: large product photo box (replace [PRODUCT_IMAGE] with real product photo)',
+    '- TOP RIGHT: "SPEND" headline, white box with spend amount in THB, "or more in-store" text',
+    '- MIDDLE RIGHT: yellow/gold FREE GIFT banner (replace [FREE_GIFT] with gift description in Thai)',
+    '- BOTTOM: valid date bar (replace [VALID_DATE])',
+    '- Keep: 100 BAHT SHOP logo, red elephant mascot, red/white theme, decorative elements',
+  ].join('\n'),
+  buy_x_get_y: [
+    'Template layout to preserve:',
+    '- LEFT: main product photo (replace [PRODUCT_IMAGE])',
+    '- TOP RIGHT: "BUY X GET Y" headline',
+    '- BOTTOM RIGHT: two boxes labeled BUY and GET (replace [BUY_PRODUCT] and [GET_PRODUCT] with product names/images)',
+    '- BOTTOM: valid date bar',
+    '- Keep: branding, mascot, red/white theme',
+  ].join('\n'),
+  bundle_deal: [
+    'Template layout to preserve:',
+    '- LEFT: product 1 photo + name label (replace [PRODUCT_1_IMAGE], [PRODUCT_1_NAME])',
+    '- CENTER: product 2 photo + name + plus sign (replace [PRODUCT_2_IMAGE], [PRODUCT_2_NAME])',
+    '- RIGHT: starburst with bundle price "ONLY X THB" (replace [PRICE])',
+    '- RIGHT BOTTOM: yellow FREE gift box (replace [FREE_GIFT_IMAGE] text)',
+    '- BOTTOM: valid date bar',
+    '- Keep: BUNDLE DEAL headline, mascot, branding',
+  ].join('\n'),
+  new_arrival: [
+    'Template layout to preserve:',
+    '- LEFT: product photo (replace [PRODUCT_IMAGE])',
+    '- TOP RIGHT: "NEW ARRIVAL" headline and Thai subheadline',
+    '- BOTTOM RIGHT: 3 feature boxes (replace [FEATURE_1], [FEATURE_2], [FEATURE_3] with Thai text)',
+    '- BOTTOM: valid date bar with calendar icon',
+    '- Keep: NEW badges, mascot, branding',
+  ].join('\n'),
+  clearance_sale: [
+    'Template layout to preserve:',
+    '- LEFT: main product photo + name bar (replace [PRODUCT_IMAGE], [PRODUCT_NAME])',
+    '- TOP RIGHT: "CLEARANCE SALE" + discount starburst (replace discount % in UP TO % OFF area)',
+    '- BOTTOM RIGHT: 3 small product slots with price and name (replace each [PRODUCT_IMAGE], [PRICE], [PRODUCT_NAME], SAVE %)',
+    '- BOTTOM: valid date bar',
+    '- Keep: Thai "ลดแรง" ribbon, mascot, branding',
+  ].join('\n'),
+};
+
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
@@ -268,29 +321,26 @@ export class MediaService {
     ].join('\n');
   }
 
-  /** Generate promotion poster via AI prompt + GPT Image */
+  /** Generate promotion poster via template PNG + AI prompt + GPT Image edit */
   async generatePromoGptImage(
     promoType: string,
     data: Record<string, unknown>,
     referenceImageUrl?: string,
   ): Promise<PromoGptResult> {
     const label = PROMO_TYPE_LABELS[promoType] ?? promoType;
-    this.logger.log(`GPT Image promo generating: ${promoType}…`);
+    this.logger.log(`GPT Image promo generating: ${promoType} (template reference)…`);
 
-    const imagePrompt = await this.craftPromoImagePrompt(label, data);
+    const hasProductRef = !!referenceImageUrl?.startsWith('http');
+    const imagePrompt = await this.craftPromoImagePrompt(promoType, label, data, referenceImageUrl);
 
     let imageResult;
-    if (referenceImageUrl?.startsWith('http')) {
-      try {
-        const { buffer, contentType } = await this.proxyImage(referenceImageUrl);
-        imageResult = await this.openAi.editGptImage(imagePrompt, buffer, contentType, {
-          size: '1536x1024',
-        });
-      } catch (err) {
-        this.logger.warn(`Promo edit failed, falling back to generate: ${String(err)}`);
-        imageResult = await this.openAi.generateGptImage(imagePrompt, { size: '1536x1024' });
-      }
-    } else {
+    try {
+      const templateBuffer = this.loadPromoTemplate(promoType);
+      imageResult = await this.openAi.editGptImage(imagePrompt, templateBuffer, 'image/png', {
+        size: '1536x1024',
+      });
+    } catch (err) {
+      this.logger.warn(`Promo template edit failed, falling back to generate: ${String(err)}`);
       imageResult = await this.openAi.generateGptImage(imagePrompt, { size: '1536x1024' });
     }
 
@@ -311,28 +361,70 @@ export class MediaService {
     };
   }
 
-  /** AI writes the GPT Image prompt from structured promo form data */
-  private async craftPromoImagePrompt(promoLabel: string, data: Record<string, unknown>): Promise<string> {
+  /** Load official promo template PNG from backend assets */
+  private loadPromoTemplate(promoType: string): Buffer {
+    const filename = PROMO_TEMPLATE_FILES[promoType];
+    if (!filename) throw new Error(`Unknown promo type: ${promoType}`);
+
+    const candidates = [
+      path.join(process.cwd(), 'assets', 'promo-templates', filename),
+      path.join(process.cwd(), '..', 'frontend', 'public', 'templates', filename),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        this.logger.log(`Using promo template: ${p}`);
+        return fs.readFileSync(p);
+      }
+    }
+    throw new Error(`Template PNG not found for ${promoType} — check assets/promo-templates/`);
+  }
+
+  /** AI writes the GPT Image edit prompt — fills placeholders on the template PNG */
+  private async craftPromoImagePrompt(
+    promoType: string,
+    promoLabel: string,
+    data: Record<string, unknown>,
+    referenceImageUrl?: string,
+  ): Promise<string> {
+    const layoutHint = PROMO_TEMPLATE_LAYOUTS[promoType] ?? '';
     const dataJson = JSON.stringify(data, null, 2);
+
+    let productVisualHint = '';
+    if (referenceImageUrl?.startsWith('http')) {
+      try {
+        productVisualHint = await this.openAi.analyzeImage(
+          referenceImageUrl,
+          'Describe this product packaging briefly (color, shape, label text) for reproducing it accurately in a marketing poster product photo area. Max 3 sentences in English.',
+        );
+      } catch {
+        productVisualHint = 'Use the product name from the form data to render an accurate product photo.';
+      }
+    }
+
     const system = [
-      'You are an expert prompt engineer for GPT Image creating Thai retail promotion posters.',
-      'Brand: "100 Baht Shop Thailand" — red and white color scheme, cute red elephant mascot, professional retail quality.',
-      'Output ONLY the image generation prompt in English (max 800 words).',
-      'The prompt must specify:',
-      '- Landscape orientation marketing poster layout',
-      '- All Thai promotional text must appear exactly as provided in the data (prices, product names, dates, gifts)',
-      '- Product photo should be prominent and recognizable if reference image is used',
-      '- Include brand logo area "100 BAHT SHOP" at top',
-      '- High contrast, print-ready, suitable for in-store and social media',
-      '- Do NOT include placeholder brackets like [PRICE] — use actual values from data',
+      'You are an expert prompt engineer for GPT Image EDIT mode.',
+      'The input image is an OFFICIAL "100 Baht Shop Thailand" promotion poster TEMPLATE with placeholder labels.',
+      'Your prompt must instruct GPT Image to:',
+      '1. KEEP the exact template layout, colors, branding, logo, elephant mascot, and decorative elements',
+      '2. REPLACE all placeholder text ([PRICE], [FREE_GIFT], [PRODUCT_IMAGE], etc.) with REAL data values',
+      '3. REMOVE placeholder brackets and camera icons — show real product photos and readable Thai text',
+      '4. Use the exact Thai text values provided in the form data',
+      'Output ONLY the image edit prompt in English (max 600 words).',
     ].join('\n');
 
     const user = [
       `Promotion type: ${promoLabel}`,
-      'Form data (use these exact Thai values on the poster):',
+      '',
+      layoutHint,
+      '',
+      'Form data — use these EXACT values on the poster:',
       dataJson,
       '',
-      'Write a detailed GPT Image prompt for this specific promotion poster.',
+      referenceImageUrl
+        ? `Product photo reference (render this product accurately in the product placeholder):\n${productVisualHint}`
+        : 'No product photo reference — render appropriate product imagery based on product names in the data.',
+      '',
+      'Write the GPT Image EDIT prompt to fill this template with the promotion data.',
     ].join('\n');
 
     try {
@@ -343,17 +435,27 @@ export class MediaService {
       this.logger.warn(`AI prompt craft failed, using fallback: ${String(err)}`);
     }
 
-    return this.buildFallbackPromoPrompt(promoLabel, data);
+    return this.buildFallbackPromoPrompt(promoType, promoLabel, data, layoutHint);
   }
 
-  private buildFallbackPromoPrompt(promoLabel: string, data: Record<string, unknown>): string {
+  private buildFallbackPromoPrompt(
+    promoType: string,
+    promoLabel: string,
+    data: Record<string, unknown>,
+    layoutHint: string,
+  ): string {
     return [
-      `Create a professional landscape promotion poster for 100 Baht Shop Thailand.`,
-      `Promotion style: ${promoLabel}`,
-      'Design: red and white retail theme, cute red elephant mascot, bold Thai typography, print-ready quality.',
-      'Include all of the following information as readable Thai text on the poster:',
+      'Edit this promotion poster template image for 100 Baht Shop Thailand.',
+      `Promotion type: ${promoLabel}`,
+      '',
+      layoutHint,
+      '',
+      'Replace ALL placeholder labels with real content. Remove [BRACKETS] and placeholder icons.',
+      'Use these exact values:',
       JSON.stringify(data),
-      'Brand footer: 100 Baht Shop Thailand',
+      '',
+      'Keep template layout, red/white branding, elephant mascot unchanged.',
+      'All promotional text in Thai. Print-ready quality.',
     ].join('\n');
   }
 

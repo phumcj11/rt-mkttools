@@ -413,8 +413,8 @@ export function PromoTab({ products }: { products: ErpProduct[] }) {
             ))}
           </div>
           <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-            AI คิด prompt จากข้อมูลฟอร์ม → GPT Image สร้างโปสเตอร์ (~15–30 วิ, ~$0.04–0.12/รูป)
-            {referenceImageUrl ? ' · ใช้รูป ERP เป็นฐาน' : ' · ไม่มีรูป ERP จะสร้างจาก prompt อย่างเดียว'}
+            ใช้ Template PNG 5 แบบเป็น reference → AI คิด prompt ใส่ข้อมูล → GPT Image แก้ไข template (~15–30 วิ)
+            {referenceImageUrl ? ' · วิเคราะห์รูป ERP เพื่อวาดสินค้าให้ตรง' : ''}
           </p>
         </CardContent>
       </Card>
