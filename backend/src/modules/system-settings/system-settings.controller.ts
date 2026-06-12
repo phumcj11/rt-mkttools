@@ -64,4 +64,27 @@ export class SystemSettingsController {
     }
     return { ok: true };
   }
+
+  @Get('google')
+  async getGoogleSettings() {
+    const clientId = (await this.svc.get('google_client_id')) ?? '';
+    return {
+      google_configured: clientId.length > 5,
+      google_client_id_preview: clientId.length > 5 ? `...${clientId.slice(-6)}` : null,
+    };
+  }
+
+  @Patch('google')
+  @HttpCode(HttpStatus.OK)
+  async updateGoogleSettings(
+    @Body() body: { google_client_id?: string; google_client_secret?: string },
+  ) {
+    if (body.google_client_id !== undefined) {
+      await this.svc.set('google_client_id', body.google_client_id);
+    }
+    if (body.google_client_secret !== undefined) {
+      await this.svc.set('google_client_secret', body.google_client_secret);
+    }
+    return { ok: true };
+  }
 }

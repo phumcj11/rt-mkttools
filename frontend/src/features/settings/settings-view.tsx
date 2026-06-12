@@ -5,11 +5,14 @@ import { useTranslations } from 'next-intl';
 import {
   Building2,
   CheckCircle2,
+  Copy,
   Eye,
   EyeOff,
+  ExternalLink,
   Loader2,
   Save,
   Sparkles,
+  Star,
   Users,
   XCircle,
 } from 'lucide-react';
@@ -18,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiRequest } from '@/lib/api';
+import { getGoogleSettings, saveGoogleCredentials } from '@/lib/reviews-api';
 
 interface TenantInfo {
   id: number;
@@ -60,20 +64,31 @@ export function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
+  // Google credentials form
+  const [googleConfigured, setGoogleConfigured] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleClientSecret, setGoogleClientSecret] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+  const [googleSaving, setGoogleSaving] = useState(false);
+  const [googleSaveMsg, setGoogleSaveMsg] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     async function loadData() {
       setLoading(true);
       setError(null);
       try {
-        const [tenantData, usageData, sysData] = await Promise.all([
+        const [tenantData, usageData, sysData, googleData] = await Promise.all([
           apiRequest<TenantInfo>('/tenants/me'),
           apiRequest<AiUsage>('/ai/usage').catch(() => null),
           apiRequest<SystemSettings>('/settings/system').catch(() => null),
+          getGoogleSettings().catch(() => null),
         ]);
         setTenant(tenantData);
         setAiUsage(usageData);
         setSysSettings(sysData);
         if (sysData?.openai_model) setModel(sysData.openai_model);
+        if (googleData) setGoogleConfigured(googleData.google_configured);
       } catch {
         setError('ไม่สามารถโหลดข้อมูลได้');
       } finally {
@@ -100,6 +115,35 @@ export function SettingsView() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveGoogle = async () => {
+    if (!googleClientId.trim() || !googleClientSecret.trim()) {
+      setGoogleSaveMsg('กรุณากรอก Client ID และ Client Secret ให้ครบ');
+      return;
+    }
+    setGoogleSaving(true);
+    setGoogleSaveMsg(null);
+    try {
+      await saveGoogleCredentials(googleClientId.trim(), googleClientSecret.trim());
+      setGoogleSaveMsg('บันทึกสำเร็จ');
+      setGoogleConfigured(true);
+      setGoogleClientId('');
+      setGoogleClientSecret('');
+    } catch {
+      setGoogleSaveMsg('บันทึกไม่สำเร็จ — กรุณาลองใหม่');
+    } finally {
+      setGoogleSaving(false);
+    }
+  };
+
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
+  const callbackUrl = `${apiBaseUrl}/reviews/google/callback`;
+
+  const handleCopyCallback = () => {
+    void navigator.clipboard.writeText(callbackUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (loading) {
@@ -260,6 +304,120 @@ export function SettingsView() {
           <Button onClick={handleSaveAi} disabled={saving} className="gap-2">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             บันทึกการตั้งค่า AI
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Google Business Profile */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Star className="h-4 w-4 text-yellow-500" />
+            ตั้งค่า Google Business Profile
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Status */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">สถานะ:</span>
+            {googleConfigured ? (
+              <span className="flex items-center gap-1 text-sm font-medium text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                ตั้งค่า Credentials แล้ว — ไปที่หน้า Reviews เพื่อ OAuth
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-sm font-medium text-amber-600">
+                <XCircle className="h-4 w-4" />
+                ยังไม่ได้ตั้งค่า
+              </span>
+            )}
+          </div>
+
+          {/* Setup instructions */}
+          <div className="rounded-lg border bg-blue-50/50 p-4 text-sm space-y-2">
+            <p className="font-medium text-blue-800">วิธีสร้าง Google Cloud Credentials:</p>
+            <ol className="list-decimal list-inside space-y-1 text-blue-700">
+              <li>
+                ไปที่{' '}
+                <a
+                  href="https://console.cloud.google.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 underline hover:text-blue-900"
+                >
+                  Google Cloud Console <ExternalLink className="h-3 w-3" />
+                </a>
+              </li>
+              <li>สร้าง Project ใหม่ หรือเลือก Project ที่มีอยู่</li>
+              <li>เปิดใช้งาน <strong>&quot;My Business Reviews API&quot;</strong> และ <strong>&quot;Business Profile Performance API&quot;</strong></li>
+              <li>ไปที่ APIs &amp; Services → Credentials → สร้าง OAuth 2.0 Client ID (Web application)</li>
+              <li>ใส่ Authorized redirect URI ด้านล่างนี้ลงใน Google Cloud Console</li>
+            </ol>
+          </div>
+
+          {/* Callback URL */}
+          <div>
+            <Label>Authorized Redirect URI (คัดลอกใส่ใน Google Cloud Console)</Label>
+            <div className="mt-1 flex gap-2">
+              <Input value={callbackUrl} readOnly className="font-mono text-xs bg-muted" />
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1"
+                onClick={handleCopyCallback}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copied ? 'คัดลอกแล้ว!' : 'คัดลอก'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Credentials inputs */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Label htmlFor="google-client-id">Google Client ID</Label>
+              <Input
+                id="google-client-id"
+                placeholder="xxx.apps.googleusercontent.com"
+                value={googleClientId}
+                onChange={(e) => setGoogleClientId(e.target.value)}
+                className="mt-1"
+                autoComplete="off"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="google-client-secret">Google Client Secret</Label>
+              <div className="relative mt-1">
+                <Input
+                  id="google-client-secret"
+                  type={showSecret ? 'text' : 'password'}
+                  placeholder={googleConfigured ? 'กรอกใหม่เพื่อเปลี่ยน' : 'GOCSPX-...'}
+                  value={googleClientSecret}
+                  onChange={(e) => setGoogleClientSecret(e.target.value)}
+                  className="pr-10"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowSecret((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {googleSaveMsg && (
+            <p className={`text-sm ${googleSaveMsg.includes('ไม่สำเร็จ') || googleSaveMsg.includes('กรุณา') ? 'text-destructive' : 'text-green-600'}`}>
+              {googleSaveMsg}
+            </p>
+          )}
+
+          <Button onClick={handleSaveGoogle} disabled={googleSaving} className="gap-2">
+            {googleSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            บันทึก Google Credentials
           </Button>
         </CardContent>
       </Card>
