@@ -28,9 +28,9 @@ fi
 echo "==> Running pending SQL migrations"
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
-DB_USER="${DB_USER:-mkttools}"
+DB_USER="${DB_USERNAME:-${DB_USER:-mkttools}}"
 DB_PASS="${DB_PASSWORD:-}"
-DB_NAME="${DB_NAME:-mkttools_db}"
+DB_NAME="${DB_DATABASE:-${DB_NAME:-mkttools_db}}"
 for sql_file in "$APP_DIR"/database/migrations/*.sql; do
   migname=$(basename "$sql_file")
   rows=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASS" "$DB_NAME" \
