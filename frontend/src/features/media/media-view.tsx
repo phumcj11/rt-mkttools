@@ -39,7 +39,7 @@ import {
   type ProductMediaResult,
   type VideoSettings,
 } from '@/lib/media-api';
-import { BenefitPosterTemplate, buildPosterData, type BenefitPosterData } from './benefit-poster';
+import { BenefitPosterTemplate, buildPosterData, POSTER_LAYOUTS, type BenefitPosterData, type PosterLayout } from './benefit-poster';
 
 type Tab = 'products' | 'files' | 'settings';
 
@@ -67,11 +67,13 @@ export function MediaView() {
   const [klingKey, setKlingKey] = useState('');
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
+  const [posterLayout, setPosterLayout] = useState<PosterLayout>('classic');
 
   const posterRef = useRef<HTMLDivElement>(null);
   const [posterRender, setPosterRender] = useState<{
     sku: string;
     data: BenefitPosterData;
+    layout: PosterLayout;
     resolve: (imageUrl: string) => void;
     reject: (err: Error) => void;
   } | null>(null);
@@ -102,7 +104,7 @@ export function MediaView() {
     const data = buildPosterData(product, apiResult.benefits, apiResult.benefitLines);
     if (data.imageUrl) data.imageUrl = proxyImageUrl(data.imageUrl);
     return new Promise<string>((resolve, reject) => {
-      setPosterRender({ sku, data, resolve, reject });
+      setPosterRender({ sku, data, layout: posterLayout, resolve, reject });
     });
   };
 
@@ -294,6 +296,33 @@ export function MediaView() {
       {/* Products Tab */}
       {tab === 'products' && (
         <div className="space-y-4">
+          {/* Layout picker */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">เลือกรูปแบบโปสเตอร์</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {POSTER_LAYOUTS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPosterLayout(opt.id)}
+                    className={`flex flex-col items-start rounded-lg border p-3 text-left transition-colors ${
+                      posterLayout === opt.id
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                        : 'border-border hover:bg-accent'
+                    }`}
+                  >
+                    <span className="text-sm font-semibold">{opt.label}</span>
+                    <span className="text-[11px] text-muted-foreground mt-0.5">{opt.description}</span>
+                    <Badge variant="outline" className="mt-2 text-[10px]">{opt.ratio}</Badge>
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">{products.length} สินค้า</span>
             {selected.size > 0 && (
@@ -601,7 +630,7 @@ export function MediaView() {
       {posterRender && (
         <div aria-hidden style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }}>
           <div ref={posterRef}>
-            <BenefitPosterTemplate data={posterRender.data} />
+            <BenefitPosterTemplate data={posterRender.data} layout={posterRender.layout} />
           </div>
         </div>
       )}
