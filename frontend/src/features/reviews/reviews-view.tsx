@@ -289,7 +289,7 @@ export function ReviewsView() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">Google Business Profile — ยังไม่ได้เชื่อมต่อ</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  กด "เชื่อมต่อ Google" เพื่อเริ่ม OAuth flow
+                  กด &quot;เชื่อมต่อ Google&quot; เพื่อเริ่ม OAuth flow
                 </p>
               </div>
               <Button
