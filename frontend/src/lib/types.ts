@@ -514,3 +514,40 @@ export interface ErpSyncResult {
   from: string;
   to: string;
 }
+
+export interface ErpCacheStatus {
+  products: { count: number; syncedAt: string | null };
+  sales: { count: number; syncedAt: string | null };
+}
+
+export interface ErpProductPromotion {
+  id: number;
+  name: string;
+  type: string;
+  typeName: string;
+  promoPrice: number;
+  retailPrice: number;
+  conditions: string;
+  remainingGpPct: number | null;
+}
+
+export interface ErpProductDetail {
+  sku: string;
+  productId: number;
+  name: string;
+  category: string;
+  brand: string;
+  imageUrl: string;
+  abcCompany: string;
+  costPrice: number;
+  retailPrice: number;
+  normalGpPct: number;
+  sales: {
+    revenue: number;
+    qtySold: number;
+    gpBaht: number;
+    gpPct: number;
+    periodDays: number;
+  } | null;
+  promotions: ErpProductPromotion[];
+}

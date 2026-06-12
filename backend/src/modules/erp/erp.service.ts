@@ -278,24 +278,58 @@ export class ErpService {
     category?: number;
     abc?: string;
     limit?: number;
+    /** Pre-fetched product rows from DB cache — avoids ERP API call */
+    cachedProducts?: Array<{
+      id: number; sku: string; name: string; category: string; brand: string;
+      retailPrice: number; costSales: number; imageUrl: string; abcCompany: string;
+      productType?: string;
+    }>;
+    /** Pre-fetched sales rows from DB cache — avoids ERP API call */
+    cachedSales?: Array<{
+      sku: string; productId: number; revenue: number; qtySold: number;
+      gpBaht: number; gpPct: number; abcCompany: string;
+    }>;
   }) {
     const limit = params.limit ?? 80;
     const pieceQty = Math.max(1, params.pieceQty ?? 1);
     const perPieceTarget = params.targetPrice / pieceQty;
 
-    // Fetch products (master) + sales in parallel
-    const [salesRows, productRows] = await Promise.all([
-      this.skuBranchSales(params.from, params.to, {
-        category: params.category,
-        abc: params.abc,
-        limit: 500,
-      }, false),
-      this.productsList({
-        category: params.category,
-        abc: params.abc,
-        limit: 2000,
-      }, false),
-    ]);
+    // Use pre-fetched DB cache if provided, otherwise fall back to live ERP API
+    let salesRows: Awaited<ReturnType<typeof this.skuBranchSales>>;
+    let productRows: Awaited<ReturnType<typeof this.productsList>>;
+
+    if (params.cachedProducts && params.cachedSales) {
+      this.logger.debug('campaignCandidates: using DB cache');
+      productRows = params.cachedProducts.map((p) => ({ ...p, productType: p.productType ?? '' }));
+      // Adapt cached sales shape to match skuBranchSales output
+      salesRows = params.cachedSales.map((s) => ({
+        sku: s.sku,
+        productId: s.productId,
+        name: '',
+        category: '',
+        brand: '',
+        qtySold: s.qtySold,
+        revenue: s.revenue,
+        gpBaht: s.gpBaht,
+        gpPct: s.gpPct,
+        abcCompany: s.abcCompany,
+        abcBranch: '',
+      }));
+    } else {
+      this.logger.debug('campaignCandidates: fetching live from ERP');
+      [salesRows, productRows] = await Promise.all([
+        this.skuBranchSales(params.from, params.to, {
+          category: params.category,
+          abc: params.abc,
+          limit: 500,
+        }, false),
+        this.productsList({
+          category: params.category,
+          abc: params.abc,
+          limit: 2000,
+        }, false),
+      ]);
+    }
 
     const normalSku = (s: string) => s.replace(/\s+/g, '').toUpperCase();
     type ProdEntry = {
@@ -391,12 +425,21 @@ export class ErpService {
           ? Math.ceil((bundleCost / (1 - params.minGpPct / 100)) / 5) * 5
           : 0;
 
-      const eligibleForTarget = effectiveGpPct >= params.minGpPct;
+      // A product is "price-fit" when its per-piece retail is reasonably close to the
+      // per-piece campaign target (0.5× – 1.5×).  A ฿19 item should never appear in a
+      // "2 ชิ้น ฿100" (perPieceTarget = ฿50) suggestion — that would confuse customers.
+      // Products with no retail price on file are allowed through (GP history is used).
+      const priceFit =
+        retailPrice === 0 ||
+        (retailPrice >= perPieceTarget * 0.5 && retailPrice <= perPieceTarget * 1.5);
+
+      const eligibleForTarget = effectiveGpPct >= params.minGpPct && priceFit;
 
       const dataQuality: string[] = [];
-      if (!prod)             dataQuality.push('no_master');
-      if (costSales === 0)   dataQuality.push('no_cost');
-      if (retailPrice === 0) dataQuality.push('no_price');
+      if (!prod)                          dataQuality.push('no_master');
+      if (costSales === 0)                dataQuality.push('no_cost');
+      if (retailPrice === 0)              dataQuality.push('no_price');
+      if (!priceFit && retailPrice > 0)   dataQuality.push('price_mismatch');
 
       const bundleRetail = retailPrice * pieceQty;
       const discountNeeded =
@@ -429,7 +472,7 @@ export class ErpService {
       const key = normalSku(p.sku);
       if (seen.has(key)) continue;
       if (params.abc && p.abcCompany && !p.abcCompany.startsWith(params.abc.charAt(0))) continue;
-      if (p.retailPrice > 0 && p.retailPrice <= perPieceTarget * 1.2) {
+      if (p.retailPrice >= perPieceTarget * 0.5 && p.retailPrice <= perPieceTarget * 1.2) {
         seen.add(key);
         merged.push(buildCandidate(p.sku, p.id, null, p));
       }
@@ -465,8 +508,9 @@ export class ErpService {
       if (!c.hasSales) reasons.push('สินค้าใน catalog (ยังไม่มียอดขายช่วงนี้)');
 
       const warnings: string[] = [];
-      if (c.dataQuality.includes('no_cost'))  warnings.push('ไม่มีต้นทุน — ใช้ GP ประวัติ');
-      if (c.dataQuality.includes('no_price')) warnings.push('ไม่มีราคาขายใน master');
+      if (c.dataQuality.includes('no_cost'))        warnings.push('ไม่มีต้นทุน — ใช้ GP ประวัติ');
+      if (c.dataQuality.includes('no_price'))       warnings.push('ไม่มีราคาขายใน master');
+      if (c.dataQuality.includes('price_mismatch')) warnings.push(`ราคา/ชิ้น ฿${c.retailPrice} ต่างจากเป้า ฿${Math.round(perPieceTarget)} มาก`);
       if (c.effectiveGpPct < params.minGpPct + 5) warnings.push('GP ใกล้ขีดต่ำสุด');
       if (!['ACOM', 'BCOM'].includes(c.abcCompany) && c.hasSales) warnings.push('ยอดขายระดับ C/D');
       if (c.discountNeeded > 0)
@@ -500,6 +544,118 @@ export class ErpService {
         return b.score - a.score;
       })
       .slice(0, limit);
+  }
+
+  /**
+   * Full product detail: cost, retail, GP + active promotions.
+   * syncService is passed in to avoid a circular-dependency between ErpService and ErpSyncService.
+   */
+  async productDetail(sku: string, syncService: {
+    // TypeORM returns decimal columns as strings, so accept string | number
+    getCachedProduct(sku: string): Promise<{ productId: number; name: string; category: string; brand: string; retailPrice: number | string; costSales: number | string; imageUrl: string; abcCompany: string } | null>;
+    getCachedSales(sku: string): Promise<{ revenue: number | string; qtySold: number; gpBaht: number | string; gpPct: number | string; periodDays: number } | null>;
+  }) {
+    const normalSku = sku.replace(/\s+/g, '').toUpperCase();
+
+    const [cachedProd, cachedSales] = await Promise.all([
+      syncService.getCachedProduct(normalSku),
+      syncService.getCachedSales(normalSku),
+    ]);
+
+    // If not in cache, fall back to live ERP
+    let productData: {
+      id: number; sku: string; name: string; category: string; brand: string;
+      retailPrice: number; costSales: number; imageUrl: string; abcCompany: string;
+    } | undefined;
+
+    if (cachedProd) {
+      productData = {
+        id: cachedProd.productId,
+        sku: normalSku,
+        name: cachedProd.name,
+        category: cachedProd.category,
+        brand: cachedProd.brand,
+        retailPrice: Number(cachedProd.retailPrice),
+        costSales: Number(cachedProd.costSales),
+        imageUrl: cachedProd.imageUrl,
+        abcCompany: cachedProd.abcCompany,
+      };
+    } else {
+      const rows = await this.productsList({ q: sku, limit: 1 }, true);
+      productData = rows[0];
+    }
+
+    const normalGpPct =
+      productData && productData.retailPrice > 0 && productData.costSales > 0
+        ? Math.round(
+            ((productData.retailPrice - productData.costSales) / productData.retailPrice) * 1000,
+          ) / 10
+        : cachedSales?.gpPct ?? 0;
+
+    // Fetch active promotions for this product
+    let promotions: Array<{
+      id: number; name: string; type: string; typeName?: string;
+      promoPrice: number; retailPrice: number; conditions: string; remainingGpPct: number | null;
+    }> = [];
+    if (productData?.id) {
+      try {
+        const promoRows = await this.call<any[]>(
+          'promotions',
+          'by_product',
+          { product_id: productData.id, active_only: 1 },
+          false,
+          30 * 60 * 1_000,
+        );
+        const cost = productData.costSales ?? 0;
+        promotions = (promoRows ?? []).map((p: any) => {
+          const promoPrice = num(p.promo_price ?? p.promotion_price ?? p.price ?? 0);
+          const remainingGpPct =
+            promoPrice > 0 && cost > 0
+              ? Math.round(((promoPrice - cost) / promoPrice) * 1000) / 10
+              : null;
+          const conditions: string[] = [];
+          if (p.min_qty)        conditions.push(`ซื้อขั้นต่ำ ${p.min_qty} ชิ้น`);
+          if (p.min_amount)     conditions.push(`ขั้นต่ำ ฿${p.min_amount}`);
+          if (p.free_item_qty)  conditions.push(`แถม ${p.free_item_qty} ชิ้น`);
+          if (p.date_start && p.date_stop) conditions.push(`${p.date_start} – ${p.date_stop}`);
+          return {
+            id: num(p.id),
+            name: String(p.promotion_name ?? p.name ?? ''),
+            type: String(p.promotion_type ?? ''),
+            typeName: String(p.promotion_type_name ?? ''),
+            promoPrice,
+            retailPrice: num(p.retail_price ?? p.price ?? 0),
+            conditions: conditions.join(', ') || '—',
+            remainingGpPct,
+          };
+        });
+      } catch {
+        // promotions are best-effort; don't fail the whole request
+      }
+    }
+
+    return {
+      sku: normalSku,
+      productId: productData?.id ?? 0,
+      name: productData?.name ?? sku,
+      category: productData?.category ?? '',
+      brand: productData?.brand ?? '',
+      imageUrl: productData?.imageUrl ?? '',
+      abcCompany: productData?.abcCompany ?? '',
+      costPrice: productData?.costSales ?? 0,
+      retailPrice: productData?.retailPrice ?? 0,
+      normalGpPct,
+      sales: cachedSales
+        ? {
+            revenue: Number(cachedSales.revenue),
+            qtySold: cachedSales.qtySold,
+            gpBaht: Number(cachedSales.gpBaht),
+            gpPct: Number(cachedSales.gpPct),
+            periodDays: cachedSales.periodDays,
+          }
+        : null,
+      promotions,
+    };
   }
 
   /** Aggregates category-level performance from topProducts */

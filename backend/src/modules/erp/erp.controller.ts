@@ -2,6 +2,7 @@ import {
   Controller,
   DefaultValuePipe,
   Get,
+  Param,
   ParseIntPipe,
   Post,
   Query,
@@ -151,12 +152,21 @@ export class ErpController {
     @Query('withAi') withAi?: string,
   ) {
     const r = defaultRange();
+
+    // Try DB cache first (faster, no ERP round-trip)
+    const cacheStatus = await this.sync.getCacheStatus();
+    const useCache = cacheStatus.products.count > 0 && cacheStatus.sales.count > 0;
+    const cachedProducts = useCache ? await this.sync.getAllCachedProducts() : undefined;
+    const cachedSales    = useCache ? await this.sync.getAllCachedSales()    : undefined;
+
     const candidates = await this.erp.campaignCandidates({
       targetPrice, minGpPct, pieceQty: Math.max(1, pieceQty),
       from: from || r.from,
       to: to || r.to,
       category: this.toInt(category),
       abc, limit,
+      cachedProducts,
+      cachedSales,
     });
 
     if (withAi === '1' || withAi === 'true') {
@@ -165,10 +175,32 @@ export class ErpController {
         { campaignName: campaignName || 'Campaign', targetPrice, minGpPct, pieceQty: Math.max(1, pieceQty) },
         candidates,
       );
-      return { candidates, summary };
+      return { candidates, summary, cacheStatus };
     }
 
-    return { candidates, summary: null };
+    return { candidates, summary: null, cacheStatus };
+  }
+
+  @Get('sync/status')
+  syncStatus() {
+    return this.sync.getCacheStatus();
+  }
+
+  @Post('sync/products')
+  @Roles('super_admin', 'admin')
+  syncProducts() {
+    return this.sync.syncProducts();
+  }
+
+  @Post('sync/sales')
+  @Roles('super_admin', 'admin')
+  syncSales(@Query('days', new DefaultValuePipe(90), ParseIntPipe) days: number) {
+    return this.sync.syncSalesSummary(days);
+  }
+
+  @Get('products/:sku/detail')
+  async productDetail(@Param('sku') sku: string) {
+    return this.erp.productDetail(sku, this.sync);
   }
 
   @Get('ai-insights')

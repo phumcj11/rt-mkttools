@@ -37,17 +37,22 @@ import {
   getErpCategoryPerformance,
   getErpProducts,
   getErpPromotions,
+  getErpSyncStatus,
   getErpTopProducts,
+  syncErpProducts,
+  syncErpSales,
   type ErpRangeOpts,
 } from '@/lib/erp-api';
 import type {
   CampaignAnalysisSummary,
+  ErpCacheStatus,
   ErpCampaignCandidate,
   ErpCategoryPerformance,
   ErpProductListItem,
   ErpPromotion,
   ErpTopProduct,
 } from '@/lib/types';
+import { ProductDetailDrawer } from './ProductDetailDrawer';
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -419,11 +424,35 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
   const priceLabel = qtyNum > 1 ? `${qtyNum} ชิ้น ฿${priceNum}` : `฿${priceNum}`;
   const perPiece = Math.round((priceNum / qtyNum) * 100) / 100;
 
-  const [candidates, setCandidates] = useState<ErpCampaignCandidate[]>([]);
-  const [summary, setSummary]       = useState<CampaignAnalysisSummary | null>(null);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState<string | null>(null);
-  const [ran, setRan]               = useState(false);
+  const [candidates, setCandidates]   = useState<ErpCampaignCandidate[]>([]);
+  const [summary, setSummary]         = useState<CampaignAnalysisSummary | null>(null);
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+  const [ran, setRan]                 = useState(false);
+
+  // Detail drawer
+  const [detailSku, setDetailSku] = useState<string | null>(null);
+
+  // ERP DB cache status
+  const [cacheStatus, setCacheStatus] = useState<ErpCacheStatus | null>(null);
+  const [syncing, setSyncing]         = useState(false);
+
+  useEffect(() => {
+    getErpSyncStatus().then(setCacheStatus).catch(() => {});
+  }, []);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await Promise.all([syncErpProducts(), syncErpSales(90)]);
+      const status = await getErpSyncStatus();
+      setCacheStatus(status);
+    } catch {
+      // silent
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleRun = async () => {
     setLoading(true);
@@ -461,6 +490,40 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
 
   return (
     <div className="flex flex-col gap-6">
+      {/* ERP cache status bar */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">ข้อมูล ERP:</span>
+        {cacheStatus ? (
+          <>
+            <span>
+              สินค้า {cacheStatus.products.count.toLocaleString()} รายการ
+              {cacheStatus.products.syncedAt
+                ? ` · ล่าสุด ${new Date(cacheStatus.products.syncedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}`
+                : ' · ยังไม่ได้ sync'}
+            </span>
+            <span>·</span>
+            <span>
+              ยอดขาย {cacheStatus.sales.count.toLocaleString()} SKU
+              {cacheStatus.sales.syncedAt
+                ? ` · ล่าสุด ${new Date(cacheStatus.sales.syncedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}`
+                : ' · ยังไม่ได้ sync'}
+            </span>
+          </>
+        ) : (
+          <span>กำลังตรวจสอบ…</span>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="ml-auto h-7 gap-1.5 text-xs"
+          onClick={handleSync}
+          disabled={syncing}
+        >
+          <RefreshCw className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
+          {syncing ? 'กำลัง Sync…' : 'Sync ERP'}
+        </Button>
+      </div>
+
       {/* Form */}
       <Card>
         <CardHeader className="pb-3">
@@ -672,7 +735,14 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                                   : c.dataQuality.includes('no_cost')
                                   ? <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />
                                   : null}
-                                <span className="font-medium leading-tight truncate">{c.name}</span>
+                                <button
+                                  type="button"
+                                  className="font-medium leading-tight truncate hover:underline hover:text-primary text-left"
+                                  onClick={() => setDetailSku(c.sku)}
+                                  title="ดูรายละเอียดสินค้า"
+                                >
+                                  {c.name}
+                                </button>
                               </div>
                               <div className="text-xs text-muted-foreground truncate">
                                 {c.sku}{c.category ? ` · ${c.category}` : ''}
@@ -773,6 +843,13 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
           <p className="text-xs">กำหนดจำนวนชิ้น + ราคารวม เช่น 3 ชิ้น ฿100 → ระบบดึงสินค้าที่ GP ผ่านเกณฑ์ (ใช้ GP ที่ดีกว่าระหว่างคำนวณ/ประวัติ){withAi ? ' + AI สรุป' : ''}</p>
         </div>
       )}
+
+      {/* Product Detail Drawer */}
+      <ProductDetailDrawer
+        sku={detailSku}
+        open={!!detailSku}
+        onClose={() => setDetailSku(null)}
+      />
     </div>
   );
 }

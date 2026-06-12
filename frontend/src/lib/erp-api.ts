@@ -3,11 +3,13 @@ import type {
   CampaignAnalysisSummary,
   ErpAlert,
   ErpBranchSales,
+  ErpCacheStatus,
   ErpCampaignCandidate,
   ErpCampaignResult,
   ErpCategoryPerformance,
   ErpDashboard,
   ErpInsights,
+  ErpProductDetail,
   ErpProductListItem,
   ErpPromotion,
   ErpSalesSummary,
@@ -15,7 +17,13 @@ import type {
   ErpTopProduct,
 } from './types';
 
-export type { CampaignAnalysisSummary, ErpCampaignCandidate, ErpCampaignResult };
+export type {
+  CampaignAnalysisSummary,
+  ErpCacheStatus,
+  ErpCampaignCandidate,
+  ErpCampaignResult,
+  ErpProductDetail,
+};
 
 export interface ErpRangeOpts {
   from?: string;
@@ -113,4 +121,20 @@ export function getErpAlerts() {
 
 export function syncErp(days = 90) {
   return apiRequest<ErpSyncResult>(`/erp/sync?days=${days}`, { method: 'POST' });
+}
+
+export function getErpSyncStatus() {
+  return apiRequest<ErpCacheStatus>('/erp/sync/status');
+}
+
+export function syncErpProducts() {
+  return apiRequest<{ synced: number }>('/erp/sync/products', { method: 'POST' });
+}
+
+export function syncErpSales(days = 90) {
+  return apiRequest<ErpSyncResult>(`/erp/sync/sales?days=${days}`, { method: 'POST' });
+}
+
+export function getErpProductDetail(sku: string) {
+  return apiRequest<ErpProductDetail>(`/erp/products/${encodeURIComponent(sku)}/detail`);
 }
