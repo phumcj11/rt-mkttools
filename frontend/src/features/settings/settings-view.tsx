@@ -354,7 +354,7 @@ export function SettingsView() {
                 </a>
               </li>
               <li>สร้าง Project ใหม่ หรือเลือก Project ที่มีอยู่</li>
-              <li>เปิดใช้งาน <strong>&quot;My Business Reviews API&quot;</strong> และ <strong>&quot;Business Profile Performance API&quot;</strong></li>
+              <li>เปิดใช้งาน API เหล่านี้: <strong>&quot;Google My Business API&quot;</strong>, <strong>&quot;My Business Account Management API&quot;</strong>, <strong>&quot;My Business Business Information API&quot;</strong></li>
               <li>ไปที่ APIs &amp; Services → Credentials → สร้าง OAuth 2.0 Client ID (Web application)</li>
               <li>ใส่ Authorized redirect URI ด้านล่างนี้ลงใน Google Cloud Console</li>
             </ol>

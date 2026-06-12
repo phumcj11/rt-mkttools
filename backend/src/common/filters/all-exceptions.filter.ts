@@ -34,6 +34,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let code = 'common.serverError';
     let details: unknown;
+    let customMessage: string | undefined;
 
     if (exception instanceof AppException) {
       status = exception.getStatus();
@@ -42,8 +43,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = exception.getStatus();
       const res = exception.getResponse();
       code = STATUS_CODE_MAP[status] ?? 'common.serverError';
-      if (typeof res === 'object' && res !== null && 'message' in res) {
+      if (typeof res === 'string') {
+        customMessage = res;
+      } else if (typeof res === 'object' && res !== null && 'message' in res) {
         const message = (res as { message: unknown }).message;
+        if (typeof message === 'string') customMessage = message;
         if (Array.isArray(message)) details = message;
       }
     } else {
@@ -54,7 +58,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       success: false,
       error: {
         code,
-        message: this.i18n.translate(code, locale),
+        message: customMessage ?? this.i18n.translate(code, locale),
       },
     };
     if (details) (body.error as Record<string, unknown>).details = details;
