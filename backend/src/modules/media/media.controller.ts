@@ -13,7 +13,7 @@ import {
 import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
-import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -36,6 +36,19 @@ class SavePromoDto {
   @IsString()
   @IsNotEmpty()
   dataUrl: string;
+}
+
+class GeneratePromoGptDto {
+  @IsString()
+  @IsNotEmpty()
+  promoType: string;
+
+  @IsObject()
+  data: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  referenceImageUrl?: string;
 }
 
 class VideoSubmitDto {
@@ -90,6 +103,14 @@ export class MediaController {
   @HttpCode(HttpStatus.OK)
   savePoster(@Param('sku') sku: string, @Body() body: { dataUrl: string }) {
     return this.media.savePosterImage(sku, body.dataUrl);
+  }
+
+  /** Generate promotion poster via AI prompt + GPT Image */
+  @Post('promo/generate')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  generatePromoGpt(@Body() dto: GeneratePromoGptDto) {
+    return this.media.generatePromoGptImage(dto.promoType, dto.data, dto.referenceImageUrl);
   }
 
   /** Save client-rendered promotion poster PNG */

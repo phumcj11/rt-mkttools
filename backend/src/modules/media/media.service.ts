@@ -20,6 +20,23 @@ export interface ProductMediaResult {
   category: string;
 }
 
+export interface PromoGptResult {
+  imageUrl: string;
+  filename: string;
+  model: string;
+  promptUsed: string;
+  generatedAt: string;
+  source: 'gpt_image';
+}
+
+const PROMO_TYPE_LABELS: Record<string, string> = {
+  spend_free_gift: 'Spend & Free Gift — ซื้อครบ X บาท รับของแถม',
+  buy_x_get_y: 'Buy X Get Y — ซื้อ X ได้ Y ฟรี',
+  bundle_deal: 'Bundle Deal — จัดเซตสินค้าราคาพิเศษ',
+  new_arrival: 'New Arrival — สินค้าใหม่เข้าร้าน',
+  clearance_sale: 'Clearance Sale — ลดแรง สินค้าจำกัด',
+};
+
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
@@ -248,6 +265,95 @@ export class MediaService {
       '- Include "100 Baht Shop Thailand" branding at the bottom',
       '- Professional quality suitable for social media and in-store display',
       '- All benefit text must be in Thai language',
+    ].join('\n');
+  }
+
+  /** Generate promotion poster via AI prompt + GPT Image */
+  async generatePromoGptImage(
+    promoType: string,
+    data: Record<string, unknown>,
+    referenceImageUrl?: string,
+  ): Promise<PromoGptResult> {
+    const label = PROMO_TYPE_LABELS[promoType] ?? promoType;
+    this.logger.log(`GPT Image promo generating: ${promoType}…`);
+
+    const imagePrompt = await this.craftPromoImagePrompt(label, data);
+
+    let imageResult;
+    if (referenceImageUrl?.startsWith('http')) {
+      try {
+        const { buffer, contentType } = await this.proxyImage(referenceImageUrl);
+        imageResult = await this.openAi.editGptImage(imagePrompt, buffer, contentType, {
+          size: '1536x1024',
+        });
+      } catch (err) {
+        this.logger.warn(`Promo edit failed, falling back to generate: ${String(err)}`);
+        imageResult = await this.openAi.generateGptImage(imagePrompt, { size: '1536x1024' });
+      }
+    } else {
+      imageResult = await this.openAi.generateGptImage(imagePrompt, { size: '1536x1024' });
+    }
+
+    const safeType = promoType.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `promo-gpt-${safeType}-${Date.now()}.png`;
+    const localPath = path.join(this.uploadsDir, filename);
+    fs.writeFileSync(localPath, imageResult.buffer);
+
+    this.logger.log(`Promo GPT Image saved ${filename} (model: ${imageResult.model})`);
+
+    return {
+      imageUrl: `/media/serve/${filename}`,
+      filename,
+      model: imageResult.model,
+      promptUsed: imagePrompt,
+      generatedAt: new Date().toISOString(),
+      source: 'gpt_image',
+    };
+  }
+
+  /** AI writes the GPT Image prompt from structured promo form data */
+  private async craftPromoImagePrompt(promoLabel: string, data: Record<string, unknown>): Promise<string> {
+    const dataJson = JSON.stringify(data, null, 2);
+    const system = [
+      'You are an expert prompt engineer for GPT Image creating Thai retail promotion posters.',
+      'Brand: "100 Baht Shop Thailand" — red and white color scheme, cute red elephant mascot, professional retail quality.',
+      'Output ONLY the image generation prompt in English (max 800 words).',
+      'The prompt must specify:',
+      '- Landscape orientation marketing poster layout',
+      '- All Thai promotional text must appear exactly as provided in the data (prices, product names, dates, gifts)',
+      '- Product photo should be prominent and recognizable if reference image is used',
+      '- Include brand logo area "100 BAHT SHOP" at top',
+      '- High contrast, print-ready, suitable for in-store and social media',
+      '- Do NOT include placeholder brackets like [PRICE] — use actual values from data',
+    ].join('\n');
+
+    const user = [
+      `Promotion type: ${promoLabel}`,
+      'Form data (use these exact Thai values on the poster):',
+      dataJson,
+      '',
+      'Write a detailed GPT Image prompt for this specific promotion poster.',
+    ].join('\n');
+
+    try {
+      const res = await this.openAi.complete(system, user);
+      const prompt = res.content.trim();
+      if (prompt.length > 80) return prompt;
+    } catch (err) {
+      this.logger.warn(`AI prompt craft failed, using fallback: ${String(err)}`);
+    }
+
+    return this.buildFallbackPromoPrompt(promoLabel, data);
+  }
+
+  private buildFallbackPromoPrompt(promoLabel: string, data: Record<string, unknown>): string {
+    return [
+      `Create a professional landscape promotion poster for 100 Baht Shop Thailand.`,
+      `Promotion style: ${promoLabel}`,
+      'Design: red and white retail theme, cute red elephant mascot, bold Thai typography, print-ready quality.',
+      'Include all of the following information as readable Thai text on the poster:',
+      JSON.stringify(data),
+      'Brand footer: 100 Baht Shop Thailand',
     ].join('\n');
   }
 

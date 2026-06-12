@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { toPng } from 'html-to-image';
+import { useState } from 'react';
 import {
   Download,
   Loader2,
@@ -16,19 +15,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   generatePromoFeatures,
-  proxyImageUrl,
+  generatePromoGptImage,
   resolveMediaUrl,
-  savePromoImage,
   type ErpProduct,
 } from '@/lib/media-api';
 import {
   emptyPromoData,
-  getPromoDimensions,
-  PromoTemplateRenderer,
   PROMO_OPTIONS,
   type BundleDealData,
   type BuyXGetYData,
   type ClearanceSaleData,
+  type ClearanceSaleProduct,
   type NewArrivalData,
   type PromoData,
   type PromoType,
@@ -36,19 +33,44 @@ import {
 } from './promo-templates';
 
 // ---------------------------------------------------------------------------
-// Product picker helper
+// Helpers
 // ---------------------------------------------------------------------------
+
+/** Strip proxy image URLs — GPT Image uses referenceImageUrl separately */
+function sanitizePromoDataForAi(data: PromoData): Record<string, unknown> {
+  const copy = { ...(data as unknown as Record<string, unknown>) };
+
+  const renameIfText = (from: string, to: string) => {
+    const v = copy[from];
+    if (typeof v === 'string' && v && !v.startsWith('http')) copy[to] = v;
+    delete copy[from];
+  };
+
+  renameIfText('productImage', 'productName');
+  renameIfText('mainProductImage', 'mainProductName');
+  renameIfText('product1Image', 'product1Name');
+  renameIfText('product2Image', 'product2Name');
+  delete copy.buyProductImage;
+  delete copy.getProductImage;
+
+  if (Array.isArray(copy.products)) {
+    copy.products = (copy.products as ClearanceSaleProduct[]).map(({ image: _img, ...rest }) => rest);
+  }
+  return copy;
+}
 
 function ProductPicker({
   label,
   products,
   selectedSku,
   onChange,
+  onReferenceImage,
 }: {
   label: string;
   products: ErpProduct[];
   selectedSku: string;
-  onChange: (imageUrl: string, sku: string, name: string) => void;
+  onChange: (sku: string, name: string) => void;
+  onReferenceImage?: (originalUrl: string) => void;
 }) {
   return (
     <div className="space-y-1">
@@ -58,7 +80,10 @@ function ProductPicker({
         value={selectedSku}
         onChange={(e) => {
           const p = products.find((x) => x.sku === e.target.value);
-          if (p) onChange(proxyImageUrl(p.imageUrl), p.sku, p.name);
+          if (p) {
+            onChange(p.sku, p.name);
+            onReferenceImage?.(p.imageUrl);
+          }
         }}
       >
         <option value="">-- เลือกสินค้า --</option>
@@ -104,21 +129,27 @@ function SpendFreeGiftForm({
   data,
   setData,
   products,
+  onReferenceImage,
 }: {
   data: SpendFreeGiftData;
   setData: (d: SpendFreeGiftData) => void;
   products: ErpProduct[];
+  onReferenceImage: (url: string) => void;
 }) {
   const [sku, setSku] = useState('');
   return (
     <div className="space-y-3">
       <ProductPicker
-        label="รูปสินค้า (Product Image)"
+        label="สินค้าหลัก (AI ใช้รูป ERP เป็นฐาน)"
         products={products}
         selectedSku={sku}
-        onChange={(imageUrl, s) => { setSku(s); setData({ ...data, productImage: imageUrl }); }}
+        onReferenceImage={onReferenceImage}
+        onChange={(s, name) => {
+          setSku(s);
+          setData({ ...data, productImage: name, spendAmount: data.spendAmount });
+        }}
       />
-      <TextF label="ยอดซื้อขั้นต่ำ (Spend Amount) — ตัวเลขเท่านั้น" value={data.spendAmount}
+      <TextF label="ยอดซื้อขั้นต่ำ (Spend Amount)" value={data.spendAmount}
         onChange={(v) => setData({ ...data, spendAmount: v })} placeholder="เช่น 299" />
       <div className="space-y-1">
         <Label className="text-xs">ของแถม (Free Gift)</Label>
@@ -136,32 +167,31 @@ function BuyXGetYForm({
   data,
   setData,
   products,
+  onReferenceImage,
 }: {
   data: BuyXGetYData;
   setData: (d: BuyXGetYData) => void;
   products: ErpProduct[];
+  onReferenceImage: (url: string) => void;
 }) {
   const [mainSku, setMainSku] = useState('');
   const [buySku, setBuySku] = useState('');
   const [getSku, setGetSku] = useState('');
   return (
     <div className="space-y-3">
-      <ProductPicker label="รูปสินค้าหลัก (ซ้าย)" products={products} selectedSku={mainSku}
-        onChange={(imageUrl, s) => { setMainSku(s); setData({ ...data, mainProductImage: imageUrl }); }} />
+      <ProductPicker label="สินค้าหลัก (AI ใช้รูป ERP เป็นฐาน)" products={products} selectedSku={mainSku}
+        onReferenceImage={onReferenceImage}
+        onChange={(s, name) => { setMainSku(s); setData({ ...data, mainProductImage: name }); }} />
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2 border rounded-md p-2">
           <p className="text-xs font-semibold text-red-600">BUY (ซื้อ)</p>
           <ProductPicker label="สินค้า BUY" products={products} selectedSku={buySku}
-            onChange={(imageUrl, s, name) => { setBuySku(s); setData({ ...data, buyProductImage: imageUrl, buyProductName: name }); }} />
-          <TextF label="ชื่อ BUY" value={data.buyProductName}
-            onChange={(v) => setData({ ...data, buyProductName: v })} placeholder="ชื่อสินค้าที่ต้องซื้อ" />
+            onChange={(s, name) => { setBuySku(s); setData({ ...data, buyProductName: name }); }} />
         </div>
         <div className="space-y-2 border rounded-md p-2">
           <p className="text-xs font-semibold text-red-600">GET (รับฟรี)</p>
           <ProductPicker label="สินค้า GET" products={products} selectedSku={getSku}
-            onChange={(imageUrl, s, name) => { setGetSku(s); setData({ ...data, getProductImage: imageUrl, getProductName: name }); }} />
-          <TextF label="ชื่อ GET" value={data.getProductName}
-            onChange={(v) => setData({ ...data, getProductName: v })} placeholder="ชื่อของที่ได้ฟรี" />
+            onChange={(s, name) => { setGetSku(s); setData({ ...data, getProductName: name }); }} />
         </div>
       </div>
       <TextF label="วันหมดเขต" value={data.validDate}
@@ -174,10 +204,12 @@ function BundleDealForm({
   data,
   setData,
   products,
+  onReferenceImage,
 }: {
   data: BundleDealData;
   setData: (d: BundleDealData) => void;
   products: ErpProduct[];
+  onReferenceImage: (url: string) => void;
 }) {
   const [sku1, setSku1] = useState('');
   const [sku2, setSku2] = useState('');
@@ -185,16 +217,13 @@ function BundleDealForm({
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <ProductPicker label="สินค้า 1" products={products} selectedSku={sku1}
-            onChange={(imageUrl, s, name) => { setSku1(s); setData({ ...data, product1Image: imageUrl, product1Name: name }); }} />
-          <TextF label="ชื่อสินค้า 1" value={data.product1Name}
-            onChange={(v) => setData({ ...data, product1Name: v })} />
+          <ProductPicker label="สินค้า 1 (AI ใช้รูปเป็นฐาน)" products={products} selectedSku={sku1}
+            onReferenceImage={onReferenceImage}
+            onChange={(s, name) => { setSku1(s); setData({ ...data, product1Name: name }); }} />
         </div>
         <div className="space-y-2">
           <ProductPicker label="สินค้า 2" products={products} selectedSku={sku2}
-            onChange={(imageUrl, s, name) => { setSku2(s); setData({ ...data, product2Image: imageUrl, product2Name: name }); }} />
-          <TextF label="ชื่อสินค้า 2" value={data.product2Name}
-            onChange={(v) => setData({ ...data, product2Name: v })} />
+            onChange={(s, name) => { setSku2(s); setData({ ...data, product2Name: name }); }} />
         </div>
       </div>
       <TextF label='ราคา Bundle "ONLY X THB"' value={data.bundlePrice}
@@ -211,10 +240,12 @@ function NewArrivalForm({
   data,
   setData,
   products,
+  onReferenceImage,
 }: {
   data: NewArrivalData;
   setData: (d: NewArrivalData) => void;
   products: ErpProduct[];
+  onReferenceImage: (url: string) => void;
 }) {
   const [sku, setSku] = useState('');
   const [selectedSku, setSelectedSku] = useState('');
@@ -235,10 +266,11 @@ function NewArrivalForm({
 
   return (
     <div className="space-y-3">
-      <ProductPicker label="รูปสินค้า" products={products} selectedSku={sku}
-        onChange={(imageUrl, s) => { setSku(s); setSelectedSku(s); setData({ ...data, productImage: imageUrl }); }} />
+      <ProductPicker label="สินค้า (AI ใช้รูป ERP เป็นฐาน)" products={products} selectedSku={sku}
+        onReferenceImage={onReferenceImage}
+        onChange={(s, name) => { setSku(s); setSelectedSku(s); setData({ ...data, productImage: name }); }} />
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold">จุดเด่น 3 ข้อ (Feature Boxes)</p>
+        <p className="text-xs font-semibold">จุดเด่น 3 ข้อ — AI จะใส่ในโปสเตอร์</p>
         <Button variant="outline" size="sm" className="h-7 text-xs gap-1"
           onClick={() => void handleAiFeatures()} disabled={aiLoading}>
           {aiLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
@@ -261,17 +293,19 @@ function ClearanceSaleForm({
   data,
   setData,
   products,
+  onReferenceImage,
 }: {
   data: ClearanceSaleData;
   setData: (d: ClearanceSaleData) => void;
   products: ErpProduct[];
+  onReferenceImage: (url: string) => void;
 }) {
   const [mainSku, setMainSku] = useState('');
   const [smallSkus, setSmallSkus] = useState(['', '', '']);
 
-  const updateProduct = (i: number, imageUrl: string, name: string, sku: string) => {
+  const updateProduct = (i: number, name: string, sku: string) => {
     const updated = [...data.products];
-    updated[i] = { ...updated[i], image: imageUrl, name };
+    updated[i] = { ...updated[i], name };
     const newSkus = [...smallSkus]; newSkus[i] = sku; setSmallSkus(newSkus);
     setData({ ...data, products: updated });
   };
@@ -283,12 +317,9 @@ function ClearanceSaleForm({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <ProductPicker label="สินค้าหลัก (ซ้าย)" products={products} selectedSku={mainSku}
-          onChange={(imageUrl, s, name) => { setMainSku(s); setData({ ...data, mainProductImage: imageUrl, mainProductName: name }); }} />
-        <TextF label="ชื่อสินค้าหลัก" value={data.mainProductName}
-          onChange={(v) => setData({ ...data, mainProductName: v })} />
-      </div>
+      <ProductPicker label="สินค้าหลัก (AI ใช้รูป ERP เป็นฐาน)" products={products} selectedSku={mainSku}
+        onReferenceImage={onReferenceImage}
+        onChange={(s, name) => { setMainSku(s); setData({ ...data, mainProductName: name }); }} />
       <TextF label='ลดสูงสุด "UP TO X% OFF"' value={data.discountPercent}
         onChange={(v) => setData({ ...data, discountPercent: v })} placeholder="เช่น 50" />
 
@@ -296,11 +327,9 @@ function ClearanceSaleForm({
       {[0, 1, 2].map((i) => (
         <div key={i} className="border rounded-md p-2 space-y-2">
           <p className="text-xs font-semibold">สินค้า {i + 1}</p>
-          <ProductPicker label={`รูปสินค้า ${i + 1}`} products={products} selectedSku={smallSkus[i]}
-            onChange={(imageUrl, s, name) => updateProduct(i, imageUrl, name, s)} />
-          <div className="grid grid-cols-3 gap-2">
-            <TextF label="ชื่อ" value={data.products[i]?.name ?? ''}
-              onChange={(v) => updateProductField(i, 'name', v)} />
+          <ProductPicker label={`สินค้า ${i + 1}`} products={products} selectedSku={smallSkus[i]}
+            onChange={(s, name) => updateProduct(i, name, s)} />
+          <div className="grid grid-cols-2 gap-2">
             <TextF label="ราคา" value={data.products[i]?.price ?? ''}
               onChange={(v) => updateProductField(i, 'price', v)} placeholder="฿" />
             <TextF label="ลด %" value={data.products[i]?.savePercent ?? ''}
@@ -318,95 +347,48 @@ function ClearanceSaleForm({
 // Main PromoTab component
 // ---------------------------------------------------------------------------
 
-/** Wait for all img elements inside root to finish loading before capture */
-function waitForImages(root: HTMLElement, timeoutMs = 8000): Promise<void> {
-  const imgs = Array.from(root.querySelectorAll('img'));
-  if (imgs.length === 0) return Promise.resolve();
-  return Promise.all(
-    imgs.map(
-      (img) =>
-        new Promise<void>((resolve) => {
-          if (img.complete && img.naturalWidth > 0) {
-            resolve();
-            return;
-          }
-          const done = () => resolve();
-          img.addEventListener('load', done, { once: true });
-          img.addEventListener('error', done, { once: true });
-          setTimeout(done, timeoutMs);
-        }),
-    ),
-  ).then(() => undefined);
-}
-
 export function PromoTab({ products }: { products: ErpProduct[] }) {
   const [promoType, setPromoType] = useState<PromoType>('spend_free_gift');
   const [promoData, setPromoData] = useState<PromoData>(() => emptyPromoData('spend_free_gift'));
-  const [saving, setSaving] = useState(false);
+  const [referenceImageUrl, setReferenceImageUrl] = useState('');
+  const [generating, setGenerating] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultFilename, setResultFilename] = useState<string | null>(null);
+  const [lastModel, setLastModel] = useState<string | null>(null);
 
-  const promoRef = useRef<HTMLDivElement>(null);
-  const [promoRender, setPromoRender] = useState<{
-    type: PromoType;
-    data: PromoData;
-    resolve: (url: string) => void;
-    reject: (err: Error) => void;
-  } | null>(null);
-
-  /** Off-screen capture effect */
-  useEffect(() => {
-    if (!promoRender || !promoRef.current) return;
-    const timer = setTimeout(() => {
-      void (async () => {
-        try {
-          await waitForImages(promoRef.current!);
-          const { width, height } = getPromoDimensions(promoRender.type);
-          const dataUrl = await toPng(promoRef.current!, {
-            pixelRatio: 1,
-            cacheBust: true,
-            width,
-            height,
-          });
-          const res = await savePromoImage(promoRender.type, dataUrl);
-          promoRender.resolve(res.imageUrl);
-          setResultFilename(res.filename);
-        } catch (e) {
-          promoRender.reject(e instanceof Error ? e : new Error(String(e)));
-        } finally {
-          setPromoRender(null);
-        }
-      })();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [promoRender]);
-
-  const handleSave = async () => {
-    setSaving(true);
+  const handleGenerate = async () => {
+    setGenerating(true);
     setResultUrl(null);
+    setLastModel(null);
     try {
-      const imageUrl = await new Promise<string>((resolve, reject) => {
-        setPromoRender({ type: promoType, data: promoData, resolve, reject });
-      });
-      setResultUrl(imageUrl);
+      const res = await generatePromoGptImage(
+        promoType,
+        sanitizePromoDataForAi(promoData),
+        referenceImageUrl || undefined,
+      );
+      setResultUrl(res.imageUrl);
+      setResultFilename(res.filename);
+      setLastModel(res.model);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ');
+      alert(e instanceof Error ? e.message : 'สร้างโปสเตอร์ไม่สำเร็จ');
     } finally {
-      setSaving(false);
+      setGenerating(false);
     }
   };
 
   const handleTypeChange = (t: PromoType) => {
     setPromoType(t);
     setPromoData(emptyPromoData(t));
+    setReferenceImageUrl('');
     setResultUrl(null);
+    setLastModel(null);
   };
 
   const resolvedResultUrl = resultUrl ? resolveMediaUrl(resultUrl) : null;
+  const refFormProps = { onReferenceImage: setReferenceImageUrl };
 
   return (
     <div className="space-y-4">
-      {/* Template selector */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">เลือกประเภทโปรโมชั่น</CardTitle>
@@ -426,20 +408,18 @@ export function PromoTab({ products }: { products: ErpProduct[] }) {
               >
                 <span className="text-sm font-semibold">{opt.label}</span>
                 <span className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{opt.description}</span>
-                <Badge variant="outline" className="mt-2 text-[10px]">
-                  {opt.width}×{opt.height}
-                </Badge>
+                <Badge variant="outline" className="mt-2 text-[10px]">GPT Image</Badge>
               </button>
             ))}
           </div>
-          <p className="mt-3 text-xs text-muted-foreground bg-muted/50 border rounded-md px-3 py-2">
-            ใช้ Template มาตรฐาน + ข้อมูลจากฟอร์ม — ไม่ใช้ AI ออกแบบใหม่ทุกครั้ง (AI มีแค่ปุ่ม Generate Features ใน New Arrival)
+          <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            AI คิด prompt จากข้อมูลฟอร์ม → GPT Image สร้างโปสเตอร์ (~15–30 วิ, ~$0.04–0.12/รูป)
+            {referenceImageUrl ? ' · ใช้รูป ERP เป็นฐาน' : ' · ไม่มีรูป ERP จะสร้างจาก prompt อย่างเดียว'}
           </p>
         </CardContent>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Form */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -449,103 +429,65 @@ export function PromoTab({ products }: { products: ErpProduct[] }) {
           </CardHeader>
           <CardContent className="space-y-3">
             {promoType === 'spend_free_gift' && (
-              <SpendFreeGiftForm
-                data={promoData as SpendFreeGiftData}
-                setData={(d) => setPromoData(d)}
-                products={products}
-              />
+              <SpendFreeGiftForm data={promoData as SpendFreeGiftData} setData={setPromoData} products={products} {...refFormProps} />
             )}
             {promoType === 'buy_x_get_y' && (
-              <BuyXGetYForm
-                data={promoData as BuyXGetYData}
-                setData={(d) => setPromoData(d)}
-                products={products}
-              />
+              <BuyXGetYForm data={promoData as BuyXGetYData} setData={setPromoData} products={products} {...refFormProps} />
             )}
             {promoType === 'bundle_deal' && (
-              <BundleDealForm
-                data={promoData as BundleDealData}
-                setData={(d) => setPromoData(d)}
-                products={products}
-              />
+              <BundleDealForm data={promoData as BundleDealData} setData={setPromoData} products={products} {...refFormProps} />
             )}
             {promoType === 'new_arrival' && (
-              <NewArrivalForm
-                data={promoData as NewArrivalData}
-                setData={(d) => setPromoData(d)}
-                products={products}
-              />
+              <NewArrivalForm data={promoData as NewArrivalData} setData={setPromoData} products={products} {...refFormProps} />
             )}
             {promoType === 'clearance_sale' && (
-              <ClearanceSaleForm
-                data={promoData as ClearanceSaleData}
-                setData={(d) => setPromoData(d)}
-                products={products}
-              />
+              <ClearanceSaleForm data={promoData as ClearanceSaleData} setData={setPromoData} products={products} {...refFormProps} />
             )}
 
-            <Button
-              className="w-full mt-2"
-              onClick={() => void handleSave()}
-              disabled={saving}
-            >
-              {saving
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />กำลังสร้างโปสเตอร์...</>
-                : <><Sparkles className="mr-2 h-4 w-4" />สร้างโปสเตอร์ (บันทึก PNG)</>}
+            <Button className="w-full mt-2" onClick={() => void handleGenerate()} disabled={generating}>
+              {generating
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />AI กำลังสร้างโปสเตอร์...</>
+                : <><Sparkles className="mr-2 h-4 w-4" />สร้างด้วย GPT Image</>}
             </Button>
           </CardContent>
         </Card>
 
-        {/* Live preview + saved result */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">ตัวอย่าง (Live Preview)</CardTitle>
+            <CardTitle className="text-base">ผลลัพธ์ AI</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="overflow-hidden rounded-lg border bg-muted/30">
-              <div
-                style={{
-                  transform: `scale(${520 / getPromoDimensions(promoType).width})`,
-                  transformOrigin: 'top left',
-                  width: getPromoDimensions(promoType).width,
-                  height: getPromoDimensions(promoType).height,
-                }}
-              >
-                <PromoTemplateRenderer type={promoType} data={promoData} />
-              </div>
-              <div style={{ height: getPromoDimensions(promoType).height * (520 / getPromoDimensions(promoType).width) }} />
-            </div>
-
-            {saving && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                กำลังบันทึก PNG...
+            {generating && (
+              <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-sm font-medium">AI กำลังคิด prompt และสร้างภาพ...</p>
+                <p className="text-xs">ใช้เวลาประมาณ 15–30 วินาที</p>
               </div>
             )}
-
-            {resolvedResultUrl && !saving && (
-              <div className="space-y-2 pt-2 border-t">
-                <p className="text-xs font-medium text-green-700">บันทึกสำเร็จ</p>
+            {!generating && resolvedResultUrl && (
+              <div className="space-y-3">
+                <img src={resolvedResultUrl} alt="AI promotion poster" className="w-full rounded-lg border shadow" />
+                {lastModel && (
+                  <Badge variant="secondary" className="text-xs">AI Generated · {lastModel}</Badge>
+                )}
                 <a href={resolvedResultUrl} download={resultFilename ?? 'promo-poster.png'}>
                   <Button variant="outline" className="w-full gap-1.5">
                     <Download className="h-4 w-4" />
                     ดาวน์โหลด PNG
                   </Button>
                 </a>
+                <p className="text-xs text-muted-foreground">บันทึกในแท็บ &quot;ไฟล์ที่สร้าง&quot; แล้ว</p>
+              </div>
+            )}
+            {!generating && !resolvedResultUrl && (
+              <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground/50">
+                <Sparkles className="h-8 w-8" />
+                <p className="text-sm">กรอกข้อมูลแล้วกด &quot;สร้างด้วย GPT Image&quot;</p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
-
-      {/* Off-screen renderer for capture */}
-      {promoRender && (
-        <div aria-hidden style={{ position: 'fixed', left: -99999, top: 0, pointerEvents: 'none', zIndex: -1 }}>
-          <div ref={promoRef}>
-            <PromoTemplateRenderer type={promoRender.type} data={promoRender.data} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

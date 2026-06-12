@@ -133,6 +133,26 @@ export function generateVideoAndWait(sku: string) {
 }
 
 // Promotion posters
+export interface PromoGptResult {
+  imageUrl: string;
+  filename: string;
+  model: string;
+  promptUsed: string;
+  generatedAt: string;
+  source: 'gpt_image';
+}
+
+export function generatePromoGptImage(
+  promoType: string,
+  data: Record<string, unknown>,
+  referenceImageUrl?: string,
+) {
+  return apiRequest<PromoGptResult>('/media/promo/generate', {
+    method: 'POST',
+    body: { promoType, data, referenceImageUrl: referenceImageUrl || undefined },
+  });
+}
+
 export function savePromoImage(promoType: string, dataUrl: string) {
   return apiRequest<{ imageUrl: string; filename: string }>('/media/promo/save', {
     method: 'POST',
