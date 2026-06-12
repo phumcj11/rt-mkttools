@@ -137,7 +137,8 @@ export class ErpController {
   }
 
   @Get('campaign-candidates')
-  campaignCandidates(
+  async campaignCandidates(
+    @CurrentUser() user: AuthUser,
     @Query('targetPrice', new DefaultValuePipe(100), ParseIntPipe) targetPrice: number,
     @Query('minGpPct', new DefaultValuePipe(30), ParseIntPipe) minGpPct: number,
     @Query('from') from?: string,
@@ -145,17 +146,28 @@ export class ErpController {
     @Query('category') category?: string,
     @Query('abc') abc?: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit = 50,
+    @Query('campaignName') campaignName?: string,
+    @Query('withAi') withAi?: string,
   ) {
     const r = defaultRange();
-    return this.erp.campaignCandidates({
-      targetPrice,
-      minGpPct,
+    const candidates = await this.erp.campaignCandidates({
+      targetPrice, minGpPct,
       from: from || r.from,
       to: to || r.to,
       category: this.toInt(category),
-      abc,
-      limit,
+      abc, limit,
     });
+
+    if (withAi === '1' || withAi === 'true') {
+      const summary = await this.insights.analyzeCampaign(
+        user,
+        { campaignName: campaignName || 'Campaign', targetPrice, minGpPct },
+        candidates,
+      );
+      return { candidates, summary };
+    }
+
+    return { candidates, summary: null };
   }
 
   @Get('ai-insights')

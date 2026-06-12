@@ -465,16 +465,32 @@ export interface ErpCampaignCandidate {
   retailPrice: number;
   /** Cost/sales price from ERP product master */
   costSales: number;
-  /** Minimum sell price to hit minGpPct, rounded up to nearest ฿5 */
-  suggestedBuffetPrice: number;
-  /** True when retail_price ≤ targetPrice (fits the buffet tier) */
-  fitsTargetPrice: boolean;
-  /** How much % discount is needed to bring retail down to targetPrice */
+  /** Minimum sell price that still hits minGpPct, rounded up to nearest ฿5 */
+  minSellPrice: number;
+  /** GP% if we sell this product at targetPrice (null when costSales unknown) */
+  campaignGpPct: number | null;
+  /** True when selling at targetPrice still meets minGpPct (or historical GP passes when no cost) */
+  eligibleForTarget: boolean;
+  /** How much % discount is needed to bring retail price down to targetPrice */
   discountNeeded: number;
+  /** Data quality flags: 'no_master' | 'no_cost' | 'no_price' */
+  dataQuality: string[];
   score: number;
   reasons: string[];
   warnings: string[];
   hasExistingPromo: boolean;
+}
+
+export interface CampaignAnalysisSummary {
+  source: 'ai' | 'heuristic';
+  insights: string[];
+  text: string;
+  generatedAt: string;
+}
+
+export interface ErpCampaignResult {
+  candidates: ErpCampaignCandidate[];
+  summary: CampaignAnalysisSummary | null;
 }
 
 export interface ErpInsights {

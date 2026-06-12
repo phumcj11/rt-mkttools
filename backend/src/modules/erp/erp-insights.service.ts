@@ -117,6 +117,93 @@ export class ErpInsightsService {
     return hResult;
   }
 
+  /** Generate a short campaign-planning summary (AI or heuristic) */
+  async analyzeCampaign(
+    user: AuthUser,
+    params: {
+      campaignName: string;
+      targetPrice: number;
+      minGpPct: number;
+    },
+    candidates: Array<{
+      name: string; sku: string; category: string; brand: string;
+      campaignGpPct: number | null; eligibleForTarget: boolean;
+      revenue: number; abcCompany: string; minSellPrice: number;
+      warnings: string[];
+    }>,
+  ): Promise<ErpInsightsResult> {
+    const eligible  = candidates.filter((c) => c.eligibleForTarget);
+    const top10     = eligible.slice(0, 10);
+
+    if (this.openai.isConfigured() && top10.length > 0) {
+      try {
+        await this.ai.assertWithinQuota(user.tenantId);
+        const system =
+          'คุณเป็นผู้วางแผนการตลาดของร้าน 100 บาทช็อปไทย ' +
+          'วิเคราะห์รายการสินค้าและให้คำแนะนำแคมเปญสั้น ๆ เป็นภาษาไทย ' +
+          'ตอบเป็นรายการ 4-6 ข้อ ขึ้นต้นแต่ละข้อด้วย "- " เน้นสิ่งที่ลงมือทำได้จริง';
+        const rows = top10
+          .map((c, i) =>
+            `${i + 1}. ${c.name} (${c.category}) — ` +
+            `GP@฿${params.targetPrice}: ${c.campaignGpPct?.toFixed(1) ?? 'N/A'}%, ` +
+            `ยอดขาย: ฿${Math.round(c.revenue).toLocaleString()}, ABC: ${c.abcCompany}` +
+            (c.warnings.length ? `, ⚠ ${c.warnings[0]}` : ''),
+          )
+          .join('\n');
+        const userPrompt =
+          `แคมเปญ: "${params.campaignName}" ราคาเป้า ฿${params.targetPrice} GP ขั้นต่ำ ${params.minGpPct}%\n` +
+          `สินค้าที่ผ่านเกณฑ์ ${eligible.length} รายการ (แสดง 10 อันดับแรก):\n${rows}\n\n` +
+          'กรุณาให้คำแนะนำสั้น ๆ: สินค้ากลุ่มใดควรเลือก, ควรระวังอะไร, และข้อเสนอแนะการจัดแคมเปญ';
+        const result = await this.openai.complete(system, userPrompt);
+        await this.ai.addUsage(user.tenantId, result.promptTokens + result.completionTokens);
+        const insights = result.content
+          .split('\n')
+          .map((l) => l.replace(/^[-*•\d.]\s*/, '').trim())
+          .filter(Boolean);
+        return { source: 'ai', insights, text: result.content, generatedAt: new Date().toISOString() };
+      } catch (err) {
+        this.logger.warn(`Campaign AI summary failed, using heuristic: ${(err as Error).message}`);
+      }
+    }
+
+    // Heuristic fallback
+    return {
+      source: 'heuristic',
+      insights: this.heuristicCampaign(params, eligible),
+      text: '',
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  private heuristicCampaign(
+    params: { campaignName: string; targetPrice: number; minGpPct: number },
+    eligible: Array<{
+      name: string; category: string; abcCompany: string;
+      campaignGpPct: number | null; revenue: number; warnings: string[];
+    }>,
+  ): string[] {
+    const out: string[] = [];
+    out.push(`แคมเปญ "${params.campaignName}" มีสินค้าผ่านเกณฑ์ ${eligible.length} รายการที่ขาย ฿${params.targetPrice} แล้ว GP ≥ ${params.minGpPct}%`);
+
+    const aClass = eligible.filter((c) => c.abcCompany === 'ACOM');
+    if (aClass.length)
+      out.push(`สินค้ากลุ่ม A ที่แนะนำ: ${aClass.slice(0, 3).map((c) => c.name).join(', ')}`);
+
+    const highGp = eligible.filter((c) => (c.campaignGpPct ?? 0) >= 40);
+    if (highGp.length)
+      out.push(`สินค้า GP สูง ≥40% (กำไรดี): ${highGp.slice(0, 3).map((c) => c.name).join(', ')}`);
+
+    const warned = eligible.filter((c) => c.warnings.length > 0);
+    if (warned.length)
+      out.push(`${warned.length} รายการมีข้อควรระวัง — ตรวจสอบก่อนประกาศโปร`);
+
+    const cats = [...new Set(eligible.map((c) => c.category).filter(Boolean))];
+    if (cats.length)
+      out.push(`หมวดสินค้าที่ครอบคลุม: ${cats.slice(0, 4).join(', ')}`);
+
+    return out;
+  }
+
   private heuristic(f: {
     days: number;
     revenueRange: number;

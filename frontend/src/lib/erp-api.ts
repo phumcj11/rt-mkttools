@@ -1,8 +1,10 @@
 import { apiRequest } from './api';
 import type {
+  CampaignAnalysisSummary,
   ErpAlert,
   ErpBranchSales,
   ErpCampaignCandidate,
+  ErpCampaignResult,
   ErpCategoryPerformance,
   ErpDashboard,
   ErpInsights,
@@ -12,6 +14,8 @@ import type {
   ErpSyncResult,
   ErpTopProduct,
 } from './types';
+
+export type { CampaignAnalysisSummary, ErpCampaignCandidate, ErpCampaignResult };
 
 export interface ErpRangeOpts {
   from?: string;
@@ -76,21 +80,25 @@ export function getErpProducts(opts?: ErpProductsOpts) {
 export interface ErpCampaignCandidatesOpts extends ErpRangeOpts {
   targetPrice?: number;
   minGpPct?: number;
+  campaignName?: string;
   category?: number;
   abc?: string;
   limit?: number;
+  withAi?: boolean;
 }
 
 export function getErpCampaignCandidates(opts?: ErpCampaignCandidatesOpts) {
   const p = new URLSearchParams();
   if (opts?.targetPrice !== undefined) p.set('targetPrice', String(opts.targetPrice));
   if (opts?.minGpPct !== undefined)    p.set('minGpPct', String(opts.minGpPct));
-  if (opts?.from)                     p.set('from', opts.from);
-  if (opts?.to)                       p.set('to', opts.to);
-  if (opts?.category !== undefined)   p.set('category', String(opts.category));
-  if (opts?.abc)                      p.set('abc', opts.abc);
-  if (opts?.limit)                    p.set('limit', String(opts.limit));
-  return apiRequest<ErpCampaignCandidate[]>(`/erp/campaign-candidates?${p.toString()}`);
+  if (opts?.from)                      p.set('from', opts.from);
+  if (opts?.to)                        p.set('to', opts.to);
+  if (opts?.campaignName)              p.set('campaignName', opts.campaignName);
+  if (opts?.category !== undefined)    p.set('category', String(opts.category));
+  if (opts?.abc)                       p.set('abc', opts.abc);
+  if (opts?.limit)                     p.set('limit', String(opts.limit));
+  if (opts?.withAi)                    p.set('withAi', '1');
+  return apiRequest<ErpCampaignResult>(`/erp/campaign-candidates?${p.toString()}`);
 }
 
 export function getErpAiInsights(days = 30, force = false) {

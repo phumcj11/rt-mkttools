@@ -41,6 +41,7 @@ import {
   type ErpRangeOpts,
 } from '@/lib/erp-api';
 import type {
+  CampaignAnalysisSummary,
   ErpCampaignCandidate,
   ErpCategoryPerformance,
   ErpProductListItem,
@@ -410,8 +411,10 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
   const [minGpPct, setMinGpPct]         = useState('30');
   const [lookback, setLookback]         = useState('30');
   const [abcFilter, setAbcFilter]       = useState('');
+  const [withAi, setWithAi]             = useState(true);
 
   const [candidates, setCandidates] = useState<ErpCampaignCandidate[]>([]);
+  const [summary, setSummary]       = useState<CampaignAnalysisSummary | null>(null);
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [ran, setRan]               = useState(false);
@@ -420,20 +423,24 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
     setLoading(true);
     setError(null);
     setRan(false);
+    setSummary(null);
     try {
       const today = new Date();
       const from  = new Date(today);
       from.setDate(from.getDate() - (Number(lookback) - 1));
       const fmtD  = (d: Date) => d.toISOString().slice(0, 10);
-      const data = await getErpCampaignCandidates({
-        targetPrice: Number(targetPrice) || 100,
-        minGpPct:    Number(minGpPct)    || 30,
+      const result = await getErpCampaignCandidates({
+        targetPrice:  Number(targetPrice) || 100,
+        minGpPct:     Number(minGpPct)    || 30,
+        campaignName: campaignName || 'Campaign',
         from: fmtD(from),
         to:   fmtD(today),
         abc:  abcFilter || undefined,
         limit: 60,
+        withAi,
       });
-      setCandidates(data ?? []);
+      setCandidates(result?.candidates ?? []);
+      setSummary(result?.summary ?? null);
       setRan(true);
     } catch {
       setError('โหลดข้อมูลไม่สำเร็จ — กรุณาลองใหม่');
@@ -527,10 +534,24 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                 ))}
               </div>
             </div>
-            <Button onClick={handleRun} disabled={loading} className="ml-auto gap-2">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-              {loading ? 'กำลังวิเคราะห์...' : 'วิเคราะห์สินค้าเข้าร่วม'}
-            </Button>
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                type="button"
+                onClick={() => setWithAi((v) => !v)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  withAi
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-muted-foreground/30 text-muted-foreground hover:bg-accent'
+                }`}
+              >
+                <Sparkles className="h-3 w-3" />
+                AI วิเคราะห์
+              </button>
+              <Button onClick={handleRun} disabled={loading} className="gap-2">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                {loading ? 'กำลังวิเคราะห์...' : 'วิเคราะห์สินค้าเข้าร่วม'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -542,18 +563,41 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
         </div>
       )}
 
-      {/* Results */}
+      {/* AI Summary Panel */}
+      {ran && !loading && summary && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Sparkles className="h-4 w-4 text-primary" />
+              {summary.source === 'ai' ? 'AI แนะนำ' : 'สรุปแคมเปญ'} — &quot;{campaignName}&quot;
+              <Badge className="ml-auto text-xs">{summary.source === 'ai' ? 'GPT' : 'Auto'}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1.5">
+              {summary.insights.map((ins, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                  {ins}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Results Table */}
       {ran && !loading && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Star className="h-4 w-4 text-amber-500" />
-              สินค้าแนะนำสำหรับ &quot;{campaignName}&quot; — GP ≥ {minGpPct}%
+              สินค้าที่ขาย ฿{targetPrice} แล้ว GP ≥ {minGpPct}%
               <Badge className="ml-2 bg-primary/10 text-primary">{candidates.length} รายการ</Badge>
-              {candidates.filter((c) => c.fitsTargetPrice).length > 0 && (
+              {candidates.filter((c) => c.eligibleForTarget && c.dataQuality.length === 0).length > 0 && (
                 <Badge className="ml-1 bg-green-100 text-green-800">
                   <CheckCircle2 className="mr-1 h-3 w-3" />
-                  {candidates.filter((c) => c.fitsTargetPrice).length} เข้าเกณฑ์ ฿{targetPrice}
+                  {candidates.filter((c) => c.eligibleForTarget && c.dataQuality.length === 0).length} ผ่านเกณฑ์
                 </Badge>
               )}
             </CardTitle>
@@ -569,11 +613,11 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-8">#</TableHead>
-                      <TableHead>สินค้า / หมวด</TableHead>
+                      <TableHead>ชื่อสินค้า / SKU</TableHead>
                       <TableHead className="text-right">Score</TableHead>
-                      <TableHead className="text-right">GP%</TableHead>
-                      <TableHead className="text-right">ราคาขาย</TableHead>
-                      <TableHead className="text-right">แนะนำ Buffet</TableHead>
+                      <TableHead className="text-right">GP ที่ ฿{targetPrice}</TableHead>
+                      <TableHead className="text-right">ราคาขายปัจจุบัน</TableHead>
+                      <TableHead className="text-right">ราคาขั้นต่ำ (GP {minGpPct}%)</TableHead>
                       <TableHead className="text-right">ยอดขาย</TableHead>
                       <TableHead>ABC</TableHead>
                       <TableHead>เหตุผล / คำเตือน</TableHead>
@@ -582,38 +626,48 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                   </TableHeader>
                   <TableBody>
                     {candidates.map((c, i) => (
-                      <TableRow key={c.sku} className={c.fitsTargetPrice ? 'bg-green-50/40' : ''}>
+                      <TableRow key={c.sku} className={c.eligibleForTarget && c.dataQuality.length === 0 ? 'bg-green-50/40' : ''}>
                         <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5">
-                            {c.fitsTargetPrice
+                            {c.eligibleForTarget && c.dataQuality.length === 0
                               ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                              : c.dataQuality.includes('no_cost')
+                              ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
                               : <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
                             <div>
-                              <div className="font-medium">{c.name}</div>
-                              <div className="text-xs text-muted-foreground">{c.sku} · {c.category}{c.brand ? ` · ${c.brand}` : ''}</div>
+                              <div className="font-medium leading-tight">{c.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {c.sku}{c.category ? ` · ${c.category}` : ''}{c.brand ? ` · ${c.brand}` : ''}
+                              </div>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className={`text-right text-lg ${scoreColor(c.score)}`}>{c.score}</TableCell>
                         <TableCell className="text-right">
-                          <span className={c.gpPct >= 40 ? 'font-bold text-green-600' : c.gpPct >= 30 ? 'text-green-600' : 'text-amber-600'}>
-                            {c.gpPct.toFixed(1)}%
-                          </span>
+                          {c.campaignGpPct !== null ? (
+                            <span className={c.campaignGpPct >= 40 ? 'font-bold text-green-600' : c.campaignGpPct >= Number(minGpPct) ? 'text-green-600' : 'text-amber-600'}>
+                              {c.campaignGpPct.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">ประวัติ {c.gpPct.toFixed(0)}%</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           {c.retailPrice > 0 ? (
-                            <span className={c.fitsTargetPrice ? 'font-semibold text-green-700' : 'text-amber-600'}>
+                            <span className={c.retailPrice <= Number(targetPrice) ? 'text-green-700' : 'text-muted-foreground'}>
                               ฿{c.retailPrice.toLocaleString()}
-                              {!c.fitsTargetPrice && c.discountNeeded > 0 && (
+                              {c.discountNeeded > 0 && (
                                 <span className="ml-1 text-xs text-amber-500">(-{c.discountNeeded}%)</span>
                               )}
                             </span>
-                          ) : <span className="text-muted-foreground">—</span>}
+                          ) : <span className="text-muted-foreground text-xs">ไม่มีข้อมูล</span>}
                         </TableCell>
                         <TableCell className="text-right">
-                          {c.suggestedBuffetPrice > 0 ? (
-                            <span className="font-semibold text-primary">฿{c.suggestedBuffetPrice}</span>
+                          {c.minSellPrice > 0 ? (
+                            <span className={`font-semibold ${c.minSellPrice <= Number(targetPrice) ? 'text-primary' : 'text-amber-600'}`}>
+                              ฿{c.minSellPrice.toLocaleString()}
+                            </span>
                           ) : <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell className="text-right">{thb(c.revenue)}</TableCell>
@@ -647,7 +701,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                           <div className="flex gap-1">
                             <Button
                               size="sm" variant="outline" className="h-7 px-2 text-xs"
-                              onClick={() => router.push(`/posm?product=${encodeURIComponent(c.name)}&price=${c.suggestedBuffetPrice || c.retailPrice}&promo=${encodeURIComponent(campaignName)}`)}
+                              onClick={() => router.push(`/posm?product=${encodeURIComponent(c.name)}&price=${c.minSellPrice || c.retailPrice}&promo=${encodeURIComponent(campaignName)}`)}
                             >
                               <FileImage className="mr-1 h-3 w-3" />POSM
                             </Button>
@@ -677,7 +731,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
             กรอกชื่อ Campaign, ราคาเป้าหมาย และ GP ขั้นต่ำ แล้วกด
             <strong className="text-foreground"> วิเคราะห์สินค้าเข้าร่วม</strong>
           </p>
-          <p className="text-xs">ระบบจะดึงข้อมูลยอดขาย GP และ ABC จาก ERP มา rank สินค้าที่เหมาะสมให้ทันที</p>
+          <p className="text-xs">ระบบดึง product master + ยอดขาย + ABC จาก ERP คำนวณว่าถ้าขายที่ราคาเป้าหมายแล้ว GP จะเป็นเท่าไร{withAi ? ' พร้อม AI สรุปคำแนะนำ' : ''}</p>
         </div>
       )}
     </div>

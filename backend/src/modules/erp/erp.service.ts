@@ -280,89 +280,151 @@ export class ErpService {
   }) {
     const limit = params.limit ?? 50;
 
-    // Fetch products + sales in parallel
+    // Fetch products (master) + sales in parallel
     const [salesRows, productRows] = await Promise.all([
       this.skuBranchSales(params.from, params.to, {
         category: params.category,
         abc: params.abc,
-        limit: 200,
+        limit: 500,
       }, false),
       this.productsList({
         category: params.category,
         abc: params.abc,
-        limit: 500,
+        limit: 1000,
       }, false),
     ]);
 
-    // Build product price map: sku → { retailPrice, costSales }
-    const productMap = new Map<string, { retailPrice: number; costSales: number }>();
+    // Build product master maps: by sku AND by id (both normalized)
+    const normalSku = (s: string) => s.replace(/\s+/g, '').toUpperCase();
+    type ProdEntry = { id: number; sku: string; name: string; category: string; brand: string; retailPrice: number; costSales: number };
+    const prodBySku = new Map<string, ProdEntry>();
+    const prodById  = new Map<number, ProdEntry>();
     for (const p of productRows) {
-      productMap.set(p.sku, { retailPrice: p.retailPrice, costSales: p.costSales });
+      const entry: ProdEntry = {
+        id: p.id, sku: p.sku, name: p.name, category: p.category,
+        brand: p.brand, retailPrice: p.retailPrice, costSales: p.costSales,
+      };
+      prodBySku.set(normalSku(p.sku), entry);
+      if (p.id > 0) prodById.set(p.id, entry);
     }
 
-    // Build a map: sku → aggregated sales across branches
+    // Aggregate sales by SKU across branches
     const salesMap = new Map<string, {
-      sku: string;
+      sku: string; productId: number;
       qtySold: number; revenue: number; gpBaht: number; gpPct: number;
-      abcCompany: string; name: string; category: string; brand: string; productId: number;
+      abcCompany: string; salesName: string; salesCategory: string; salesBrand: string;
     }>();
     for (const row of salesRows) {
-      const existing = salesMap.get(row.sku);
+      const key = normalSku(row.sku);
+      const existing = salesMap.get(key);
       if (existing) {
         existing.qtySold += row.qtySold;
         existing.revenue += row.revenue;
         existing.gpBaht  += row.gpBaht;
-        // keep the higher gpPct (approximate)
+        // weighted-average GP approximation: keep higher (conservative)
         if (row.gpPct > existing.gpPct) existing.gpPct = row.gpPct;
       } else {
-        salesMap.set(row.sku, { ...row });
+        salesMap.set(key, {
+          sku: row.sku, productId: row.productId,
+          qtySold: row.qtySold, revenue: row.revenue,
+          gpBaht: row.gpBaht, gpPct: row.gpPct,
+          abcCompany: row.abcCompany,
+          salesName: row.name, salesCategory: row.category, salesBrand: row.brand,
+        });
       }
     }
 
-    // Filter by GP threshold
-    const candidates = Array.from(salesMap.values()).filter(
-      (s) => s.gpPct >= params.minGpPct,
-    );
+    // Build candidate list — merge master data with sales
+    const merged = Array.from(salesMap.values()).map((s) => {
+      const prod =
+        prodBySku.get(normalSku(s.sku)) ??
+        (s.productId > 0 ? prodById.get(s.productId) : undefined);
 
-    // Score: GP weight + sales volume weight
-    const maxRevenue = Math.max(...candidates.map((c) => c.revenue), 1);
-    const scored = candidates.map((c) => {
-      const prod = productMap.get(c.sku);
       const retailPrice = prod?.retailPrice ?? 0;
       const costSales   = prod?.costSales   ?? 0;
+      const name        = prod?.name        || s.salesName     || s.sku;
+      const category    = prod?.category    || s.salesCategory || '';
+      const brand       = prod?.brand       || s.salesBrand    || '';
 
-      // Suggested buffet price: cost / (1 − minGP%) rounded up to nearest 5 baht
-      const rawSuggested = costSales > 0
-        ? costSales / (1 - params.minGpPct / 100)
-        : retailPrice;
-      const suggestedBuffetPrice = rawSuggested > 0
-        ? Math.ceil(rawSuggested / 5) * 5
-        : 0;
+      // --- key calculations ---
+      // GP if we sell at targetPrice
+      const campaignGpPct =
+        costSales > 0
+          ? Math.round(((params.targetPrice - costSales) / params.targetPrice) * 1000) / 10
+          : null;
 
-      const fitsTargetPrice = retailPrice > 0 && retailPrice <= params.targetPrice;
-      const discountNeeded  = retailPrice > params.targetPrice
-        ? Math.round(((retailPrice - params.targetPrice) / retailPrice) * 100)
-        : 0;
+      // Minimum sell price that still hits minGpPct, rounded up to nearest ฿5
+      const minSellPrice =
+        costSales > 0
+          ? Math.ceil((costSales / (1 - params.minGpPct / 100)) / 5) * 5
+          : 0;
 
-      const gpScore    = Math.min(c.gpPct / 100, 1) * 40;
-      const salesScore = (c.revenue / maxRevenue) * 40;
-      const abcBonus   = c.abcCompany === 'ACOM' ? 20 : c.abcCompany === 'BCOM' ? 10 : 0;
-      const priceBonus = fitsTargetPrice ? 10 : 0;
-      const score      = gpScore + salesScore + abcBonus + priceBonus;
+      // A product is eligible for the target if selling at targetPrice still hits GP min
+      const eligibleForTarget =
+        costSales > 0
+          ? (campaignGpPct ?? 0) >= params.minGpPct
+          : s.gpPct >= params.minGpPct; // fallback to historical GP when no cost
+
+      // Data quality flags
+      const dataQuality: string[] = [];
+      if (!prod)             dataQuality.push('no_master');
+      if (costSales === 0)   dataQuality.push('no_cost');
+      if (retailPrice === 0) dataQuality.push('no_price');
+
+      // How much % the retail price needs to be cut to reach targetPrice
+      const discountNeeded =
+        retailPrice > params.targetPrice
+          ? Math.round(((retailPrice - params.targetPrice) / retailPrice) * 100)
+          : 0;
+
+      return {
+        sku: s.sku, productId: s.productId,
+        name, category, brand,
+        gpPct: s.gpPct, gpBaht: s.gpBaht, revenue: s.revenue, qtySold: s.qtySold,
+        abcCompany: s.abcCompany,
+        retailPrice, costSales, minSellPrice,
+        campaignGpPct,
+        eligibleForTarget,
+        discountNeeded,
+        dataQuality,
+      };
+    });
+
+    // Filter: keep eligible OR (no cost + historical GP passes) but always exclude junk
+    const candidates = merged.filter(
+      (c) => c.eligibleForTarget && (c.dataQuality.length === 0 || !c.dataQuality.includes('no_master'))
+    );
+
+    // Score
+    const maxRevenue = Math.max(...candidates.map((c) => c.revenue), 1);
+    const scored = candidates.map((c) => {
+      const gpScore      = c.campaignGpPct !== null
+        ? Math.min(c.campaignGpPct / 100, 1) * 40
+        : Math.min(c.gpPct / 100, 1) * 35;
+      const salesScore   = (c.revenue / maxRevenue) * 40;
+      const abcBonus     = c.abcCompany === 'ACOM' ? 20 : c.abcCompany === 'BCOM' ? 10 : 0;
+      const eligibleBonus = c.eligibleForTarget && c.dataQuality.length === 0 ? 10 : 0;
+      const score        = gpScore + salesScore + abcBonus + eligibleBonus;
 
       const reasons: string[] = [];
-      if (c.gpPct >= 40)         reasons.push(`GP สูง ${c.gpPct.toFixed(0)}%`);
-      else if (c.gpPct >= params.minGpPct) reasons.push(`GP ผ่านเกณฑ์ ${c.gpPct.toFixed(0)}%`);
-      if (c.abcCompany === 'ACOM') reasons.push('สินค้า A (ขายดีมาก)');
-      else if (c.abcCompany === 'BCOM') reasons.push('สินค้า B (ขายดี)');
+      if (c.campaignGpPct !== null) {
+        if (c.campaignGpPct >= 40) reasons.push(`ขายที่ ฿${params.targetPrice} ได้ GP ${c.campaignGpPct.toFixed(0)}%`);
+        else                       reasons.push(`ขายที่ ฿${params.targetPrice} ได้ GP ${c.campaignGpPct.toFixed(0)}% (ผ่านเกณฑ์)`);
+      } else if (c.gpPct >= params.minGpPct) {
+        reasons.push(`GP ประวัติ ${c.gpPct.toFixed(0)}% ผ่านเกณฑ์`);
+      }
+      if (c.abcCompany === 'ACOM') reasons.push('สินค้า A ขายดีมาก');
+      else if (c.abcCompany === 'BCOM') reasons.push('สินค้า B ขายดี');
       if (c.revenue > maxRevenue * 0.5) reasons.push('ยอดขายสูง');
-      if (fitsTargetPrice) reasons.push(`ราคา ฿${retailPrice} เข้าเกณฑ์ Buffet`);
+      if (c.retailPrice > 0 && c.retailPrice <= params.targetPrice) reasons.push(`ราคาปัจจุบัน ฿${c.retailPrice} อยู่ใต้เกณฑ์`);
 
       const warnings: string[] = [];
-      if (c.gpPct < params.minGpPct + 5) warnings.push('GP ใกล้ขีดต่ำสุด');
+      if (c.dataQuality.includes('no_cost'))  warnings.push('ไม่มีข้อมูลต้นทุน — ใช้ GP ประวัติแทน');
+      if (c.dataQuality.includes('no_price')) warnings.push('ไม่มีราคาขายใน master');
+      if (c.campaignGpPct !== null && c.campaignGpPct < params.minGpPct + 5) warnings.push('GP ที่ราคา campaign ใกล้ขีดต่ำสุด');
       if (!['ACOM', 'BCOM'].includes(c.abcCompany)) warnings.push('ยอดขายระดับ C/D');
-      if (retailPrice > 0 && !fitsTargetPrice)
-        warnings.push(`ราคา ฿${retailPrice} เกิน ฿${params.targetPrice} (ต้องลด ${discountNeeded}%)`);
+      if (c.retailPrice > params.targetPrice && c.discountNeeded > 0)
+        warnings.push(`ราคาปัจจุบัน ฿${c.retailPrice} ต้องลด ${c.discountNeeded}%`);
 
       return {
         sku: c.sku,
@@ -375,11 +437,13 @@ export class ErpService {
         revenue: c.revenue,
         qtySold: c.qtySold,
         abcCompany: c.abcCompany,
-        retailPrice,
-        costSales,
-        suggestedBuffetPrice,
-        fitsTargetPrice,
-        discountNeeded,
+        retailPrice: c.retailPrice,
+        costSales: c.costSales,
+        minSellPrice: c.minSellPrice,
+        campaignGpPct: c.campaignGpPct,
+        eligibleForTarget: c.eligibleForTarget,
+        discountNeeded: c.discountNeeded,
+        dataQuality: c.dataQuality,
         score: Math.round(score),
         reasons,
         warnings,
@@ -387,8 +451,13 @@ export class ErpService {
       };
     });
 
+    // Eligible first, then by score
     return scored
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => {
+        if (a.eligibleForTarget !== b.eligibleForTarget)
+          return a.eligibleForTarget ? -1 : 1;
+        return b.score - a.score;
+      })
       .slice(0, limit);
   }
 
