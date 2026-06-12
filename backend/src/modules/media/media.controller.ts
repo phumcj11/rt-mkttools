@@ -51,6 +51,18 @@ class GeneratePromoGptDto {
   referenceImageUrl?: string;
 }
 
+class GeneratePromoCompositeDto {
+  @IsString()
+  @IsNotEmpty()
+  promoType: string;
+
+  @IsObject()
+  data: Record<string, string>;
+
+  @IsObject()
+  imageUrls: Record<string, string>;
+}
+
 class VideoSubmitDto {
   @IsString()
   @IsNotEmpty()
@@ -105,8 +117,16 @@ export class MediaController {
     return this.media.savePosterImage(sku, body.dataUrl);
   }
 
-  /** Generate promotion poster via AI prompt + GPT Image */
+  /** Generate promotion poster via sharp composite (default — pixel-perfect) */
   @Post('promo/generate')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  generatePromoComposite(@Body() dto: GeneratePromoCompositeDto) {
+    return this.media.generatePromoComposite(dto.promoType, dto.data, dto.imageUrls);
+  }
+
+  /** Generate promotion poster via AI prompt + GPT Image (optional AI Creative mode) */
+  @Post('promo/generate-gpt')
   @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
   @HttpCode(HttpStatus.OK)
   generatePromoGpt(@Body() dto: GeneratePromoGptDto) {

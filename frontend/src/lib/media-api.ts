@@ -133,6 +133,14 @@ export function generateVideoAndWait(sku: string) {
 }
 
 // Promotion posters
+export interface PromoCompositeResult {
+  imageUrl: string;
+  filename: string;
+  generatedAt: string;
+  source: 'composite';
+  cutoutUsed: boolean;
+}
+
 export interface PromoGptResult {
   imageUrl: string;
   filename: string;
@@ -142,12 +150,25 @@ export interface PromoGptResult {
   source: 'gpt_image';
 }
 
+/** Default: pixel-perfect composite (template + sharp + optionally n8n cutout) */
+export function generatePromoComposite(
+  promoType: string,
+  data: Record<string, string>,
+  imageUrls: Record<string, string>,
+) {
+  return apiRequest<PromoCompositeResult>('/media/promo/generate', {
+    method: 'POST',
+    body: { promoType, data, imageUrls },
+  });
+}
+
+/** Optional AI Creative mode: GPT Image */
 export function generatePromoGptImage(
   promoType: string,
   data: Record<string, unknown>,
   referenceImageUrl?: string,
 ) {
-  return apiRequest<PromoGptResult>('/media/promo/generate', {
+  return apiRequest<PromoGptResult>('/media/promo/generate-gpt', {
     method: 'POST',
     body: { promoType, data, referenceImageUrl: referenceImageUrl || undefined },
   });
@@ -185,6 +206,19 @@ export function getVideoSettings() {
 
 export function saveVideoSettings(body: { kling_api_key?: string }) {
   return apiRequest<{ ok: boolean }>('/settings/system/video', { method: 'PATCH', body });
+}
+
+export interface N8nSettings {
+  n8n_configured: boolean;
+  n8n_webhook_url_preview: string | null;
+}
+
+export function getN8nSettings() {
+  return apiRequest<N8nSettings>('/settings/system/n8n');
+}
+
+export function saveN8nSettings(body: { n8n_promo_webhook_url: string }) {
+  return apiRequest<{ ok: boolean }>('/settings/system/n8n', { method: 'PATCH', body });
 }
 
 export function syncToDrive() {

@@ -23,10 +23,12 @@ import {
   generateBenefitImage,
   generateGptBenefitImage,
   getDriveSettings,
+  getN8nSettings,
   getVideoSettings,
   listMediaFiles,
   listMediaProducts,
   saveDriveSettings,
+  saveN8nSettings,
   saveVideoSettings,
   submitProductVideo,
   syncToDrive,
@@ -37,6 +39,7 @@ import {
   type DriveSettings,
   type ErpProduct,
   type MediaFile,
+  type N8nSettings,
   type ProductMediaResult,
   type VideoSettings,
 } from '@/lib/media-api';
@@ -64,9 +67,11 @@ export function MediaView() {
 
   const [driveSettings, setDriveSettings] = useState<DriveSettings | null>(null);
   const [videoSettings, setVideoSettings] = useState<VideoSettings | null>(null);
+  const [n8nSettings, setN8nSettings] = useState<N8nSettings | null>(null);
   const [driveFolderId, setDriveFolderId] = useState('');
   const [driveServiceAccount, setDriveServiceAccount] = useState('');
   const [klingKey, setKlingKey] = useState('');
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const [posterLayout, setPosterLayout] = useState<PosterLayout>('classic');
@@ -140,6 +145,7 @@ export function MediaView() {
     if (tab === 'settings') {
       getDriveSettings().then(setDriveSettings).catch(() => undefined);
       getVideoSettings().then(setVideoSettings).catch(() => undefined);
+      getN8nSettings().then(setN8nSettings).catch(() => undefined);
     }
   }, [tab]);
 
@@ -253,10 +259,14 @@ export function MediaView() {
       if (klingKey.trim()) {
         await saveVideoSettings({ kling_api_key: klingKey.trim() });
       }
+      if (n8nWebhookUrl.trim()) {
+        await saveN8nSettings({ n8n_promo_webhook_url: n8nWebhookUrl.trim() });
+      }
       setSettingsMsg('บันทึกสำเร็จ');
       setDriveFolderId('');
       setDriveServiceAccount('');
       setKlingKey('');
+      setN8nWebhookUrl('');
       const [ds, vs] = await Promise.all([getDriveSettings(), getVideoSettings()]);
       setDriveSettings(ds);
       setVideoSettings(vs);
@@ -632,13 +642,53 @@ export function MediaView() {
             </CardContent>
           </Card>
 
+          {/* n8n Composite */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <RefreshCw className="h-4 w-4 text-primary" />
+                n8n — Cutout Webhook (ไดคัทสินค้า)
+                {n8nSettings?.n8n_configured && (
+                  <Badge variant="default" className="ml-auto text-xs">เชื่อมต่อแล้ว</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {n8nSettings?.n8n_configured ? (
+                <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+                  <p className="font-medium text-green-600">ตั้งค่าแล้ว</p>
+                  <p className="text-muted-foreground text-xs mt-0.5">URL: {n8nSettings.n8n_webhook_url_preview}</p>
+                </div>
+              ) : (
+                <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800 space-y-1">
+                  <p className="font-semibold">วิธีตั้งค่า n8n Cutout:</p>
+                  <ol className="list-decimal ml-4 space-y-0.5">
+                    <li>Import workflow จากไฟล์ <span className="font-mono">backend/assets/n8n/promo-cutout-workflow.json</span></li>
+                    <li>ติดตั้ง rembg บน server: <span className="font-mono">pip install rembg[cli]</span></li>
+                    <li>Activate workflow ใน n8n → copy Webhook URL</li>
+                    <li>วาง URL ด้านล่าง</li>
+                  </ol>
+                  <p className="text-muted-foreground mt-1">ถ้าไม่ตั้งค่า ระบบจะใช้รูปสินค้าโดยตรงโดยไม่ไดคัท</p>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label>n8n Webhook URL</Label>
+                <Input
+                  placeholder="https://your-n8n.com/webhook/promo-cutout"
+                  value={n8nWebhookUrl}
+                  onChange={(e) => setN8nWebhookUrl(e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {settingsMsg && (
             <p className={`text-sm ${settingsMsg.includes('สำเร็จ') ? 'text-green-600' : 'text-destructive'}`}>
               {settingsMsg}
             </p>
           )}
           <Button
-            disabled={settingsSaving || (!driveFolderId.trim() && !driveServiceAccount.trim() && !klingKey.trim())}
+            disabled={settingsSaving || (!driveFolderId.trim() && !driveServiceAccount.trim() && !klingKey.trim() && !n8nWebhookUrl.trim())}
             onClick={() => void handleSaveSettings()}
           >
             {settingsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

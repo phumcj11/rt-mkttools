@@ -1,0 +1,83 @@
+{
+  "name": "Promo Cutout — rembg",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "promo-cutout",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.productImageUrl }}",
+        "options": {
+          "response": { "response": { "responseFormat": "arraybuffer" } }
+        }
+      },
+      "id": "download-image",
+      "name": "Download ERP Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fileName": "/tmp/promo-input-{{ $('Webhook').item.json.body.sku }}.png",
+        "options": {}
+      },
+      "id": "write-input",
+      "name": "Write Input PNG",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "command": "rembg i /tmp/promo-input-{{ $('Webhook').item.json.body.sku }}.png /tmp/promo-output-{{ $('Webhook').item.json.body.sku }}.png && echo OK"
+      },
+      "id": "rembg-cmd",
+      "name": "rembg Cutout",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "fileName": "/tmp/promo-output-{{ $('Webhook').item.json.body.sku }}.png"
+      },
+      "id": "read-output",
+      "name": "Read Output PNG",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const binaryData = $input.item.binary.data;\nconst base64 = binaryData.data;\nconst sku = $('Webhook').item.json.body.sku;\n\n// Cleanup temp files\nconst { execSync } = require('child_process');\ntry {\n  execSync(`rm -f /tmp/promo-input-${sku}.png /tmp/promo-output-${sku}.png`);\n} catch(e) {}\n\nreturn [{ json: { cutoutBase64: base64, mimeType: 'image/png', sku } }];"
+      },
+      "id": "build-response",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Download ERP Image", "type": "main", "index": 0 }]] },
+    "Download ERP Image": { "main": [[{ "node": "Write Input PNG", "type": "main", "index": 0 }]] },
+    "Write Input PNG": { "main": [[{ "node": "rembg Cutout", "type": "main", "index": 0 }]] },
+    "rembg Cutout": { "main": [[{ "node": "Read Output PNG", "type": "main", "index": 0 }]] },
+    "Read Output PNG": { "main": [[{ "node": "Build Response", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": true },
+  "pinData": {}
+}

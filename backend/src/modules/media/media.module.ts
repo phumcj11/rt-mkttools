@@ -6,6 +6,7 @@ import { SystemSettingsModule } from '../system-settings/system-settings.module'
 import { DriveService } from './drive.service';
 import { MediaController } from './media.controller';
 import { MediaService } from './media.service';
+import { PromoCompositeService } from './promo-composite.service';
 import { VideoService } from './video.service';
 
 @Module({
@@ -15,7 +16,7 @@ import { VideoService } from './video.service';
     SystemSettingsModule,
   ],
   controllers: [MediaController],
-  providers: [MediaService, DriveService, VideoService],
+  providers: [MediaService, DriveService, VideoService, PromoCompositeService],
   exports: [MediaService, DriveService, VideoService],
 })
 export class MediaModule {}

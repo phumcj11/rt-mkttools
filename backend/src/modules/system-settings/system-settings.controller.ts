@@ -137,4 +137,24 @@ export class SystemSettingsController {
     }
     return { ok: true };
   }
+
+  // ────── n8n Composite ──────
+
+  @Get('n8n')
+  async getN8nSettings() {
+    const url = (await this.svc.get('n8n_promo_webhook_url')) ?? '';
+    return {
+      n8n_configured: url.startsWith('http'),
+      n8n_webhook_url_preview: url ? `${url.slice(0, 30)}…` : null,
+    };
+  }
+
+  @Patch('n8n')
+  @HttpCode(HttpStatus.OK)
+  async updateN8nSettings(@Body() body: { n8n_promo_webhook_url?: string }) {
+    if (body.n8n_promo_webhook_url !== undefined) {
+      await this.svc.set('n8n_promo_webhook_url', body.n8n_promo_webhook_url.trim());
+    }
+    return { ok: true };
+  }
 }

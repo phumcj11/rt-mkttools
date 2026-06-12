@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { ErpProductCache } from '../../database/entities/erp-product-cache.entity';
 import { OpenAiService } from '../ai/openai.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
+import { PromoCompositeService } from './promo-composite.service';
 
 export interface ProductMediaResult {
   sku: string;
@@ -27,6 +28,14 @@ export interface PromoGptResult {
   promptUsed: string;
   generatedAt: string;
   source: 'gpt_image';
+}
+
+export interface PromoCompositeResult {
+  imageUrl: string;
+  filename: string;
+  generatedAt: string;
+  source: 'composite';
+  cutoutUsed: boolean;
 }
 
 const PROMO_TYPE_LABELS: Record<string, string> = {
@@ -100,6 +109,7 @@ export class MediaService {
     private readonly productRepo: Repository<ErpProductCache>,
     private readonly openAi: OpenAiService,
     private readonly settings: SystemSettingsService,
+    private readonly composite: PromoCompositeService,
   ) {
     this.uploadsDir = path.join(process.cwd(), 'uploads', 'media');
     fs.mkdirSync(this.uploadsDir, { recursive: true });
@@ -319,6 +329,84 @@ export class MediaService {
       '- Professional quality suitable for social media and in-store display',
       '- All benefit text must be in Thai language',
     ].join('\n');
+  }
+
+  /**
+   * Generate promotion poster via pixel-perfect compositing:
+   * 1. Optionally call n8n → rembg to get a cutout PNG of the product
+   * 2. Use sharp to composite the cutout + text layers onto the template PNG
+   */
+  async generatePromoComposite(
+    promoType: string,
+    data: Record<string, string>,
+    imageUrls: Record<string, string>,
+  ): Promise<PromoCompositeResult> {
+    try {
+      const webhookUrl = await this.settings.get('n8n_promo_webhook_url');
+      const n8nEnabled = webhookUrl?.startsWith('http') ?? false;
+
+      // Fetch and optionally cutout each image
+      const imageBuffers: Record<string, Buffer> = {};
+      let cutoutUsed = false;
+
+      for (const [slotName, imgUrl] of Object.entries(imageUrls)) {
+        if (!imgUrl) continue;
+        try {
+          const { buffer } = await this.proxyImage(imgUrl);
+          if (n8nEnabled) {
+            try {
+              const cutout = await this.callN8nCutout(webhookUrl!, imgUrl, slotName);
+              imageBuffers[slotName] = cutout;
+              cutoutUsed = true;
+              this.logger.log(`Cutout via n8n: ${slotName}`);
+            } catch (err) {
+              this.logger.warn(`n8n cutout failed for ${slotName}, using original: ${String(err)}`);
+              imageBuffers[slotName] = buffer;
+            }
+          } else {
+            imageBuffers[slotName] = buffer;
+          }
+        } catch (err) {
+          this.logger.warn(`Could not fetch image for slot ${slotName}: ${String(err)}`);
+        }
+      }
+
+      const resultBuffer = await this.composite.composite(promoType, data, imageBuffers);
+
+      const safeType = promoType.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `promo-composite-${safeType}-${Date.now()}.png`;
+      const localPath = path.join(this.uploadsDir, filename);
+      fs.writeFileSync(localPath, resultBuffer);
+
+      this.logger.log(`Composite saved: ${filename} (cutout: ${cutoutUsed})`);
+
+      return {
+        imageUrl: `/media/serve/${filename}`,
+        filename,
+        generatedAt: new Date().toISOString(),
+        source: 'composite',
+        cutoutUsed,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Promo composite failed: ${msg}`);
+      throw new BadRequestException(msg || 'สร้างโปสเตอร์ไม่สำเร็จ');
+    }
+  }
+
+  private async callN8nCutout(webhookUrl: string, imageUrl: string, sku: string): Promise<Buffer> {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productImageUrl: imageUrl, sku }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!res.ok) {
+      throw new Error(`n8n returned HTTP ${res.status}`);
+    }
+    const json = (await res.json()) as { cutoutBase64?: string };
+    if (!json.cutoutBase64) throw new Error('n8n response missing cutoutBase64');
+    return Buffer.from(json.cutoutBase64, 'base64');
   }
 
   /** Generate promotion poster via template PNG + AI prompt + GPT Image edit */
