@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { toPng } from 'html-to-image';
 import {
   CheckCircle2,
   CloudUpload,
@@ -19,7 +20,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  batchGenerateImages,
   generateBenefitImage,
   getDriveSettings,
   getVideoSettings,
@@ -30,6 +30,8 @@ import {
   submitProductVideo,
   syncToDrive,
   uploadFileToDrive,
+  uploadBenefitPoster,
+  proxyImageUrl,
   resolveMediaUrl,
   type DriveSettings,
   type ErpProduct,
@@ -37,6 +39,7 @@ import {
   type ProductMediaResult,
   type VideoSettings,
 } from '@/lib/media-api';
+import { BenefitPosterTemplate, buildPosterData, type BenefitPosterData } from './benefit-poster';
 
 type Tab = 'products' | 'files' | 'settings';
 
@@ -64,6 +67,52 @@ export function MediaView() {
   const [klingKey, setKlingKey] = useState('');
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
+
+  const posterRef = useRef<HTMLDivElement>(null);
+  const [posterRender, setPosterRender] = useState<{
+    sku: string;
+    data: BenefitPosterData;
+    resolve: (imageUrl: string) => void;
+    reject: (err: Error) => void;
+  } | null>(null);
+
+  /** Off-screen poster → PNG → upload */
+  useEffect(() => {
+    if (!posterRender || !posterRef.current) return;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const dataUrl = await toPng(posterRef.current!, {
+            pixelRatio: 2,
+            cacheBust: true,
+          });
+          const saved = await uploadBenefitPoster(posterRender.sku, dataUrl);
+          posterRender.resolve(saved.imageUrl);
+        } catch (e) {
+          posterRender.reject(e instanceof Error ? e : new Error(String(e)));
+        } finally {
+          setPosterRender(null);
+        }
+      })();
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [posterRender]);
+
+  const capturePoster = (sku: string, product: ErpProduct, apiResult: ProductMediaResult) => {
+    const data = buildPosterData(product, apiResult.benefits, apiResult.benefitLines);
+    if (data.imageUrl) data.imageUrl = proxyImageUrl(data.imageUrl);
+    return new Promise<string>((resolve, reject) => {
+      setPosterRender({ sku, data, resolve, reject });
+    });
+  };
+
+  const generateWithPoster = async (sku: string): Promise<ProductMediaResult> => {
+    const product = products.find((p) => p.sku === sku);
+    if (!product) throw new Error(`ไม่พบสินค้า ${sku}`);
+    const apiResult = await generateBenefitImage(sku);
+    const imageUrl = await capturePoster(sku, product, apiResult);
+    return { ...apiResult, imageUrl, source: 'benefit_poster' };
+  };
 
   useEffect(() => {
     setProductsLoading(true);
@@ -97,11 +146,8 @@ export function MediaView() {
   const handleGenerateOne = async (sku: string) => {
     setGenerating(sku);
     try {
-      const res = await generateBenefitImage(sku);
+      const res = await generateWithPoster(sku);
       setResults((prev) => ({ ...prev, [sku]: res }));
-      if (res.source === 'erp_composite') {
-        alert(`สร้างรูปสำเร็จ (ใช้รูป ERP + ป้ายราคา — DALL-E ไม่พร้อมหรือถูกปฏิเสธ)`);
-      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'สร้างรูปไม่สำเร็จ';
       alert(`${sku}: ${msg}`);
@@ -113,24 +159,29 @@ export function MediaView() {
   const handleBatchGenerate = async () => {
     if (selected.size === 0) return;
     setBatchRunning(true);
-    try {
-      const res = await batchGenerateImages(Array.from(selected));
-      const newResults: Record<string, ProductMediaResult> = {};
-      res.success.forEach((r) => { newResults[r.sku] = r; });
-      setResults((prev) => ({ ...prev, ...newResults }));
-      if (res.failed.length > 0) {
-        const detail = res.failed.map((f) => `${f.sku}: ${f.error}`).join('\n');
-        alert(`สำเร็จ ${res.success.length} รายการ, ล้มเหลว ${res.failed.length} รายการ\n\n${detail}`);
-      } else if (res.success.some((r) => r.source === 'erp_composite')) {
-        alert(`สำเร็จ ${res.success.length} รายการ (บางรายการใช้รูป ERP แทน DALL-E)`);
+    const skus = Array.from(selected);
+    const success: ProductMediaResult[] = [];
+    const failed: { sku: string; error: string }[] = [];
+
+    for (const sku of skus) {
+      try {
+        success.push(await generateWithPoster(sku));
+      } catch (err: unknown) {
+        failed.push({ sku, error: err instanceof Error ? err.message : String(err) });
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Batch generate ล้มเหลว';
-      alert(msg);
-    } finally {
-      setBatchRunning(false);
-      setSelected(new Set());
     }
+
+    const newResults: Record<string, ProductMediaResult> = {};
+    success.forEach((r) => { newResults[r.sku] = r; });
+    setResults((prev) => ({ ...prev, ...newResults }));
+
+    if (failed.length > 0) {
+      const detail = failed.map((f) => `${f.sku}: ${f.error}`).join('\n');
+      alert(`สำเร็จ ${success.length} รายการ, ล้มเหลว ${failed.length} รายการ\n\n${detail}`);
+    }
+
+    setBatchRunning(false);
+    setSelected(new Set());
   };
 
   const handleVideoSubmit = async (sku: string) => {
@@ -543,6 +594,15 @@ export function MediaView() {
             {settingsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             บันทึกการตั้งค่า
           </Button>
+        </div>
+      )}
+
+      {/* Off-screen poster renderer for html-to-image */}
+      {posterRender && (
+        <div aria-hidden style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }}>
+          <div ref={posterRef}>
+            <BenefitPosterTemplate data={posterRender.data} />
+          </div>
         </div>
       )}
     </div>

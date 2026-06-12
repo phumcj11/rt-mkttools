@@ -66,6 +66,24 @@ export class MediaController {
     return this.media.generateBenefitImage(sku);
   }
 
+  /** Save client-rendered benefit poster PNG */
+  @Post('products/:sku/poster')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  savePoster(@Param('sku') sku: string, @Body() body: { dataUrl: string }) {
+    return this.media.savePosterImage(sku, body.dataUrl);
+  }
+
+  /** Proxy ERP product image (same-origin for html-to-image) */
+  @Public()
+  @Get('proxy-image')
+  async proxyImage(@Query('url') url: string, @Res() res: Response) {
+    const { buffer, contentType } = await this.media.proxyImage(url);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(buffer);
+  }
+
   /** Batch generate benefit images */
   @Post('products/batch-image')
   @Roles('admin', 'super_admin', 'marketing_manager')

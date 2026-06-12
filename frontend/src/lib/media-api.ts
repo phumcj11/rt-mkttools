@@ -15,9 +15,12 @@ export interface ProductMediaResult {
   productName: string;
   imageUrl: string;
   benefits: string;
+  benefitLines?: string[];
   originalImageUrl: string;
   generatedAt: string;
-  source?: 'dalle' | 'erp_composite';
+  source?: 'benefit_poster' | 'dalle' | 'erp_composite';
+  price?: string;
+  category?: string;
 }
 
 /** Static uploads served via /api/media/serve/:filename */
@@ -74,6 +77,20 @@ export function listMediaProducts(limit = 50, offset = 0) {
 // Image generation
 export function generateBenefitImage(sku: string) {
   return apiRequest<ProductMediaResult>(`/media/products/${sku}/image`, { method: 'POST' });
+}
+
+export function uploadBenefitPoster(sku: string, dataUrl: string) {
+  return apiRequest<{ imageUrl: string; filename: string }>(`/media/products/${sku}/poster`, {
+    method: 'POST',
+    body: { dataUrl },
+  });
+}
+
+/** Same-origin proxy for ERP images (html-to-image CORS) */
+export function proxyImageUrl(originalUrl: string): string {
+  if (!originalUrl) return '';
+  const api = (process.env.NEXT_PUBLIC_API_URL ?? '/api').replace(/\/$/, '');
+  return `${api}/media/proxy-image?url=${encodeURIComponent(originalUrl)}`;
 }
 
 export function batchGenerateImages(skus: string[]) {

@@ -12,9 +12,12 @@ export interface ProductMediaResult {
   productName: string;
   imageUrl: string;
   benefits: string;
+  benefitLines: string[];
   originalImageUrl: string;
   generatedAt: string;
-  source: 'dalle' | 'erp_composite';
+  source: 'benefit_poster' | 'dalle';
+  price: string;
+  category: string;
 }
 
 @Injectable()
@@ -40,52 +43,41 @@ export class MediaService {
     });
   }
 
+  /**
+   * Step 1: AI generates Thai benefit copy.
+   * Step 2 (frontend): renders benefit poster with html-to-image, uploads via savePosterImage().
+   */
   async generateBenefitImage(sku: string): Promise<ProductMediaResult> {
     const product = await this.productRepo.findOneBy({ sku });
     if (!product) throw new Error(`ไม่พบสินค้า SKU "${sku}" ใน cache — ซิงค์ ERP ก่อน`);
 
     const benefits = await this.generateBenefits(product);
+    const benefitLines = this.parseBenefitLines(benefits);
+
+    return {
+      sku,
+      productName: product.name,
+      imageUrl: '',
+      benefits,
+      benefitLines,
+      originalImageUrl: product.imageUrl,
+      generatedAt: new Date().toISOString(),
+      source: 'benefit_poster',
+      price: product.retailPrice,
+      category: product.category,
+    };
+  }
+
+  /** Save client-rendered benefit poster PNG */
+  async savePosterImage(sku: string, dataUrl: string): Promise<{ imageUrl: string; filename: string }> {
+    const match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
+    if (!match) throw new Error('Invalid image data');
+
     const filename = `product-${this.safeFilename(sku)}-${Date.now()}.png`;
     const localPath = path.join(this.uploadsDir, filename);
-    const servedUrl = `/media/serve/${filename}`;
+    fs.writeFileSync(localPath, Buffer.from(match[1], 'base64'));
 
-    // Try DALL-E 3 first
-    try {
-      const dallePrompt = this.buildDallePrompt(product);
-      const { url: dalleUrl } = await this.openAi.generateImage(dallePrompt, { size: '1024x1024' });
-      await this.downloadFile(dalleUrl, localPath);
-      return {
-        sku,
-        productName: product.name,
-        imageUrl: servedUrl,
-        benefits,
-        originalImageUrl: product.imageUrl,
-        generatedAt: new Date().toISOString(),
-        source: 'dalle',
-      };
-    } catch (dalleErr: unknown) {
-      const dalleMsg = dalleErr instanceof Error ? dalleErr.message : String(dalleErr);
-      this.logger.warn(`DALL-E failed for ${sku}, using ERP fallback: ${dalleMsg}`);
-
-      if (!product.imageUrl) {
-        throw new Error(
-          dalleMsg.includes('OpenAI API Key')
-            ? dalleMsg
-            : `สร้างรูปไม่สำเร็จ: ${dalleMsg} (สินค้านี้ไม่มีรูป ERP สำหรับ fallback)`,
-        );
-      }
-
-      await this.createErpCompositeImage(product, localPath);
-      return {
-        sku,
-        productName: product.name,
-        imageUrl: servedUrl,
-        benefits,
-        originalImageUrl: product.imageUrl,
-        generatedAt: new Date().toISOString(),
-        source: 'erp_composite',
-      };
-    }
+    return { imageUrl: `/media/serve/${filename}`, filename };
   }
 
   async batchGenerateBenefitImages(skus: string[]): Promise<{
@@ -124,107 +116,75 @@ export class MediaService {
     return this.settings.get('google_drive_folder_id');
   }
 
+  async proxyImage(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      throw new Error('Invalid image URL');
+    }
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) throw new Error(`Cannot fetch image: HTTP ${res.status}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const contentType = res.headers.get('content-type') ?? 'image/jpeg';
+    return { buffer, contentType };
+  }
+
   private async generateBenefits(product: ErpProductCache): Promise<string> {
+    const prompt = product.imageUrl
+      ? `ดูรูปสินค้าและเขียนสรรพคุณ/จุดเด่น 5 ข้อ เป็นภาษาไทย แต่ละข้อสั้นกระชับ ไม่เกิน 2 บรรทัด
+รูปแบบ:
+1. ...
+2. ...
+3. ...
+4. ...
+5. ...
+
+สินค้า: ${product.name}
+หมวด: ${product.category}
+ราคา: ฿${product.retailPrice}`
+      : `เขียนสรรพคุณ/จุดเด่น 5 ข้อ เป็นภาษาไทย แต่ละข้อสั้นกระชับ
+รูปแบบ:
+1. ...
+2. ...
+3. ...
+4. ...
+5. ...
+
+สินค้า: ${product.name}
+หมวด: ${product.category}
+ราคา: ฿${product.retailPrice}`;
+
     try {
       if (product.imageUrl) {
-        return await this.openAi.analyzeImage(
-          product.imageUrl,
-          `ดูรูปสินค้าชิ้นนี้และสรุปสรรพคุณ/จุดเด่น 5 ข้อ เป็นภาษาไทย สำหรับสินค้า: ${product.name} หมวด: ${product.category} ราคา ฿${product.retailPrice}`,
-        );
+        return await this.openAi.analyzeImage(product.imageUrl, prompt);
       }
       const res = await this.openAi.complete(
-        'คุณเป็นนักเขียน copy การตลาดสินค้าปลีก ตอบเป็นภาษาไทย',
-        `เขียนสรรพคุณ/จุดเด่น 5 ข้อของสินค้า: ${product.name} หมวด: ${product.category} ราคา ฿${product.retailPrice}`,
+        'คุณเป็นนักเขียน copy การตลาดสินค้าปลีก ตอบเป็นภาษาไทยเท่านั้น ใช้รูปแบบ 1. 2. 3.',
+        prompt,
       );
       return res.content;
     } catch (err) {
-      this.logger.warn(`Benefits text generation failed: ${String(err)}`);
-      return `สินค้า: ${product.name}\nราคา: ฿${product.retailPrice}\nหมวด: ${product.category}`;
+      this.logger.warn(`Benefits generation failed: ${String(err)}`);
+      if (err instanceof Error && err.message === 'OPENAI_NOT_CONFIGURED') {
+        throw new Error('ยังไม่ได้ตั้งค่า OpenAI API Key — ไปที่ หน้าตั้งค่า → AI Configuration');
+      }
+      return [
+        '1. สินค้าคุณภาพ ราคาคุ้มค่า',
+        '2. เหมาะสำหรับใช้ในชีวิตประจำวัน',
+        '3. หาซื้อได้ที่ 100 Baht Shop',
+        `4. ราคา ฿${product.retailPrice}`,
+        `5. หมวด ${product.category}`,
+      ].join('\n');
     }
   }
 
-  /** Sanitized prompt — avoid medical claims that trigger content policy */
-  private buildDallePrompt(product: ErpProductCache): string {
-    const category = product.category || 'retail product';
-    const price = product.retailPrice || '0';
-    return [
-      'Professional retail store marketing poster layout.',
-      `Product category: ${category}.`,
-      `Price badge: ${price} Baht.`,
-      'Clean white background, modern minimalist design.',
-      'Generic product package photography style, no medical claims, no brand logos, no readable text.',
-      'Studio lighting, high quality commercial photo.',
-    ].join(' ');
-  }
-
-  /** Fallback: composite ERP product photo + price header using sharp */
-  private async createErpCompositeImage(product: ErpProductCache, dest: string): Promise<void> {
-    const sharp = (await import('sharp')).default;
-    const width = 1024;
-    const height = 1024;
-
-    const imgRes = await fetch(product.imageUrl);
-    if (!imgRes.ok) throw new Error(`ดาวน์โหลดรูป ERP ไม่สำเร็จ (${imgRes.status})`);
-
-    const imgBuf = Buffer.from(await imgRes.arrayBuffer());
-    const productImg = await sharp(imgBuf)
-      .resize(880, 780, { fit: 'inside', background: { r: 255, g: 255, b: 255, alpha: 1 } })
-      .png()
-      .toBuffer();
-    const meta = await sharp(productImg).metadata();
-    const pw = meta.width ?? 880;
-    const ph = meta.height ?? 780;
-    const left = Math.floor((width - pw) / 2);
-    const top = 120;
-
-    const price = Number(product.retailPrice).toLocaleString('th-TH');
-    const headerSvg = Buffer.from(`
-      <svg width="${width}" height="100" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100%" height="100%" fill="#dc2626"/>
-        <text x="50%" y="55%" font-size="42" fill="white" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold">
-          ${price} Baht
-        </text>
-      </svg>
-    `);
-
-    const footerSvg = Buffer.from(`
-      <svg width="${width}" height="60" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100%" height="100%" fill="#1e40af"/>
-        <text x="50%" y="55%" font-size="22" fill="white" text-anchor="middle" font-family="Arial,sans-serif">
-          100 Baht Shop Thailand
-        </text>
-      </svg>
-    `);
-
-    await sharp({
-      create: { width, height, channels: 4, background: { r: 248, g: 250, b: 252, alpha: 1 } },
-    })
-      .composite([
-        { input: headerSvg, top: 0, left: 0 },
-        { input: productImg, top, left },
-        { input: footerSvg, top: height - 60, left: 0 },
-      ])
-      .png()
-      .toFile(dest);
+  private parseBenefitLines(benefits: string): string[] {
+    return benefits
+      .split('\n')
+      .map((l) => l.replace(/^\d+[\.\)]\s*/, '').trim())
+      .filter((l) => l.length > 3)
+      .slice(0, 5);
   }
 
   private safeFilename(sku: string): string {
     return sku.replace(/[^a-zA-Z0-9_-]/g, '_');
-  }
-
-  private async downloadFile(url: string, dest: string, redirects = 0): Promise<void> {
-    if (redirects > 5) throw new Error('Too many redirects downloading image');
-
-    const res = await fetch(url, { redirect: 'manual' });
-    if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get('location');
-      if (!loc) throw new Error('Redirect without location');
-      return this.downloadFile(loc, dest, redirects + 1);
-    }
-    if (!res.ok) throw new Error(`Download failed HTTP ${res.status}`);
-
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length < 1000) throw new Error('Downloaded file too small — likely not a valid image');
-    fs.writeFileSync(dest, buf);
   }
 }
