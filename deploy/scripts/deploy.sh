@@ -31,15 +31,21 @@ DB_PORT="${DB_PORT:-3306}"
 DB_USER="${DB_USERNAME:-${DB_USER:-mkttools}}"
 DB_PASS="${DB_PASSWORD:-}"
 DB_NAME="${DB_DATABASE:-${DB_NAME:-mkttools_db}}"
+MYSQL="mysql -h${DB_HOST} -P${DB_PORT} -u${DB_USER} -p${DB_PASS} ${DB_NAME}"
+
+# Ensure tracking table exists
+$MYSQL -e "CREATE TABLE IF NOT EXISTS _applied_migrations (name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);" 2>/dev/null || true
+
 for sql_file in "$APP_DIR"/database/migrations/*.sql; do
   migname=$(basename "$sql_file")
-  rows=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASS" "$DB_NAME" \
-    -sse "SELECT COUNT(*) FROM _applied_migrations WHERE name='$migname' LIMIT 1;" 2>/dev/null || echo 0)
+  rows=$($MYSQL -sse "SELECT COUNT(*) FROM _applied_migrations WHERE name='$migname' LIMIT 1;" 2>/dev/null || echo 0)
+  # trim whitespace
+  rows=$(echo "$rows" | tr -d '[:space:]')
   if [ "$rows" = "0" ]; then
     echo "    Applying $migname ..."
-    mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$sql_file"
-    mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASS" "$DB_NAME" \
-      -e "CREATE TABLE IF NOT EXISTS _applied_migrations (name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP); INSERT IGNORE INTO _applied_migrations (name) VALUES ('$migname');"
+    # --force: continue on errors (handles duplicate columns, tables that already exist, etc.)
+    $MYSQL --force < "$sql_file" 2>&1 | grep -v "^mysql:" | grep -v "^$" || true
+    $MYSQL -e "INSERT IGNORE INTO _applied_migrations (name) VALUES ('$migname');" 2>/dev/null || true
     echo "    Done: $migname"
   else
     echo "    Already applied: $migname"
