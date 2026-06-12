@@ -12,18 +12,19 @@
 | 4 | Marketing Modules | Products, Campaigns, Promotions, scheduling | ✅ เสร็จ |
 | 5 | Realtime & Notifications | Socket.io gateway, live notifications, AI chat | ✅ เสร็จ |
 | 6 | Analytics | Dashboards, sales metrics, reports, export | ✅ เสร็จ |
-| 7 | Billing + Executive Dashboard + Branch + ERP | Billing, branch, executive dashboard v2, audit, ChangSiam ERP | ✅ เสร็จ (production MVP) |
-| 8 | AI POSM Generator + Content Factory Expansion | POSM studio (export PNG/JPG/PDF), content types/languages เพิ่ม | ⏳ |
-| 9 | Google Review Center + Omnichannel Chat | review ingestion/analysis + reward, shared inbox + channel connectors | ⏳ |
-| 10 | Social Listening + AI Agent Center + Hardening | mentions/competitors, agent center, tests/monitoring/backup | ⏳ |
+| 7 | Executive Dashboard + Branch + ERP + Audit | branch CRUD, executive dashboard ERP data, audit logs, ChangSiam integration | ✅ เสร็จ (production MVP) |
+| 8 | PDF Realignment: 8 โมดูล + POSM + Content Factory | single-org, 6 roles, sidebar 8 โมดูล, POSM backend, content 15 ชนิด | ✅ เสร็จ |
+| 9 | Google Review Center + LINE OA connector | Review API + AI reply, LINE webhook setup, Omnichannel tabs | ✅ เสร็จ |
+| 10 | Social Listening + AI Agent Center | mentions/keywords backend, agent dashboard + run/stop, task queue | ✅ เสร็จ |
+| 11 | Hardening + Advanced Integrations | tests, monitoring, MySQL backup cron, Google Business API, FB Messenger | ⏳ ถัดไป |
 
-> เฟส 7-10 จัดใหม่ให้ align กับ product spec ใน `Marketing AI Platform.pdf` (8 โมดูลหลัก: Auth, Executive Dashboard, AI POSM, AI Content Factory, Google Review Center, Omnichannel Chat, Social Listening, AI Agent Center)
+> เฟส 8–10 align กับ product spec ใน `Marketing AI Platform.pdf` (8 โมดูลหลัก: Auth, Executive Dashboard, AI POSM, AI Content Factory, Google Review Center, Omnichannel Chat, Social Listening, AI Agent Center)
 
 ---
 
 ## รายละเอียดแต่ละเฟส
 
-### Phase 0 — Foundation (ปัจจุบัน)
+### Phase 0 — Foundation
 - [x] Monorepo + โครงสร้างโฟลเดอร์
 - [x] README, .gitignore, .env.example
 - [x] เอกสารสถาปัตยกรรม / roadmap / DB / modules
@@ -61,109 +62,70 @@
 - [x] Campaigns UI: ตาราง + ฟอร์มเพิ่ม/แก้ไข/ลบ + แผงจัดการโปรโมชั่นต่อแคมเปญ
 
 ### Phase 5 — Realtime & Notifications ✅
-- [x] Socket.io gateway (`@nestjs/platform-socket.io`) + auth ด้วย JWT ตอน handshake (`auth.token`)
-- [x] ห้อง realtime แยกตาม `user:{id}` และ `tenant:{id}` + `RealtimeService` (global) สำหรับ emit
+- [x] Socket.io gateway + auth ด้วย JWT ตอน handshake
+- [x] ห้อง realtime แยกตาม `user:{id}` และ `tenant:{id}` + `RealtimeService` (global)
 - [x] โมดูล `notifications` (REST: list / unread-count / mark-read / read-all) + push event `notification:new`
-- [x] ผูก notification เข้ากับ flow จริง (สร้างแคมเปญ / บันทึกคอนเทนต์)
 - [x] โมดูล `chat` (threads + messages, tenant/user-scoped) + OpenAI streaming ผ่าน event `chat:send`/`chat:chunk`/`chat:done`
-- [x] Frontend: socket client + กระดิ่งแจ้งเตือนบน Topbar (badge + dropdown) + หน้า Chat สตรีมเรียลไทม์
+- [x] Frontend: socket client + กระดิ่งแจ้งเตือนบน Topbar + หน้า Chat สตรีมเรียลไทม์
 
 ### Phase 6 — Analytics ✅
-- [x] `SalesRecord` entity + ตาราง `sales_records` (tenant-scoped) เป็นแหล่งข้อมูลยอดขาย
-- [x] โมดูล `analytics` (REST): summary / sales-series / top-products / campaign-status / sales (export) + บันทึกยอดขาย + สร้างข้อมูลตัวอย่าง
-- [x] สรุปเมตริกแบบ on-demand จาก `sales_records` (รวมยอด/ออเดอร์/เฉลี่ย) + โทเค็น AI เดือนนี้จาก `ai_usage`
-- [x] Frontend: หน้า Analytics — การ์ดสรุป + กราฟแท่งแนวโน้มยอดขาย + สินค้าขายดี + สถานะแคมเปญ + เลือกช่วง 7/30/90 วัน
-- [x] Export รายงานยอดขายเป็น CSV (รองรับภาษาไทยด้วย BOM)
-- [x] Dashboard เชื่อมตัวเลขจริง (ยอดขาย, แคมเปญที่ใช้งาน, สินค้า, โทเค็น AI)
+- [x] `SalesRecord` entity + ตาราง `sales_records` (tenant-scoped)
+- [x] โมดูล `analytics` (REST): summary / sales-series / top-products / campaign-status / sales (export)
+- [x] Frontend: หน้า Analytics — การ์ดสรุป + กราฟแท่งแนวโน้มยอดขาย + สินค้าขายดี + Export CSV
 
-### Phase 7 — Billing + Executive Dashboard + Branch + ERP ✅
-ปิดงาน billing ให้พร้อม production และวางรากฐานหลายสาขา + dashboard เชิงผู้บริหารตาม PDF
+### Phase 7 — Executive Dashboard + Branch + ERP + Audit ✅
+- [x] Branch CRUD (ตาราง `branches` entity, tenant-scoped) + ตัวกรองตามสาขา
+- [x] Executive Dashboard เชื่อม ERP จริง (`/erp/dashboard` → `dashboard-view.tsx`)
+- [x] `audit_logs` + AuditModule + AuditInterceptor บันทึก mutation สำคัญ
+- [x] ChangSiam ERP Integration (โมดูล `erp` — proxy ยอดขายจริง + AI insights)
+- [x] Auth เพิ่ม forgot/reset password (token ใน `password_resets`)
 
-Billing:
-- [x] Entities: `plans`, `subscriptions`, `invoices` + BillingModule (REST API)
-- [x] สมัครสมาชิก → สร้าง subscription แพ็ก `free` อัตโนมัติ
-- [x] บังคับ AI quota / user limit ตามแพ็กเกจ
-- [x] Frontend: หน้า Settings/Billing (เปรียบเทียบแพ็ก, upgrade, invoices)
-- [x] Invoice lifecycle (open/paid/void) + payment method/reference model
-- [x] Plan enforcement ระดับ feature (`erp`, `executive`, `audit` ตามแพ็กเกจ)
-- [x] Payment flow: manual/bank transfer (MVP) + hook สำหรับ gateway ภายนอกในอนาคต
+### Phase 8 — PDF Realignment + POSM + Content Factory ✅
+- [x] ปรับ single-org "100 Baht Shop Thailand" (tenant id=1 fixed) — ถอด multi-tenant/billing ออกจาก runtime
+- [x] 6 roles ใหม่: `super_admin`, `admin`, `marketing_manager`, `marketing_staff`, `branch_manager`, `customer_service`
+- [x] Sidebar ใหม่ 8 โมดูลตาม PDF + i18n nav
+- [x] **POSM Module**: `POST /posm` → AI headline + บันทึก `posm_projects`, `GET /posm`, `DELETE /posm/:id`
+- [x] Frontend POSM: เลือก type, กรอกข้อมูล, เรียก API, แสดง AI headline ใน preview, ดาวน์โหลด, ประวัติ
+- [x] Content Factory ขยายเป็น 15 ชนิด (fb/tiktok/ig/seo/rewrite/translate/hashtag ฯลฯ)
+- [x] DB entities ใหม่: `posm_projects`, `google_reviews`, `social_mentions`, `listening_keywords`, `ai_agents`, `ai_tasks`
+- [x] Migration Phase 8 รันแล้วทั้ง production และ local
 
-Branch Foundation:
-- [x] ตาราง `branches` + entity (tenant-scoped) — migration `2026_06_phase7_branches.sql`
-- [x] ผูก `users` / `sales_records` / `campaigns` กับ `branch_id`
-- [x] ตัวกรองตามสาขาใน API analytics + UI filter
-- [x] Frontend: หน้า Branches CRUD
+### Phase 9 — Google Review Center + LINE OA Connector ✅
+- [x] **Reviews Module**: `GET /reviews`, `POST /reviews`, `POST /reviews/:id/generate-reply` (AI), `POST /reviews/:id/mark-replied`
+- [x] `GET /reviews/stats` — total / avgRating / negative / unreplied
+- [x] Frontend Reviews: โหลดจาก API จริง, เพิ่มรีวิว, AI ตอบกลับ, mark replied, refresh
+- [x] **LINE OA Webhook**: `POST /api/chat/line-webhook` (Public endpoint, รับ events LINE, log)
+- [x] `GET /api/chat/line-config` — แสดงสถานะและ webhook URL
+- [x] Frontend Channels tab: แสดง webhook URL, คำแนะนำตั้งค่า LINE, toggle setup guide
+- [x] Omnichannel Chat: AI Chat ทำงานจริง, Shared Inbox / Customer Profile / Channels tabs scaffold
 
-Executive Dashboard v2 (ตาม PDF MODULE 2):
-- [x] ยอดขายรวม / รายสาขา / รายหมวด / สินค้าขายดี (Dashboard + Analytics)
-- [x] KPI chat + placeholder KPI review/social (Phase 9/10)
-- [x] AI Insight layer (heuristic insights บน dashboard + ERP AI insights)
-
-Audit:
-- [x] `audit_logs` + AuditModule (REST list) + AuditInterceptor บันทึก mutation สำคัญ
-- [x] Frontend: หน้า Activity Log (`/audit`)
-
-ChangSiam ERP Integration (เพิ่มนอก PDF ต้นฉบับ):
-- [x] โมดูล `erp` — proxy ข้อมูลยอดขายจริงจาก ChangSiam API
-- [x] `erp_sales_daily` sync + alerts + AI insights
-- [x] Frontend: หน้า ข้อมูลจริง (ERP) (`/erp`)
-
-Auth (เพิ่มใน Phase 7 session):
-- [x] Forgot password / reset password (token ใน `password_resets`, แสดงลิงก์เมื่อยังไม่มี SMTP)
-
-### Phase 8 — AI POSM Generator + Content Factory Expansion
-โมดูลใหม่ใหญ่จาก PDF (MODULE 3 + MODULE 4)
-
-AI POSM Generator:
-- [ ] ตาราง `posm_projects` / `posm_templates` / `posm_assets` / `posm_exports`
-- [ ] ชนิดงาน: ป้ายราคา, ป้ายโปรโมชั่น, shelf talker, wobbler, A6/A5/A4, Google Review Poster, LINE Rich Menu
-- [ ] Input: รูปสินค้า, SKU, ชื่อสินค้า, ราคา, โปรโมชั่น, QR code
-- [ ] UI: live preview, drag & drop, resize layout, template gallery, save template, batch generate
-- [ ] Export: PNG / JPG / PDF
-- [ ] AI: สร้าง headline, ตรวจคำผิด, แปลภาษา, สร้างหลาย layout
-
-Content Factory Expansion:
-- [ ] เพิ่มชนิด: Facebook Post, TikTok Caption, TikTok Script, Instagram Caption, LINE Broadcast, Google Business Profile, SEO Article, Product Description, UGC Script
-- [ ] AI: rewrite, translate, hashtag generator, content calendar, video shot generator
-- [ ] ขยายภาษา output: `th`/`en` → เปิด `zh`/`my`/`ar` แบบ phased
-
-### Phase 9 — Google Review Center + Omnichannel Chat
-รวม feedback + การสนทนาทุกช่องทาง (MODULE 5 + MODULE 6)
-
-Google Review Center:
-- [ ] ตาราง `google_reviews` / `review_campaigns` / `review_rewards`
-- [ ] รีวิวรายสาขา, คะแนนเฉลี่ย, รีวิวใหม่, รีวิวติดลบ, QR code รีวิว
-- [ ] Campaign + reward flow (เช่น ซื้อครบ 1,000 + รีวิว → รับถุงแดง)
-- [ ] AI: วิเคราะห์/สรุปรีวิว, แนะนำการตอบกลับ, แจ้งเตือนรีวิวลบ
-
-Omnichannel Chat:
-- [ ] ตาราง `conversations` / `messages` / `customers`
-- [ ] Shared inbox, customer profile, assign chat, quick reply, internal note, ticket system
-- [ ] Channel connectors (ทีละช่อง): LINE OA → Facebook Messenger → Instagram DM → TikTok Inbox → WhatsApp → Website Chat
-- [ ] AI: auto reply, translate, detect intent, complaint detection, summary
-
-### Phase 10 — Social Listening + AI Agent Center + Hardening
-ยกระดับเป็น marketing intelligence platform (MODULE 7 + MODULE 8 + production hardening)
-
-Social Listening:
-- [ ] ตาราง `social_mentions` / `listening_keywords` / `competitor_profiles`
-- [ ] Monitor: Facebook, TikTok, Instagram, YouTube, Google Reviews
-- [ ] Mention feed, trend analysis, competitor monitoring, daily summary, alert system
-- [ ] AI: sentiment, viral detection, complaint detection, content recommendation
-
-AI Agent Center:
-- [ ] ตาราง `ai_agents` / `ai_prompts` / `ai_tasks` / `ai_logs`
-- [ ] Agents: Marketing, Content, POSM, Review, Social, Competitor, Chat, SEO
-- [ ] Agent dashboard, prompt management, knowledge base, task queue, logs, performance monitoring
-
-Hardening & Deploy:
-- [ ] Unit/e2e tests, rate limiting, security review
-- [ ] Monitoring (`pm2 monit` / logs) + automated MySQL backup (cron)
-- [ ] CI/CD ครบ (build + ssh deploy — มี workflow แล้ว)
+### Phase 10 — Social Listening + AI Agent Center ✅
+- [x] **Social Module**: `GET /social/mentions`, `POST /social/mentions`, `GET /social/stats`
+- [x] `GET /social/keywords`, `POST /social/keywords`, `DELETE /social/keywords/:id`
+- [x] Frontend Social: โหลด mentions จาก API, เพิ่ม/ลบ keyword จริง, stats จาก DB
+- [x] **Agents Module**: `GET /agents`, `POST /agents/:id/run`, `POST /agents/:id/stop`, `GET /agents/stats`
+- [x] `GET /agents/tasks` — task queue log
+- [x] Auto-seed 8 default agents ถ้า tenant ยังไม่มี agents ใน DB
+- [x] Frontend Agents: โหลดจาก API, กด Run/Stop เรียก backend จริง, stats จาก DB
+- [x] **Cleanup**: ลบ BillingModule dead code + `plan-feature.guard.ts` + `requires-feature.decorator.ts` + billing i18n keys
 
 ---
 
-## รูปแบบการทำงานในแต่ละเฟส (ทำให้ปล่อยของได้เรื่อยๆ)
+### Phase 11 — Hardening + Advanced Integrations (ถัดไป)
+- [ ] Unit/e2e tests (Jest/Supertest backend, Playwright frontend)
+- [ ] Rate limiting + security headers (Helmet)
+- [ ] Monitoring: PM2 log rotation, application error alerting
+- [ ] MySQL automated backup cron (mysqldump → cloud storage)
+- [ ] Google Business Profile API — ดึงรีวิวจริงอัตโนมัติ
+- [ ] Facebook Messenger connector
+- [ ] Instagram DM connector
+- [ ] LINE message reply (ส่งข้อความกลับผ่าน LINE Messaging API)
+- [ ] Social Listening: crawler/scraper สำหรับ Facebook/TikTok/Pantip keywords
+- [ ] AI Agents: task queue ด้วย Bull/BullMQ + cron scheduler
+
+---
+
+## รูปแบบการทำงานในแต่ละเฟส
 1. database schema + entities
 2. backend API
 3. admin/dashboard UI
@@ -172,7 +134,6 @@ Hardening & Deploy:
 6. test + deploy + docs
 
 ## Milestone ใช้งานจริง
-- Phase 7: ผู้บริหารใช้ dashboard + หลายสาขา + billing จริง
-- Phase 8: ทีม marketing สร้าง POSM และ content ได้จริง
-- Phase 9: ทีม CS/marketing รวม review + chat ในระบบเดียว
-- Phase 10: ใช้ social intelligence + AI agents ทำงานแทนบางส่วน
+- Phase 7: ผู้บริหารใช้ dashboard + หลายสาขา + ERP จริง ← **ใช้งาน production แล้ว**
+- Phase 8–10: ทีม marketing ใช้ POSM / reviews / social / agents ← **backend API พร้อมแล้ว, รอ migration บน production**
+- Phase 11: production hardening + connectors จริง ← ถัดไป

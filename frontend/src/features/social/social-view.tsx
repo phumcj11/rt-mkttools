@@ -1,39 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { Radio, TrendingUp, AlertTriangle, Flame, Globe, Plus, Search, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Radio, TrendingUp, AlertTriangle, Flame, Globe, Plus, Search, RefreshCw, Loader2, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-
-interface Mention {
-  id: number;
-  platform: string;
-  keyword: string;
-  text: string;
-  sentiment: 'positive' | 'neutral' | 'negative';
-  viral: boolean;
-  time: string;
-  author: string;
-}
-
-const DEFAULT_KEYWORDS = [
-  '100 Baht Shop Thailand',
-  'ChangSiam',
-  '3 Brothers',
-  'Little Thailand',
-  'Souvenir Thailand',
-];
-
-const MOCK_MENTIONS: Mention[] = [
-  { id: 1, platform: 'Facebook',  keyword: '100 Baht Shop Thailand',  text: 'เพิ่งไปร้าน 100 บาทมา ของดีมากเลยนะ แนะนำเลย!',                sentiment: 'positive', viral: true,  time: '1 ชม.',  author: '@shopaholic_th' },
-  { id: 2, platform: 'TikTok',    keyword: 'ChangSiam',                text: 'ของที่ ChangSiam ถูกมาก เดินแทบไม่ไหว 555',                      sentiment: 'positive', viral: true,  time: '2 ชม.',  author: '@tiktok_th' },
-  { id: 3, platform: 'Twitter',   keyword: '100 Baht Shop Thailand',  text: 'แอร์ร้านแรงเกิน ต้องแก้ไขด่วน',                                 sentiment: 'negative', viral: false, time: '3 ชม.',  author: '@feedback_user' },
-  { id: 4, platform: 'Instagram', keyword: 'Little Thailand',          text: 'ช้อปปิ้งที่ Little Thailand สุดปัง ของน่ารักมาก',              sentiment: 'positive', viral: false, time: '5 ชม.',  author: '@insta_shopper' },
-  { id: 5, platform: 'Facebook',  keyword: 'Souvenir Thailand',        text: 'ของที่ระลึกไทยสวยมาก เหมาะเป็นของฝากต่างประเทศ',               sentiment: 'positive', viral: false, time: '6 ชม.',  author: '@traveler_th' },
-  { id: 6, platform: 'Pantip',    keyword: '3 Brothers',               text: 'ร้าน 3 Brothers ปรับราคาสูงขึ้น ชาวบ้านบ่นเยอะ',               sentiment: 'negative', viral: true,  time: '8 ชม.',  author: '@pantip_user' },
-];
+import {
+  getMentionStats, listMentions, listKeywords, createKeyword, deleteKeyword,
+} from '@/lib/social-api';
+import type { SocialMention, ListeningKeyword, MentionStats } from '@/lib/social-api';
 
 const SENTIMENT_BADGE: Record<string, 'default' | 'destructive' | 'secondary'> = {
   positive: 'default',
@@ -50,15 +26,48 @@ const PLATFORM_COLORS: Record<string, string> = {
 };
 
 export function SocialView() {
-  const [keywords] = useState(DEFAULT_KEYWORDS);
+  const [mentions, setMentions] = useState<SocialMention[]>([]);
+  const [keywords, setKeywords] = useState<ListeningKeyword[]>([]);
+  const [stats, setStats] = useState<MentionStats | null>(null);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [newKw, setNewKw] = useState('');
+  const [addingKw, setAddingKw] = useState(false);
 
-  const positive = MOCK_MENTIONS.filter((m) => m.sentiment === 'positive').length;
-  const negative = MOCK_MENTIONS.filter((m) => m.sentiment === 'negative').length;
-  const viral = MOCK_MENTIONS.filter((m) => m.viral).length;
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [m, kw, st] = await Promise.all([
+      listMentions().catch(() => []),
+      listKeywords().catch(() => []),
+      getMentionStats().catch(() => null),
+    ]);
+    setMentions(m);
+    setKeywords(kw);
+    setStats(st);
+    setLoading(false);
+  }, []);
 
-  const filtered = MOCK_MENTIONS.filter((m) =>
-    !search || m.text.toLowerCase().includes(search.toLowerCase()) ||
+  useEffect(() => { void load(); }, [load]);
+
+  const handleAddKeyword = async () => {
+    if (!newKw.trim()) return;
+    setAddingKw(true);
+    try {
+      const kw = await createKeyword(newKw.trim());
+      setKeywords((prev) => [...prev, kw]);
+      setNewKw('');
+    } catch { /* ignore */ }
+    setAddingKw(false);
+  };
+
+  const handleDeleteKeyword = async (id: number) => {
+    await deleteKeyword(id).catch(() => null);
+    setKeywords((prev) => prev.filter((k) => k.id !== id));
+  };
+
+  const filtered = mentions.filter((m) =>
+    !search ||
+    m.text.toLowerCase().includes(search.toLowerCase()) ||
     m.keyword.toLowerCase().includes(search.toLowerCase()),
   );
 
@@ -71,7 +80,7 @@ export function SocialView() {
             ติดตาม Mentions แบรนด์และคู่แข่งบน Facebook, TikTok, Instagram, Twitter และอื่น ๆ
           </p>
         </div>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={() => void load()}>
           <RefreshCw className="mr-2 h-4 w-4" />
           อัปเดต
         </Button>
@@ -85,7 +94,7 @@ export function SocialView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-emerald-600">{positive}</p>
+            <p className="text-2xl font-bold text-emerald-600">{loading ? '…' : (stats?.positive ?? 0)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -95,7 +104,7 @@ export function SocialView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-destructive">{negative}</p>
+            <p className="text-2xl font-bold text-destructive">{loading ? '…' : (stats?.negative ?? 0)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -105,7 +114,7 @@ export function SocialView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-orange-500">{viral}</p>
+            <p className="text-2xl font-bold text-orange-500">{loading ? '…' : (stats?.viral ?? 0)}</p>
           </CardContent>
         </Card>
       </div>
@@ -117,21 +126,35 @@ export function SocialView() {
               <span className="flex items-center gap-2">
                 <Radio className="h-4 w-4" /> Keywords
               </span>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                <Plus className="h-3 w-3" />
-              </Button>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1.5">
+          <CardContent className="space-y-2">
             {keywords.map((kw) => (
               <div
-                key={kw}
+                key={kw.id}
                 className="flex items-center justify-between rounded-md bg-muted/50 px-2.5 py-1.5 text-xs"
               >
-                <span className="font-medium">{kw}</span>
-                <Globe className="h-3 w-3 text-muted-foreground" />
+                <span className="font-medium">{kw.keyword}</span>
+                <button
+                  className="text-muted-foreground hover:text-destructive transition-colors"
+                  onClick={() => void handleDeleteKeyword(kw.id)}
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </div>
             ))}
+            <div className="flex gap-1.5 pt-1">
+              <Input
+                className="h-7 text-xs"
+                placeholder="เพิ่ม keyword..."
+                value={newKw}
+                onChange={(e) => setNewKw(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleAddKeyword(); }}
+              />
+              <Button size="icon" variant="outline" className="h-7 w-7 shrink-0" disabled={addingKw} onClick={() => void handleAddKeyword()}>
+                {addingKw ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -146,33 +169,54 @@ export function SocialView() {
             />
           </div>
 
-          {filtered.map((mention) => (
-            <Card key={mention.id}>
-              <CardContent className="pt-3">
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 space-y-1.5">
-                    <div className="flex items-center gap-2 flex-wrap text-xs">
-                      <span className={`rounded px-2 py-0.5 font-medium ${PLATFORM_COLORS[mention.platform] ?? 'bg-muted'}`}>
-                        {mention.platform}
-                      </span>
-                      <span className="text-muted-foreground">{mention.author}</span>
-                      <Badge variant={SENTIMENT_BADGE[mention.sentiment]}>
-                        {mention.sentiment === 'positive' ? 'เชิงบวก' : mention.sentiment === 'negative' ? 'เชิงลบ' : 'กลาง ๆ'}
-                      </Badge>
-                      {mention.viral && (
-                        <Badge variant="outline" className="border-orange-500 text-orange-500">
-                          <Flame className="mr-1 h-2.5 w-2.5" /> Viral
-                        </Badge>
-                      )}
-                      <span className="ml-auto text-muted-foreground">{mention.time}</span>
-                    </div>
-                    <p className="text-sm">{mention.text}</p>
-                    <Badge variant="outline" className="text-[10px]">{mention.keyword}</Badge>
-                  </div>
-                </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> กำลังโหลด...
+            </div>
+          ) : filtered.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                ยังไม่มี Mentions — ระบบจะแสดง mentions เมื่อตรวจพบ keyword ที่ตั้งไว้
               </CardContent>
             </Card>
-          ))}
+          ) : (
+            filtered.map((mention) => (
+              <Card key={mention.id}>
+                <CardContent className="pt-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <span className={`rounded px-2 py-0.5 font-medium ${PLATFORM_COLORS[mention.platform] ?? 'bg-muted'}`}>
+                          {mention.platform}
+                        </span>
+                        {mention.authorHandle && <span className="text-muted-foreground">{mention.authorHandle}</span>}
+                        {mention.sentiment && (
+                          <Badge variant={SENTIMENT_BADGE[mention.sentiment]}>
+                            {mention.sentiment === 'positive' ? 'เชิงบวก' : mention.sentiment === 'negative' ? 'เชิงลบ' : 'กลาง ๆ'}
+                          </Badge>
+                        )}
+                        {mention.isViral && (
+                          <Badge variant="outline" className="border-orange-500 text-orange-500">
+                            <Flame className="mr-1 h-2.5 w-2.5" /> Viral
+                          </Badge>
+                        )}
+                        <span className="ml-auto text-muted-foreground">
+                          {mention.publishedAt
+                            ? new Date(mention.publishedAt).toLocaleDateString('th-TH')
+                            : new Date(mention.createdAt).toLocaleDateString('th-TH')}
+                        </span>
+                      </div>
+                      <p className="text-sm">{mention.text}</p>
+                      <Badge variant="outline" className="text-[10px]">
+                        <Globe className="mr-1 h-2.5 w-2.5" />
+                        {mention.keyword}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       </div>
     </div>

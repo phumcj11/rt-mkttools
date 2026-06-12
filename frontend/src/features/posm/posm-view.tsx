@@ -1,20 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { FileImage, ImagePlus, Download, Layers, Loader2, Sparkles, Tag, Megaphone } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { FileImage, ImagePlus, Download, Layers, Loader2, Sparkles, Tag, Megaphone, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { generatePosm, listPosm, deletePosm } from '@/lib/posm-api';
+import type { GeneratePosmResult, PosmProject } from '@/lib/posm-api';
 
 const POSM_TYPES = [
-  { id: 'price_tag',     label: 'ป้ายราคา',         icon: Tag },
-  { id: 'shelf_talker',  label: 'Shelf Talker',     icon: Layers },
-  { id: 'wobbler',       label: 'Wobbler',          icon: FileImage },
-  { id: 'promotion_a4',  label: 'โปสเตอร์ A4',      icon: ImagePlus },
+  { id: 'price_tag',     label: 'ป้ายราคา',            icon: Tag },
+  { id: 'shelf_talker',  label: 'Shelf Talker',        icon: Layers },
+  { id: 'wobbler',       label: 'Wobbler',             icon: FileImage },
+  { id: 'promotion_a4',  label: 'โปสเตอร์ A4',         icon: ImagePlus },
   { id: 'review_poster', label: 'Google Review Poster', icon: Sparkles },
-  { id: 'sale_tag',      label: 'ป้ายลดราคา',        icon: Megaphone },
+  { id: 'sale_tag',      label: 'ป้ายลดราคา',           icon: Megaphone },
 ];
 
 export function PosmView() {
@@ -23,14 +25,50 @@ export function PosmView() {
   const [price, setPrice] = useState('');
   const [promotion, setPromotion] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [generated, setGenerated] = useState(false);
+  const [result, setResult] = useState<GeneratePosmResult | null>(null);
+  const [history, setHistory] = useState<PosmProject[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listPosm().then(setHistory).catch(() => null);
+  }, []);
 
   const handleGenerate = async () => {
     if (!productName || !price) return;
     setGenerating(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setGenerating(false);
-    setGenerated(true);
+    setError(null);
+    try {
+      const data = await generatePosm({
+        type: selectedType,
+        productName,
+        price: Number(price),
+        promotion: promotion || undefined,
+      });
+      setResult(data);
+      setHistory((prev) => [data, ...prev].slice(0, 20));
+    } catch {
+      setError('เกิดข้อผิดพลาด กรุณาลองใหม่');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    await deletePosm(id).catch(() => null);
+    setHistory((prev) => prev.filter((p) => p.id !== id));
+    if (result?.id === id) setResult(null);
+  };
+
+  const handleDownloadPng = () => {
+    if (!result) return;
+    const content = `${result.productName}\n฿${result.price ?? ''}\n${result.promotion ?? ''}\n100 Baht Shop Thailand`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `posm-${result.id}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -81,7 +119,7 @@ export function PosmView() {
                 <Input
                   value={productName}
                   onChange={(e) => setProductName(e.target.value)}
-                  placeholder="เช่น ยาดมตราหอยทาก 100 บาท"
+                  placeholder="เช่น ยาดมตราหอยทาก"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -103,25 +141,42 @@ export function PosmView() {
                   />
                 </div>
               </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
               <Button
                 className="w-full"
                 onClick={() => void handleGenerate()}
                 disabled={!productName || !price || generating}
               >
                 {generating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    กำลังสร้าง POSM...
-                  </>
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />กำลังสร้าง POSM...</>
                 ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    สร้าง POSM ด้วย AI
-                  </>
+                  <><Sparkles className="mr-2 h-4 w-4" />สร้าง POSM ด้วย AI</>
                 )}
               </Button>
             </CardContent>
           </Card>
+
+          {history.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">ประวัติล่าสุด</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {history.slice(0, 5).map((p) => (
+                  <div key={p.id} className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm">
+                    <div>
+                      <span className="font-medium">{p.productName}</span>
+                      {p.price != null && <span className="ml-2 text-muted-foreground">฿{p.price}</span>}
+                      <Badge variant="outline" className="ml-2 text-xs">{p.type}</Badge>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => void handleDelete(p.id)}>
+                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div>
@@ -133,26 +188,37 @@ export function PosmView() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {generated ? (
+              {result ? (
                 <div className="space-y-3">
+                  {result.headline && (
+                    <div className="rounded-md bg-primary/5 border border-primary/20 px-3 py-2">
+                      <p className="text-xs font-semibold text-primary flex items-center gap-1 mb-1">
+                        <Sparkles className="h-3 w-3" /> AI Headline
+                      </p>
+                      <p className="text-sm font-medium">{result.headline}</p>
+                    </div>
+                  )}
                   <div className="flex aspect-[3/4] items-center justify-center rounded-lg border-2 border-dashed bg-gradient-to-br from-primary/10 to-yellow-400/10">
                     <div className="text-center p-4">
-                      <div className="text-3xl font-extrabold text-primary">{price} ฿</div>
-                      <div className="mt-1 text-lg font-bold">{productName}</div>
-                      {promotion && (
-                        <Badge className="mt-2 bg-yellow-400 text-black">{promotion}</Badge>
+                      {result.headline && (
+                        <div className="mb-2 text-sm font-bold text-primary">{result.headline}</div>
+                      )}
+                      <div className="text-3xl font-extrabold text-primary">฿{result.price ?? '-'}</div>
+                      <div className="mt-1 text-lg font-bold">{result.productName}</div>
+                      {result.promotion && (
+                        <Badge className="mt-2 bg-yellow-400 text-black">{result.promotion}</Badge>
                       )}
                       <div className="mt-3 text-xs text-muted-foreground">100 Baht Shop Thailand</div>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button variant="outline" size="sm" className="flex-1" onClick={handleDownloadPng}>
                       <Download className="mr-2 h-3.5 w-3.5" />
-                      PNG
+                      ดาวน์โหลด
                     </Button>
-                    <Button variant="outline" size="sm" className="flex-1">
-                      <Download className="mr-2 h-3.5 w-3.5" />
-                      PDF
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => window.print()}>
+                      <FileImage className="mr-2 h-3.5 w-3.5" />
+                      PDF / Print
                     </Button>
                   </div>
                 </div>

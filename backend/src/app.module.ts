@@ -12,6 +12,7 @@ import { validationSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { I18nModule } from './i18n/i18n.module';
 import { AiModule } from './modules/ai/ai.module';
+import { AgentsModule } from './modules/agents/agents.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -21,8 +22,11 @@ import { ChatModule } from './modules/chat/chat.module';
 import { ContentModule } from './modules/content/content.module';
 import { ErpModule } from './modules/erp/erp.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PosmModule } from './modules/posm/posm.module';
 import { ProductsModule } from './modules/products/products.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { SocialModule } from './modules/social/social.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -51,6 +55,10 @@ import { UsersModule } from './modules/users/users.module';
     ChatModule,
     RealtimeModule,
     AnalyticsModule,
+    PosmModule,
+    ReviewsModule,
+    SocialModule,
+    AgentsModule,
   ],
   controllers: [AppController],
   providers: [

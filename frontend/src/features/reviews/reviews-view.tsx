@@ -1,34 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { Globe, Star, TrendingUp, AlertCircle, QrCode, Loader2, Sparkles, MessageSquare, Award } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Globe, Star, TrendingUp, AlertCircle, Loader2, Sparkles, MessageSquare, Plus, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  listReviews, getReviewStats, createReview, generateReply, markReplied,
+} from '@/lib/reviews-api';
+import type { GoogleReview, ReviewStats } from '@/lib/reviews-api';
 
-interface MockReview {
-  id: number;
-  branch: string;
-  rating: number;
-  text: string;
-  date: string;
-  sentiment: 'positive' | 'neutral' | 'negative';
-  replied: boolean;
-}
-
-const MOCK_REVIEWS: MockReview[] = [
-  { id: 1, branch: 'สาขาสยาม',    rating: 5, text: 'ราคาถูก ของครบ พนักงานน่ารัก!',               date: '2 ชม. ที่แล้ว',   sentiment: 'positive', replied: true  },
-  { id: 2, branch: 'สาขารังสิต',   rating: 3, text: 'ของดีแต่รอนานหน่อย',                           date: '5 ชม. ที่แล้ว',   sentiment: 'neutral',  replied: false },
-  { id: 3, branch: 'สาขาเซ็นทรัล', rating: 2, text: 'หาสินค้าไม่เจอ พนักงานช่วยน้อยมาก',            date: '1 วันที่แล้ว',    sentiment: 'negative', replied: false },
-  { id: 4, branch: 'สาขาสยาม',    rating: 5, text: 'ชอบมาก ของครบทุกอย่าง จะมาอีก',               date: '1 วันที่แล้ว',    sentiment: 'positive', replied: false },
-  { id: 5, branch: 'สาขาปิ่นเกล้า', rating: 4, text: 'สาขาใหม่น่าไปมาก โซนของใช้ในบ้านดีมาก',       date: '2 วันที่แล้ว',    sentiment: 'positive', replied: true  },
-];
-
-const SENTIMENT_COLORS = {
-  positive: 'success',
-  neutral:  'warning',
+const SENTIMENT_BADGE: Record<string, 'default' | 'destructive' | 'secondary'> = {
+  positive: 'default',
+  neutral:  'secondary',
   negative: 'destructive',
-} as const;
+};
 
 const SENTIMENT_LABELS: Record<string, string> = {
   positive: 'เชิงบวก',
@@ -37,35 +25,105 @@ const SENTIMENT_LABELS: Record<string, string> = {
 };
 
 export function ReviewsView() {
-  const [replyingId, setReplyingId] = useState<number | null>(null);
-  const [aiReply, setAiReply] = useState<Record<number, string>>({});
-  const [generating, setGenerating] = useState<number | null>(null);
+  const [reviews, setReviews] = useState<GoogleReview[]>([]);
+  const [stats, setStats] = useState<ReviewStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generatingId, setGeneratingId] = useState<number | null>(null);
+  const [markingId, setMarkingId] = useState<number | null>(null);
 
-  const totalReviews = MOCK_REVIEWS.length;
-  const avgRating = (MOCK_REVIEWS.reduce((s, r) => s + r.rating, 0) / totalReviews).toFixed(1);
-  const negativeCount = MOCK_REVIEWS.filter((r) => r.sentiment === 'negative').length;
+  // Add review form
+  const [showAdd, setShowAdd] = useState(false);
+  const [addAuthor, setAddAuthor] = useState('');
+  const [addRating, setAddRating] = useState('5');
+  const [addText, setAddText]   = useState('');
+  const [adding, setAdding]     = useState(false);
 
-  const generateReply = async (review: MockReview) => {
-    setGenerating(review.id);
-    await new Promise((r) => setTimeout(r, 1200));
-    const replies: Record<string, string> = {
-      positive: `ขอบคุณมากเลยนะคะ ที่ให้เกียรติมาใช้บริการและฝากรีวิวดี ๆ ไว้ให้ ทีมงาน ${review.branch} ยินดีเสมอค่ะ 🙏`,
-      neutral:  `ขอบคุณสำหรับ Feedback นะคะ ทางเราจะนำไปปรับปรุงเพื่อให้บริการดียิ่งขึ้น หากมีข้อสงสัยสอบถามได้เลยค่ะ`,
-      negative: `ขออภัยในความไม่สะดวกค่ะ ทีมงานรับทราบปัญหาแล้วและจะเร่งแก้ไขทันที หากต้องการแจ้งรายละเอียดเพิ่มเติม สามารถติดต่อเราได้โดยตรงค่ะ`,
-    };
-    setAiReply((prev) => ({ ...prev, [review.id]: replies[review.sentiment] }));
-    setGenerating(null);
-    setReplyingId(review.id);
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [rv, st] = await Promise.all([listReviews().catch(() => []), getReviewStats().catch(() => null)]);
+    setReviews(rv);
+    setStats(st);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleGenerateReply = async (id: number) => {
+    setGeneratingId(id);
+    try {
+      const { aiReply } = await generateReply(id);
+      setReviews((prev) => prev.map((r) => r.id === id ? { ...r, aiReply } : r));
+    } catch { /* ignore */ }
+    setGeneratingId(null);
+  };
+
+  const handleMarkReplied = async (id: number) => {
+    setMarkingId(id);
+    try {
+      const updated = await markReplied(id);
+      setReviews((prev) => prev.map((r) => r.id === id ? updated : r));
+    } catch { /* ignore */ }
+    setMarkingId(null);
+  };
+
+  const handleAdd = async () => {
+    if (!addRating) return;
+    setAdding(true);
+    try {
+      const r = await createReview({ author: addAuthor || undefined, rating: Number(addRating), text: addText || undefined });
+      setReviews((prev) => [r, ...prev]);
+      setShowAdd(false);
+      setAddAuthor(''); setAddRating('5'); setAddText('');
+    } catch { /* ignore */ }
+    setAdding(false);
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Google Review Center</h1>
-        <p className="text-muted-foreground">
-          ติดตามรีวิว Google รายสาขา วิเคราะห์ sentiment และตอบกลับด้วย AI
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Google Review Center</h1>
+          <p className="text-muted-foreground">ติดตามรีวิว Google รายสาขา วิเคราะห์ sentiment และตอบกลับด้วย AI</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            รีเฟรช
+          </Button>
+          <Button size="sm" onClick={() => setShowAdd((v) => !v)}>
+            <Plus className="mr-2 h-4 w-4" />
+            เพิ่มรีวิว
+          </Button>
+        </div>
       </div>
+
+      {showAdd && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">เพิ่มรีวิวใหม่</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>ชื่อผู้รีวิว</Label>
+                <Input value={addAuthor} onChange={(e) => setAddAuthor(e.target.value)} placeholder="ชื่อลูกค้า" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>คะแนน (1-5) *</Label>
+                <Input type="number" min={1} max={5} value={addRating} onChange={(e) => setAddRating(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>ข้อความรีวิว</Label>
+              <Input value={addText} onChange={(e) => setAddText(e.target.value)} placeholder="ข้อความรีวิว..." />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" disabled={adding || !addRating} onClick={() => void handleAdd()}>
+                {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : 'บันทึก'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>ยกเลิก</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
@@ -75,7 +133,7 @@ export function ReviewsView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{totalReviews}</p>
+            <p className="text-2xl font-bold">{loading ? '…' : (stats?.total ?? reviews.length)}</p>
             <p className="text-xs text-muted-foreground mt-1">ทุกสาขา</p>
           </CardContent>
         </Card>
@@ -86,10 +144,10 @@ export function ReviewsView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{avgRating} / 5</p>
+            <p className="text-2xl font-bold">{stats?.avgRating ?? '—'} / 5</p>
             <div className="flex gap-0.5 mt-1">
               {[1,2,3,4,5].map((s) => (
-                <Star key={s} className={`h-3 w-3 ${Number(avgRating) >= s ? 'fill-yellow-400 text-yellow-400' : 'text-muted'}`} />
+                <Star key={s} className={`h-3 w-3 ${(stats?.avgRating ?? 0) >= s ? 'fill-yellow-400 text-yellow-400' : 'text-muted'}`} />
               ))}
             </div>
           </CardContent>
@@ -101,82 +159,93 @@ export function ReviewsView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-destructive">{negativeCount}</p>
+            <p className="text-2xl font-bold text-destructive">{loading ? '…' : (stats?.negative ?? 0)}</p>
             <p className="text-xs text-muted-foreground mt-1">ต้องการการตอบกลับ</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">รีวิวล่าสุด</h2>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <QrCode className="mr-2 h-4 w-4" />
-            สร้าง QR ขอรีวิว
-          </Button>
-          <Button variant="outline" size="sm">
-            <Award className="mr-2 h-4 w-4" />
-            จัดการ Rewards
-          </Button>
+      {loading ? (
+        <div className="flex items-center justify-center py-12 text-muted-foreground">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> กำลังโหลด...
         </div>
-      </div>
-
-      <div className="space-y-3">
-        {MOCK_REVIEWS.map((review) => (
-          <Card key={review.id}>
-            <CardContent className="pt-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline">{review.branch}</Badge>
-                    <div className="flex gap-0.5">
-                      {[1,2,3,4,5].map((s) => (
-                        <Star key={s} className={`h-3.5 w-3.5 ${review.rating >= s ? 'fill-yellow-400 text-yellow-400' : 'text-muted'}`} />
-                      ))}
-                    </div>
-                    <Badge variant={SENTIMENT_COLORS[review.sentiment] as 'default'}>
-                      {SENTIMENT_LABELS[review.sentiment]}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">{review.date}</span>
-                  </div>
-                  <p className="text-sm">{review.text}</p>
-                  {replyingId === review.id && aiReply[review.id] && (
-                    <div className="mt-2 rounded-md bg-muted p-3 text-sm">
-                      <p className="mb-1 text-xs font-semibold text-primary flex items-center gap-1">
-                        <Sparkles className="h-3 w-3" /> AI แนะนำการตอบกลับ
-                      </p>
-                      {aiReply[review.id]}
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col gap-2">
-                  {review.replied ? (
-                    <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-600">
-                      ตอบแล้ว
-                    </Badge>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={generating === review.id}
-                      onClick={() => void generateReply(review)}
-                    >
-                      {generating === review.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <>
-                          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                          AI ตอบ
-                        </>
+      ) : reviews.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="py-8 text-center text-muted-foreground text-sm">
+            ยังไม่มีรีวิว — กดปุ่ม &quot;เพิ่มรีวิว&quot; เพื่อบันทึกรีวิวแรก
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {reviews.map((review) => (
+            <Card key={review.id}>
+              <CardContent className="pt-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {review.author && <Badge variant="outline">{review.author}</Badge>}
+                      <div className="flex gap-0.5">
+                        {[1,2,3,4,5].map((s) => (
+                          <Star key={s} className={`h-3.5 w-3.5 ${review.rating >= s ? 'fill-yellow-400 text-yellow-400' : 'text-muted'}`} />
+                        ))}
+                      </div>
+                      {review.sentiment && (
+                        <Badge variant={SENTIMENT_BADGE[review.sentiment] as 'default'}>
+                          {SENTIMENT_LABELS[review.sentiment]}
+                        </Badge>
                       )}
-                    </Button>
-                  )}
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(review.createdAt).toLocaleDateString('th-TH')}
+                      </span>
+                    </div>
+                    {review.text && <p className="text-sm">{review.text}</p>}
+                    {review.aiReply && (
+                      <div className="mt-2 rounded-md bg-muted p-3 text-sm">
+                        <p className="mb-1 text-xs font-semibold text-primary flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" /> AI แนะนำการตอบกลับ
+                        </p>
+                        {review.aiReply}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {review.repliedAt ? (
+                      <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-600">
+                        ตอบแล้ว
+                      </Badge>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={generatingId === review.id}
+                          onClick={() => void handleGenerateReply(review.id)}
+                        >
+                          {generatingId === review.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <><MessageSquare className="mr-1.5 h-3.5 w-3.5" />AI ตอบ</>
+                          )}
+                        </Button>
+                        {review.aiReply && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={markingId === review.id}
+                            onClick={() => void handleMarkReplied(review.id)}
+                          >
+                            {markingId === review.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'ตอบแล้ว'}
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Card className="border-dashed">
         <CardContent className="pt-4">

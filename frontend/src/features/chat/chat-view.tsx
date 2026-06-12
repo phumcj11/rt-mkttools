@@ -16,6 +16,7 @@ import {
   listMessages,
   listThreads,
 } from '@/lib/chat-api';
+import { apiRequest } from '@/lib/api';
 import { connectSocket, getSocket } from '@/lib/socket';
 import type { ChatDonePayload, ChatMessage, ChatThread } from '@/lib/types';
 
@@ -286,29 +287,71 @@ function CustomerProfilePanel() {
 }
 
 function ChannelsPanel() {
+  const [lineConfig, setLineConfig] = useState<{ configured: boolean; webhookUrl: string; instructions: string } | null>(null);
+  const [showLineSetup, setShowLineSetup] = useState(false);
+
+  useEffect(() => {
+    apiRequest<{ configured: boolean; webhookUrl: string; instructions: string }>('/chat/line-config')
+      .then(setLineConfig)
+      .catch(() => null);
+  }, []);
+
+  const webhookUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/api/chat/line-webhook`
+    : (lineConfig?.webhookUrl ?? '/api/chat/line-webhook');
+
   const channels = [
-    { name: 'LINE Official Account', status: 'ready',     desc: 'เชื่อมต่อผ่าน LINE Messaging API' },
-    { name: 'Facebook Messenger',    status: 'coming',    desc: 'Facebook Graph API' },
-    { name: 'Instagram DM',          status: 'coming',    desc: 'Instagram Messaging API' },
-    { name: 'Website Live Chat',     status: 'coming',    desc: 'Widget embed บนเว็บไซต์' },
+    { name: 'LINE Official Account', desc: 'เชื่อมต่อผ่าน LINE Messaging API', ready: true },
+    { name: 'Facebook Messenger',    desc: 'Facebook Graph API',                ready: false },
+    { name: 'Instagram DM',          desc: 'Instagram Messaging API',           ready: false },
+    { name: 'Website Live Chat',     desc: 'Widget embed บนเว็บไซต์',          ready: false },
   ];
+
   return (
     <div className="space-y-3">
       {channels.map((ch) => (
         <Card key={ch.name}>
           <CardContent className="flex items-center gap-4 pt-3">
             <div className="flex-1">
-              <p className="font-medium text-sm">{ch.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-sm">{ch.name}</p>
+                {ch.ready && lineConfig?.configured && (
+                  <Badge variant="default" className="text-xs">เชื่อมต่อแล้ว</Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">{ch.desc}</p>
             </div>
-            {ch.status === 'ready' ? (
-              <Button size="sm">เชื่อมต่อ</Button>
+            {ch.ready ? (
+              <Button size="sm" variant={showLineSetup ? 'secondary' : 'default'} onClick={() => setShowLineSetup((v) => !v)}>
+                {lineConfig?.configured ? 'ดูการตั้งค่า' : 'เชื่อมต่อ'}
+              </Button>
             ) : (
               <Badge variant="outline" className="text-xs">เร็ว ๆ นี้</Badge>
             )}
           </CardContent>
         </Card>
       ))}
+
+      {showLineSetup && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-4 space-y-3 text-sm">
+            <p className="font-semibold">วิธีเชื่อมต่อ LINE Official Account</p>
+            <ol className="space-y-2 text-muted-foreground list-decimal list-inside">
+              <li>เข้า <a href="https://developers.line.biz" target="_blank" rel="noreferrer" className="text-primary underline">LINE Developers Console</a> → สร้าง Messaging API channel</li>
+              <li>ตั้ง Webhook URL เป็น:</li>
+            </ol>
+            <div className="rounded-md bg-muted px-3 py-2 font-mono text-xs break-all">{webhookUrl}</div>
+            <ol start={3} className="space-y-2 text-muted-foreground list-decimal list-inside">
+              <li>คัดลอก Channel Secret และ Channel Access Token</li>
+              <li>เพิ่มใน .env ของ server:</li>
+            </ol>
+            <div className="rounded-md bg-muted px-3 py-2 font-mono text-xs whitespace-pre">
+              {`LINE_CHANNEL_SECRET=your_secret\nLINE_CHANNEL_ACCESS_TOKEN=your_token`}
+            </div>
+            <li className="list-none text-muted-foreground">5. Restart backend — ระบบจะรับ messages อัตโนมัติ</li>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
