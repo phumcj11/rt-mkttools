@@ -13,6 +13,7 @@ import { DatabaseModule } from './database/database.module';
 import { I18nModule } from './i18n/i18n.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AgentsModule } from './modules/agents/agents.module';
+import { InboxModule } from './modules/inbox/inbox.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -59,6 +60,7 @@ import { UsersModule } from './modules/users/users.module';
     ReviewsModule,
     SocialModule,
     AgentsModule,
+    InboxModule,
   ],
   controllers: [AppController],
   providers: [

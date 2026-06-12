@@ -22,3 +22,6 @@ export * from './posm-project.entity';
 export * from './google-review.entity';
 export * from './social-mention.entity';
 export * from './ai-agent.entity';
+export * from './channel-config.entity';
+export * from './conversation.entity';
+export * from './inbox-message.entity';
