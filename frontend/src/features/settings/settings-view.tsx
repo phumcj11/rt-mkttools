@@ -89,7 +89,7 @@ export function SettingsView() {
     try {
       const body: Record<string, string> = { openai_model: model };
       if (apiKey.trim()) body.openai_api_key = apiKey.trim();
-      await apiRequest('/settings/system/ai', { method: 'PATCH', body: JSON.stringify(body) });
+      await apiRequest('/settings/system/ai', { method: 'PATCH', body });
       setSaveMsg('บันทึกสำเร็จ');
       setApiKey('');
       // Refresh settings display
