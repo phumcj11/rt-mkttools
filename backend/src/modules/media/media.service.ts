@@ -15,7 +15,7 @@ export interface ProductMediaResult {
   benefitLines: string[];
   originalImageUrl: string;
   generatedAt: string;
-  source: 'benefit_poster' | 'dalle';
+  source: 'benefit_poster' | 'gpt_image';
   price: string;
   category: string;
 }
@@ -78,6 +78,47 @@ export class MediaService {
     fs.writeFileSync(localPath, Buffer.from(match[1], 'base64'));
 
     return { imageUrl: `/media/serve/${filename}`, filename };
+  }
+
+  /**
+   * Generate benefit poster via GPT Image (images.edit with ERP photo, or images.generate).
+   */
+  async generateGptBenefitImage(sku: string): Promise<ProductMediaResult> {
+    const product = await this.productRepo.findOneBy({ sku });
+    if (!product) throw new Error(`ไม่พบสินค้า SKU "${sku}" ใน cache — ซิงค์ ERP ก่อน`);
+
+    const benefits = await this.generateBenefits(product);
+    const benefitLines = this.parseBenefitLines(benefits);
+    const prompt = this.buildGptImagePrompt(product, benefitLines);
+
+    this.logger.log(`GPT Image generating for ${sku}…`);
+
+    let imageResult;
+    if (product.imageUrl) {
+      const { buffer: imgBuf, contentType } = await this.proxyImage(product.imageUrl);
+      imageResult = await this.openAi.editGptImage(prompt, imgBuf, contentType);
+    } else {
+      imageResult = await this.openAi.generateGptImage(prompt);
+    }
+
+    const filename = `product-gpt-${this.safeFilename(sku)}-${Date.now()}.png`;
+    const localPath = path.join(this.uploadsDir, filename);
+    fs.writeFileSync(localPath, imageResult.buffer);
+
+    this.logger.log(`GPT Image saved ${filename} (model: ${imageResult.model})`);
+
+    return {
+      sku,
+      productName: product.name,
+      imageUrl: `/media/serve/${filename}`,
+      benefits,
+      benefitLines,
+      originalImageUrl: product.imageUrl,
+      generatedAt: new Date().toISOString(),
+      source: 'gpt_image',
+      price: product.retailPrice,
+      category: product.category,
+    };
   }
 
   async batchGenerateBenefitImages(skus: string[]): Promise<{
@@ -182,6 +223,57 @@ export class MediaService {
       .map((l) => l.replace(/^\d+[\.\)]\s*/, '').trim())
       .filter((l) => l.length > 3)
       .slice(0, 5);
+  }
+
+  private buildGptImagePrompt(product: ErpProductCache, benefitLines: string[]): string {
+    const benefitsText = benefitLines.map((l, i) => `${i + 1}. ${l}`).join('\n');
+    return [
+      'Create a professional Thai retail marketing poster for this product.',
+      `Product: ${product.name}`,
+      `Category: ${product.category}`,
+      `Price: ${product.retailPrice} Baht (show prominently as ฿${product.retailPrice})`,
+      '',
+      'Include these product benefits as readable Thai text on the poster:',
+      benefitsText,
+      '',
+      'Design requirements:',
+      '- Clean modern layout, red and white retail color scheme',
+      '- Keep the product packaging recognizable from the input image',
+      '- Include "100 Baht Shop Thailand" branding at the bottom',
+      '- Professional quality suitable for social media and in-store display',
+      '- All benefit text must be in Thai language',
+    ].join('\n');
+  }
+
+  /** Save a client-rendered promotion poster PNG */
+  async savePromoImage(
+    promoType: string,
+    dataUrl: string,
+  ): Promise<{ imageUrl: string; filename: string }> {
+    const match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
+    if (!match) throw new Error('Invalid image data');
+
+    const safeType = promoType.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `promo-${safeType}-${Date.now()}.png`;
+    const localPath = path.join(this.uploadsDir, filename);
+    fs.writeFileSync(localPath, Buffer.from(match[1], 'base64'));
+
+    return { imageUrl: `/media/serve/${filename}`, filename };
+  }
+
+  /** Generate 3 short Thai feature lines for a product (used by New Arrival template) */
+  async generatePromoFeatures(sku: string): Promise<{ feature1: string; feature2: string; feature3: string }> {
+    const product = await this.productRepo.findOneBy({ sku });
+    if (!product) throw new Error(`ไม่พบสินค้า SKU "${sku}" ใน cache — ซิงค์ ERP ก่อน`);
+
+    const benefits = await this.generateBenefits(product);
+    const lines = this.parseBenefitLines(benefits);
+
+    return {
+      feature1: lines[0] ?? 'สินค้าใหม่',
+      feature2: lines[1] ?? 'คุณภาพดี',
+      feature3: lines[2] ?? 'ราคาคุ้มค่า',
+    };
   }
 
   private safeFilename(sku: string): string {

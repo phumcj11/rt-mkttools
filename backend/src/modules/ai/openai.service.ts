@@ -16,6 +16,14 @@ export interface ImageGenerationResult {
   revisedPrompt?: string;
 }
 
+export interface GptImageResult {
+  buffer: Buffer;
+  model: string;
+  revisedPrompt?: string;
+}
+
+const GPT_IMAGE_MODEL_FALLBACK = ['gpt-image-1.5', 'gpt-image-1'] as const;
+
 export interface ChatMessageInput {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -142,8 +150,118 @@ export class OpenAiService {
   }
 
   /**
-   * Generate an image via DALL-E 3 and return its temporary URL.
-   * Caller is responsible for downloading + persisting the image.
+   * Generate image with GPT Image models (returns PNG buffer).
+   * Falls back across gpt-image-1.5 → gpt-image-1.
+   */
+  async generateGptImage(
+    prompt: string,
+    options: { size?: '1024x1024' | '1024x1536' | '1536x1024' } = {},
+  ): Promise<GptImageResult> {
+    const client = await this.ensureClient();
+    const models = await this.imageModelChain();
+    let lastErr: unknown;
+
+    for (const model of models) {
+      try {
+        const response = await client.images.generate({
+          model,
+          prompt,
+          n: 1,
+          size: options.size ?? '1024x1024',
+          quality: 'medium',
+          response_format: 'b64_json',
+        });
+        const img = response.data?.[0];
+        if (!img?.b64_json) continue;
+        return {
+          buffer: Buffer.from(img.b64_json, 'base64'),
+          model,
+          revisedPrompt: img.revised_prompt ?? undefined,
+        };
+      } catch (err) {
+        lastErr = err;
+        this.logger.warn(`GPT Image generate failed (${model}): ${String(err)}`);
+      }
+    }
+    throw this.wrapImageError(lastErr);
+  }
+
+  /**
+   * Edit/reference image with GPT Image — uses ERP product photo as input.
+   */
+  async editGptImage(
+    prompt: string,
+    imageBuffer: Buffer,
+    mimeType: string,
+    options: { size?: '1024x1024' | '1024x1536' | '1536x1024' } = {},
+  ): Promise<GptImageResult> {
+    const client = await this.ensureClient();
+    const { toFile } = await import('openai');
+    const ext = mimeType.includes('png') ? 'png' : 'jpg';
+    const file = await toFile(imageBuffer, `product.${ext}`, { type: mimeType });
+    const models = await this.imageModelChain();
+    let lastErr: unknown;
+
+    for (const model of models) {
+      try {
+        const response = await client.images.edit({
+          model,
+          image: file,
+          prompt,
+          n: 1,
+          size: options.size ?? '1024x1024',
+          response_format: 'b64_json',
+        });
+        const img = response.data?.[0];
+        if (!img?.b64_json) continue;
+        return {
+          buffer: Buffer.from(img.b64_json, 'base64'),
+          model,
+          revisedPrompt: img.revised_prompt ?? undefined,
+        };
+      } catch (err) {
+        lastErr = err;
+        this.logger.warn(`GPT Image edit failed (${model}): ${String(err)}`);
+      }
+    }
+    throw this.wrapImageError(lastErr);
+  }
+
+  private async imageModelChain(): Promise<string[]> {
+    let preferred = '';
+    if (this.settingsSvc) {
+      preferred = (await this.settingsSvc.get('openai_image_model')) ?? '';
+    }
+    const chain = preferred
+      ? [preferred, ...GPT_IMAGE_MODEL_FALLBACK.filter((m) => m !== preferred)]
+      : [...GPT_IMAGE_MODEL_FALLBACK];
+    return [...new Set(chain)];
+  }
+
+  private wrapImageError(err: unknown): Error {
+    if (err instanceof Error && err.message === 'OPENAI_NOT_CONFIGURED') {
+      return new Error('ยังไม่ได้ตั้งค่า OpenAI API Key — ไปที่ หน้าตั้งค่า → AI Configuration');
+    }
+    const apiMsg =
+      err && typeof err === 'object' && 'error' in err
+        ? String((err as { error?: { message?: string } }).error?.message ?? '')
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    if (apiMsg.includes('billing') || apiMsg.includes('quota')) {
+      return new Error('OpenAI billing/quota หมด — ตรวจสอบบัญชี OpenAI');
+    }
+    if (apiMsg.includes('content_policy') || apiMsg.includes('safety')) {
+      return new Error('GPT Image ปฏิเสธ prompt (content policy) — ลองใช้ Template แทน');
+    }
+    if (apiMsg.includes('model') && apiMsg.includes('not found')) {
+      return new Error('บัญชี OpenAI ยังไม่มีสิทธิ์ GPT Image — ตรวจสอบ billing หรือใช้ Template แทน');
+    }
+    return new Error(`GPT Image error: ${apiMsg.slice(0, 220)}`);
+  }
+
+  /**
+   * @deprecated Use generateGptImage — kept for compatibility
    */
   async generateImage(
     prompt: string,

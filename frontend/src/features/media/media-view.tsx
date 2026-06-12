@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   generateBenefitImage,
+  generateGptBenefitImage,
   getDriveSettings,
   getVideoSettings,
   listMediaFiles,
@@ -40,8 +41,9 @@ import {
   type VideoSettings,
 } from '@/lib/media-api';
 import { BenefitPosterTemplate, buildPosterData, POSTER_LAYOUTS, type BenefitPosterData, type PosterLayout } from './benefit-poster';
+import { PromoTab } from './promo-tab';
 
-type Tab = 'products' | 'files' | 'settings';
+type Tab = 'products' | 'promotion' | 'files' | 'settings';
 
 export function MediaView() {
   const [tab, setTab] = useState<Tab>('products');
@@ -109,6 +111,9 @@ export function MediaView() {
   };
 
   const generateWithPoster = async (sku: string): Promise<ProductMediaResult> => {
+    if (posterLayout === 'ai_gpt') {
+      return generateGptBenefitImage(sku);
+    }
     const product = products.find((p) => p.sku === sku);
     if (!product) throw new Error(`ไม่พบสินค้า ${sku}`);
     const apiResult = await generateBenefitImage(sku);
@@ -263,9 +268,10 @@ export function MediaView() {
   };
 
   const TABS: { id: Tab; label: string; icon: typeof Image }[] = [
-    { id: 'products', label: 'สินค้า ERP', icon: Sparkles },
-    { id: 'files',    label: 'ไฟล์ที่สร้าง', icon: Image },
-    { id: 'settings', label: 'ตั้งค่า', icon: CheckCircle2 },
+    { id: 'products',  label: 'Benefit Poster', icon: Sparkles },
+    { id: 'promotion', label: 'Promotion Poster', icon: Film },
+    { id: 'files',     label: 'ไฟล์ที่สร้าง', icon: Image },
+    { id: 'settings',  label: 'ตั้งค่า', icon: CheckCircle2 },
   ];
 
   return (
@@ -302,7 +308,7 @@ export function MediaView() {
               <CardTitle className="text-base">เลือกรูปแบบโปสเตอร์</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                 {POSTER_LAYOUTS.map((opt) => (
                   <button
                     key={opt.id}
@@ -320,6 +326,11 @@ export function MediaView() {
                   </button>
                 ))}
               </div>
+              {posterLayout === 'ai_gpt' && (
+                <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  GPT Image ใช้รูป ERP เป็นฐาน + AI ออกแบบโปสเตอร์ใหม่ ใช้เวลา ~15–30 วิ/ชิ้น มีค่าใช้จ่าย ~$0.04–0.12/รูป
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -389,6 +400,11 @@ export function MediaView() {
                             <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                           </div>
                         )}
+                        {result?.source === 'gpt_image' && (
+                          <Badge className="absolute bottom-2 left-2 text-[10px] bg-violet-600 hover:bg-violet-600">
+                            AI Generated
+                          </Badge>
+                        )}
                       </div>
 
                       <div>
@@ -437,6 +453,11 @@ export function MediaView() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Promotion Tab */}
+      {tab === 'promotion' && (
+        <PromoTab products={products} />
       )}
 
       {/* Files Tab */}
@@ -627,7 +648,7 @@ export function MediaView() {
       )}
 
       {/* Off-screen poster renderer for html-to-image */}
-      {posterRender && (
+      {posterRender && posterRender.layout !== 'ai_gpt' && (
         <div aria-hidden style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }}>
           <div ref={posterRef}>
             <BenefitPosterTemplate data={posterRender.data} layout={posterRender.layout} />

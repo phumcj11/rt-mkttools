@@ -2,7 +2,7 @@
 
 import type { ErpProduct } from '@/lib/media-api';
 
-export type PosterLayout = 'classic' | 'story' | 'minimal' | 'bold';
+export type PosterLayout = 'classic' | 'story' | 'minimal' | 'bold' | 'ai_gpt';
 
 export interface PosterLayoutOption {
   id: PosterLayout;
@@ -45,6 +45,14 @@ export const POSTER_LAYOUTS: PosterLayoutOption[] = [
     ratio: '1:1',
     width: 1080,
     height: 1080,
+  },
+  {
+    id: 'ai_gpt',
+    label: 'AI Generate',
+    description: 'GPT Image — AI สร้างโปสเตอร์จากรูป ERP (~15-30 วิ)',
+    ratio: '1:1',
+    width: 1024,
+    height: 1024,
   },
 ];
 

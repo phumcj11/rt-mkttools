@@ -18,7 +18,7 @@ export interface ProductMediaResult {
   benefitLines?: string[];
   originalImageUrl: string;
   generatedAt: string;
-  source?: 'benefit_poster' | 'dalle' | 'erp_composite';
+  source?: 'benefit_poster' | 'gpt_image' | 'dalle' | 'erp_composite';
   price?: string;
   category?: string;
 }
@@ -79,6 +79,11 @@ export function generateBenefitImage(sku: string) {
   return apiRequest<ProductMediaResult>(`/media/products/${sku}/image`, { method: 'POST' });
 }
 
+/** Full poster via OpenAI GPT Image (server-side, uses ERP photo) */
+export function generateGptBenefitImage(sku: string) {
+  return apiRequest<ProductMediaResult>(`/media/products/${sku}/gpt-image`, { method: 'POST' });
+}
+
 export function uploadBenefitPoster(sku: string, dataUrl: string) {
   return apiRequest<{ imageUrl: string; filename: string }>(`/media/products/${sku}/poster`, {
     method: 'POST',
@@ -123,6 +128,21 @@ export function pollVideoTask(taskId: string, taskType?: string) {
 export function generateVideoAndWait(sku: string) {
   return apiRequest<VideoTask | { error: true; message: string }>(
     `/media/products/${sku}/video/generate`,
+    { method: 'POST' },
+  );
+}
+
+// Promotion posters
+export function savePromoImage(promoType: string, dataUrl: string) {
+  return apiRequest<{ imageUrl: string; filename: string }>('/media/promo/save', {
+    method: 'POST',
+    body: { promoType, dataUrl },
+  });
+}
+
+export function generatePromoFeatures(sku: string) {
+  return apiRequest<{ feature1: string; feature2: string; feature3: string }>(
+    `/media/promo/features/${sku}`,
     { method: 'POST' },
   );
 }

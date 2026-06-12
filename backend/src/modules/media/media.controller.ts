@@ -28,6 +28,16 @@ class BatchImageDto {
   skus: string[];
 }
 
+class SavePromoDto {
+  @IsString()
+  @IsNotEmpty()
+  promoType: string;
+
+  @IsString()
+  @IsNotEmpty()
+  dataUrl: string;
+}
+
 class VideoSubmitDto {
   @IsString()
   @IsNotEmpty()
@@ -58,12 +68,20 @@ export class MediaController {
     return this.media.listProducts(limit ?? 50, offset ?? 0);
   }
 
-  /** Generate benefit image for a single SKU */
+  /** Generate benefit copy only (for template layouts) */
   @Post('products/:sku/image')
   @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
   @HttpCode(HttpStatus.OK)
   generateImage(@Param('sku') sku: string) {
     return this.media.generateBenefitImage(sku);
+  }
+
+  /** Generate full poster via GPT Image (images.edit / images.generate) */
+  @Post('products/:sku/gpt-image')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  generateGptImage(@Param('sku') sku: string) {
+    return this.media.generateGptBenefitImage(sku);
   }
 
   /** Save client-rendered benefit poster PNG */
@@ -72,6 +90,22 @@ export class MediaController {
   @HttpCode(HttpStatus.OK)
   savePoster(@Param('sku') sku: string, @Body() body: { dataUrl: string }) {
     return this.media.savePosterImage(sku, body.dataUrl);
+  }
+
+  /** Save client-rendered promotion poster PNG */
+  @Post('promo/save')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  savePromo(@Body() dto: SavePromoDto) {
+    return this.media.savePromoImage(dto.promoType, dto.dataUrl);
+  }
+
+  /** AI-generate 3 short feature lines for New Arrival template */
+  @Post('promo/features/:sku')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  generatePromoFeatures(@Param('sku') sku: string) {
+    return this.media.generatePromoFeatures(sku);
   }
 
   /** Proxy ERP product image (same-origin for html-to-image) */
