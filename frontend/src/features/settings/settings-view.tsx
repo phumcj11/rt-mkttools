@@ -427,6 +427,26 @@ export function SettingsView() {
         </CardContent>
       </Card>
 
+      {/* Google Drive + Kling AI (shortcut to /media) */}
+      <Card className="border-dashed">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-sm font-medium">Product Media AI — Google Drive &amp; Video</p>
+              <p className="text-xs text-muted-foreground">
+                ตั้งค่า Service Account, Google Drive Folder ID และ Kling AI API Key
+              </p>
+            </div>
+            <a
+              href="/th/media"
+              className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent"
+            >
+              ตั้งค่า →
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* System info */}
       <Card>
         <CardHeader>

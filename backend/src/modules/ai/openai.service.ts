@@ -11,6 +11,11 @@ export interface CompletionResult {
   model: string;
 }
 
+export interface ImageGenerationResult {
+  url: string;
+  revisedPrompt?: string;
+}
+
 export interface ChatMessageInput {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -134,5 +139,47 @@ export class OpenAiService {
     }
 
     return { content: content.trim(), promptTokens, completionTokens, model };
+  }
+
+  /**
+   * Generate an image via DALL-E 3 and return its temporary URL.
+   * Caller is responsible for downloading + persisting the image.
+   */
+  async generateImage(
+    prompt: string,
+    options: { size?: '1024x1024' | '1792x1024' | '1024x1792'; quality?: 'standard' | 'hd' } = {},
+  ): Promise<ImageGenerationResult> {
+    const client = await this.ensureClient();
+    const response = await client.images.generate({
+      model: 'dall-e-3',
+      prompt,
+      n: 1,
+      size: options.size ?? '1024x1024',
+      quality: options.quality ?? 'standard',
+    });
+    const img = response.data?.[0];
+    if (!img?.url) throw new Error('DALL-E returned no image URL');
+    return { url: img.url, revisedPrompt: img.revised_prompt ?? undefined };
+  }
+
+  /**
+   * Analyze an image via GPT-4o Vision and return a text description.
+   */
+  async analyzeImage(imageUrl: string, prompt: string): Promise<string> {
+    const client = await this.ensureClient();
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
+            { type: 'text', text: prompt },
+          ],
+        },
+      ],
+    });
+    return response.choices[0]?.message?.content?.trim() ?? '';
   }
 }

@@ -89,4 +89,52 @@ export class SystemSettingsController {
     }
     return { ok: true };
   }
+
+  // ────── Google Drive ──────
+
+  @Get('drive')
+  async getDriveSettings() {
+    const folderId = (await this.svc.get('google_drive_folder_id')) ?? '';
+    const saJson   = (await this.svc.get('google_service_account_json')) ?? '';
+    const configured = folderId.length > 0 && saJson.length > 20;
+    return {
+      drive_configured: configured,
+      drive_folder_id_preview: folderId ? `...${folderId.slice(-8)}` : null,
+      drive_service_account_set: saJson.length > 20,
+    };
+  }
+
+  @Patch('drive')
+  @HttpCode(HttpStatus.OK)
+  async updateDriveSettings(
+    @Body() body: { google_drive_folder_id?: string; google_service_account_json?: string },
+  ) {
+    if (body.google_drive_folder_id !== undefined) {
+      await this.svc.set('google_drive_folder_id', body.google_drive_folder_id);
+    }
+    if (body.google_service_account_json !== undefined) {
+      await this.svc.set('google_service_account_json', body.google_service_account_json);
+    }
+    return { ok: true };
+  }
+
+  // ────── Video (Kling AI) ──────
+
+  @Get('video')
+  async getVideoSettings() {
+    const key = (await this.svc.get('kling_api_key')) ?? '';
+    return {
+      video_configured: key.length > 5,
+      kling_key_preview: key.length > 5 ? `...${key.slice(-4)}` : null,
+    };
+  }
+
+  @Patch('video')
+  @HttpCode(HttpStatus.OK)
+  async updateVideoSettings(@Body() body: { kling_api_key?: string }) {
+    if (body.kling_api_key !== undefined) {
+      await this.svc.set('kling_api_key', body.kling_api_key);
+    }
+    return { ok: true };
+  }
 }

@@ -1,8 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { FileImage, ImagePlus, Download, Layers, Loader2, Sparkles, Tag, Megaphone, Trash2 } from 'lucide-react';
+import {
+  Download,
+  FileImage,
+  ImagePlus,
+  Layers,
+  Loader2,
+  Megaphone,
+  Sparkles,
+  Tag,
+  Trash2,
+} from 'lucide-react';
+import { toPng } from 'html-to-image';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,21 +23,152 @@ import { generatePosm, listPosm, deletePosm } from '@/lib/posm-api';
 import type { GeneratePosmResult, PosmProject } from '@/lib/posm-api';
 
 const POSM_TYPES = [
-  { id: 'price_tag',     label: 'ป้ายราคา',            icon: Tag },
-  { id: 'shelf_talker',  label: 'Shelf Talker',        icon: Layers },
-  { id: 'wobbler',       label: 'Wobbler',             icon: FileImage },
-  { id: 'promotion_a4',  label: 'โปสเตอร์ A4',         icon: ImagePlus },
+  { id: 'price_tag',     label: 'ป้ายราคา',             icon: Tag },
+  { id: 'shelf_talker',  label: 'Shelf Talker',         icon: Layers },
+  { id: 'wobbler',       label: 'Wobbler',              icon: FileImage },
+  { id: 'promotion_a4',  label: 'โปสเตอร์ A4',          icon: ImagePlus },
   { id: 'review_poster', label: 'Google Review Poster', icon: Sparkles },
-  { id: 'sale_tag',      label: 'ป้ายลดราคา',           icon: Megaphone },
+  { id: 'sale_tag',      label: 'ป้ายลดราคา',            icon: Megaphone },
 ];
+
+/* ─── Per-type template styles ───────────────────────────────────────────── */
+function PosmTemplate({ result, type }: { result: GeneratePosmResult; type: string }) {
+  const brand = '100 Baht Shop Thailand';
+
+  if (type === 'price_tag') {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-2 p-6">
+        <div className="text-xs font-semibold tracking-widest text-white/80 uppercase">Price</div>
+        <div className="text-6xl font-black text-white drop-shadow">฿{result.price ?? '-'}</div>
+        <div className="mt-1 text-xl font-bold text-white text-center">{result.productName}</div>
+        {result.promotion && (
+          <div className="mt-2 rounded-full bg-yellow-400 px-4 py-1 text-sm font-bold text-black">
+            {result.promotion}
+          </div>
+        )}
+        <div className="mt-3 text-[10px] text-white/60">{brand}</div>
+      </div>
+    );
+  }
+
+  if (type === 'shelf_talker') {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="bg-white/20 py-2 text-center text-xs font-semibold tracking-widest text-white uppercase">
+          {brand}
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-5">
+          {result.headline && (
+            <div className="text-center text-lg font-extrabold text-yellow-300">{result.headline}</div>
+          )}
+          <div className="text-center text-2xl font-bold text-white">{result.productName}</div>
+          <div className="text-4xl font-black text-white">฿{result.price ?? '-'}</div>
+          {result.promotion && (
+            <Badge className="bg-yellow-400 text-black text-sm px-3">{result.promotion}</Badge>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'wobbler') {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 p-5">
+        <div className="rounded-full bg-yellow-400 p-4 shadow-lg">
+          <div className="text-4xl font-black text-black">฿{result.price ?? '-'}</div>
+        </div>
+        <div className="text-center text-xl font-bold text-white">{result.productName}</div>
+        {result.headline && (
+          <div className="text-center text-sm font-semibold text-yellow-300">{result.headline}</div>
+        )}
+        {result.promotion && (
+          <div className="rounded border-2 border-yellow-400 px-3 py-1 text-sm font-bold text-yellow-300">
+            {result.promotion}
+          </div>
+        )}
+        <div className="text-[10px] text-white/60">{brand}</div>
+      </div>
+    );
+  }
+
+  if (type === 'promotion_a4') {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="bg-yellow-400 py-3 text-center">
+          <div className="text-sm font-extrabold text-black uppercase tracking-wider">{brand}</div>
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
+          {result.headline && (
+            <div className="text-center text-2xl font-extrabold text-yellow-300">{result.headline}</div>
+          )}
+          <div className="text-center text-3xl font-bold text-white">{result.productName}</div>
+          <div className="text-5xl font-black text-yellow-400">฿{result.price ?? '-'}</div>
+          {result.promotion && (
+            <div className="rounded-lg bg-white/20 border border-white/40 px-5 py-2 text-center text-lg font-bold text-white">
+              {result.promotion}
+            </div>
+          )}
+        </div>
+        <div className="py-2 text-center text-[10px] text-white/50">www.100bathshop.com</div>
+      </div>
+    );
+  }
+
+  if (type === 'review_poster') {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 p-5">
+        <div className="text-3xl">⭐⭐⭐⭐⭐</div>
+        <div className="text-center text-xl font-extrabold text-white">
+          {result.headline ?? 'รีวิวจากลูกค้า'}
+        </div>
+        <div className="text-center text-base font-semibold text-yellow-300">{result.productName}</div>
+        {result.promotion && (
+          <div className="text-center text-sm text-white/80 italic">&ldquo;{result.promotion}&rdquo;</div>
+        )}
+        <div className="mt-2 text-xs text-white/60">{brand}</div>
+      </div>
+    );
+  }
+
+  /* sale_tag (default) */
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-2 p-5">
+      <div className="rounded-full bg-red-500 px-5 py-1 text-sm font-extrabold text-white uppercase tracking-widest">
+        Sale
+      </div>
+      <div className="text-5xl font-black text-yellow-400">฿{result.price ?? '-'}</div>
+      <div className="text-center text-xl font-bold text-white">{result.productName}</div>
+      {result.headline && (
+        <div className="text-center text-sm font-semibold text-white/80">{result.headline}</div>
+      )}
+      {result.promotion && (
+        <Badge className="bg-yellow-400 text-black">{result.promotion}</Badge>
+      )}
+      <div className="mt-2 text-[10px] text-white/60">{brand}</div>
+    </div>
+  );
+}
+
+/* ─── bg gradient per type ───────────────────────────────────────────────── */
+const TYPE_BG: Record<string, string> = {
+  price_tag:     'from-primary to-blue-900',
+  shelf_talker:  'from-emerald-700 to-emerald-950',
+  wobbler:       'from-purple-700 to-purple-950',
+  promotion_a4:  'from-rose-700 to-rose-950',
+  review_poster: 'from-amber-600 to-amber-900',
+  sale_tag:      'from-red-700 to-gray-900',
+};
 
 export function PosmView() {
   const searchParams = useSearchParams();
+  const previewRef = useRef<HTMLDivElement>(null);
+
   const [selectedType, setSelectedType] = useState(POSM_TYPES[0].id);
   const [productName, setProductName] = useState(searchParams.get('product') ?? '');
   const [price, setPrice] = useState(searchParams.get('price') ?? '');
   const [promotion, setPromotion] = useState(searchParams.get('promo') ?? '');
   const [generating, setGenerating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [result, setResult] = useState<GeneratePosmResult | null>(null);
   const [history, setHistory] = useState<PosmProject[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -61,17 +203,43 @@ export function PosmView() {
     if (result?.id === id) setResult(null);
   };
 
-  const handleDownloadPng = () => {
-    if (!result) return;
-    const content = `${result.productName}\n฿${result.price ?? ''}\n${result.promotion ?? ''}\n100 Baht Shop Thailand`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `posm-${result.id}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleDownloadPng = async () => {
+    if (!previewRef.current || !result) return;
+    setDownloading(true);
+    try {
+      const dataUrl = await toPng(previewRef.current, { pixelRatio: 3 });
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `posm-${result.id}-${selectedType}.png`;
+      a.click();
+    } catch {
+      alert('ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setDownloading(false);
+    }
   };
+
+  const handlePrint = async () => {
+    if (!previewRef.current || !result) return;
+    setDownloading(true);
+    try {
+      const dataUrl = await toPng(previewRef.current, { pixelRatio: 2 });
+      const win = window.open('', '_blank');
+      if (!win) return;
+      win.document.write(
+        `<html><body style="margin:0"><img src="${dataUrl}" style="max-width:100%;display:block"/></body></html>`
+      );
+      win.document.close();
+      win.focus();
+      win.print();
+    } catch {
+      window.print();
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const bg = TYPE_BG[selectedType] ?? 'from-primary to-blue-900';
 
   return (
     <div className="space-y-6">
@@ -181,6 +349,7 @@ export function PosmView() {
           )}
         </div>
 
+        {/* Preview panel */}
         <div>
           <Card className="sticky top-4">
             <CardHeader>
@@ -200,34 +369,46 @@ export function PosmView() {
                       <p className="text-sm font-medium">{result.headline}</p>
                     </div>
                   )}
-                  <div className="flex aspect-[3/4] items-center justify-center rounded-lg border-2 border-dashed bg-gradient-to-br from-primary/10 to-yellow-400/10">
-                    <div className="text-center p-4">
-                      {result.headline && (
-                        <div className="mb-2 text-sm font-bold text-primary">{result.headline}</div>
-                      )}
-                      <div className="text-3xl font-extrabold text-primary">฿{result.price ?? '-'}</div>
-                      <div className="mt-1 text-lg font-bold">{result.productName}</div>
-                      {result.promotion && (
-                        <Badge className="mt-2 bg-yellow-400 text-black">{result.promotion}</Badge>
-                      )}
-                      <div className="mt-3 text-xs text-muted-foreground">100 Baht Shop Thailand</div>
-                    </div>
+
+                  {/* Capturable template */}
+                  <div
+                    ref={previewRef}
+                    className={`flex aspect-[3/4] rounded-xl bg-gradient-to-br ${bg} overflow-hidden`}
+                  >
+                    <PosmTemplate result={result} type={selectedType} />
                   </div>
+
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={handleDownloadPng}>
-                      <Download className="mr-2 h-3.5 w-3.5" />
-                      ดาวน์โหลด
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      disabled={downloading}
+                      onClick={() => void handleDownloadPng()}
+                    >
+                      {downloading ? (
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Download className="mr-2 h-3.5 w-3.5" />
+                      )}
+                      PNG
                     </Button>
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => window.print()}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      disabled={downloading}
+                      onClick={() => void handlePrint()}
+                    >
                       <FileImage className="mr-2 h-3.5 w-3.5" />
                       PDF / Print
                     </Button>
                   </div>
                 </div>
               ) : (
-                <div className="flex aspect-[3/4] items-center justify-center rounded-lg border-2 border-dashed">
-                  <p className="text-center text-sm text-muted-foreground px-4">
-                    กรอกข้อมูลสินค้าและกด &quot;สร้าง POSM&quot; เพื่อดู Preview
+                <div className={`flex aspect-[3/4] items-center justify-center rounded-xl bg-gradient-to-br ${bg}`}>
+                  <p className="text-center text-sm text-white/60 px-4">
+                    กรอกข้อมูลสินค้าและกด &ldquo;สร้าง POSM&rdquo; เพื่อดู Preview
                   </p>
                 </div>
               )}

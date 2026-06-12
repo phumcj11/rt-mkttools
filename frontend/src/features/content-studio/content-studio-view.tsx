@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { Check, Copy, Loader2, Save, Sparkles, Calendar, RefreshCw } from 'lucide-react';
+import { BookOpen, Check, Copy, Loader2, Save, Sparkles, RefreshCw, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +13,8 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError } from '@/lib/api';
 import { fetchTemplates, fetchUsage, generateContent } from '@/lib/ai-api';
-import { saveContent } from '@/lib/content-api';
+import { listContent, saveContent, deleteContent } from '@/lib/content-api';
+import type { ContentItem } from '@/lib/types';
 import type {
   ContentTemplate,
   ContentTone,
@@ -60,6 +61,11 @@ export function ContentStudioView() {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const [library, setLibrary] = useState<ContentItem[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [copiedLibId, setCopiedLibId] = useState<number | null>(null);
+
   const isToolType = (t: GenerateContentType) => ['rewrite', 'translate', 'hashtag'].includes(t);
 
   useEffect(() => {
@@ -73,6 +79,7 @@ export function ContentStudioView() {
       })
       .catch(() => undefined);
     refreshUsage();
+    refreshLibrary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,6 +87,14 @@ export function ContentStudioView() {
     fetchUsage()
       .then(setUsage)
       .catch(() => undefined);
+  }
+
+  function refreshLibrary() {
+    setLibraryLoading(true);
+    listContent()
+      .then(setLibrary)
+      .catch(() => undefined)
+      .finally(() => setLibraryLoading(false));
   }
 
   async function onGenerate(e: FormEvent) {
@@ -113,7 +128,23 @@ export function ContentStudioView() {
       await saveContent({ type, body: result, locale, aiRequestId: aiRequestId ?? undefined });
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
+      refreshLibrary();
     } catch { /* silent */ }
+  }
+
+  async function onDeleteLib(id: number) {
+    setDeletingId(id);
+    try {
+      await deleteContent(id);
+      setLibrary((prev) => prev.filter((c) => c.id !== id));
+    } catch { /* silent */ }
+    finally { setDeletingId(null); }
+  }
+
+  async function onCopyLib(item: ContentItem) {
+    await navigator.clipboard.writeText(item.body ?? item.title ?? '');
+    setCopiedLibId(item.id);
+    setTimeout(() => setCopiedLibId(null), 1500);
   }
 
   const templateLabel = (tpl: ContentTemplate) => (locale === 'en' ? tpl.labelEn : tpl.labelTh);
@@ -258,16 +289,79 @@ export function ContentStudioView() {
         </Card>
       </div>
 
-      <Card className="border-dashed">
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-3">
-            <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
-            <div>
-              <p className="text-sm font-medium">Content Calendar</p>
-              <p className="text-xs text-muted-foreground">วางแผนและกำหนดตาราง post ล่วงหน้า — พัฒนาต่อเนื่อง</p>
+      {/* Content Library */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BookOpen className="h-4 w-4 text-primary" />
+            คลังคอนเทนต์
+            {library.length > 0 && (
+              <span className="text-muted-foreground font-normal text-sm">({library.length})</span>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ml-auto h-7 w-7"
+              onClick={refreshLibrary}
+              disabled={libraryLoading}
+              title="รีเฟรช"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${libraryLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {libraryLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> กำลังโหลด...
             </div>
-            <Badge variant="outline" className="ml-auto shrink-0 text-xs">เร็ว ๆ นี้</Badge>
-          </div>
+          ) : library.length === 0 ? (
+            <p className="text-sm text-muted-foreground">ยังไม่มีคอนเทนต์ที่บันทึก — สร้างแล้วกด &quot;บันทึก&quot; จะปรากฏที่นี่</p>
+          ) : (
+            <div className="space-y-2">
+              {library.map((item) => (
+                <div key={item.id} className="flex items-start gap-3 rounded-lg border px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <Badge variant="outline" className="text-[10px] shrink-0">{item.type}</Badge>
+                      <span className="text-xs text-muted-foreground truncate">
+                        {new Date(item.createdAt).toLocaleString('th-TH', {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-sm line-clamp-2">{item.body ?? item.title}</p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="คัดลอก"
+                      onClick={() => void onCopyLib(item)}
+                    >
+                      {copiedLibId === item.id
+                        ? <Check className="h-3.5 w-3.5 text-green-500" />
+                        : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="ลบ"
+                      disabled={deletingId === item.id}
+                      onClick={() => void onDeleteLib(item.id)}
+                    >
+                      {deletingId === item.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Trash2 className="h-3.5 w-3.5 text-destructive" />}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

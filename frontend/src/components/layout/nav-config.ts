@@ -1,6 +1,7 @@
 import {
   Bot,
   BarChart3,
+  Clapperboard,
   FileImage,
   Gift,
   Globe,
@@ -27,6 +28,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'chat',          href: '/chat',        icon: MessageCircle   },
   { key: 'social',        href: '/social',      icon: Radio           },
   { key: 'agents',        href: '/agents',      icon: Bot             },
+  { key: 'mediaAuto',     href: '/media',       icon: Clapperboard    },
   { key: 'userAdmin',     href: '/admin',       icon: Settings2       },
 ];
 

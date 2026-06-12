@@ -28,6 +28,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SocialModule } from './modules/social/social.module';
+import { MediaModule } from './modules/media/media.module';
 import { SystemSettingsModule } from './modules/system-settings/system-settings.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -63,6 +64,7 @@ import { UsersModule } from './modules/users/users.module';
     AgentsModule,
     InboxModule,
     SystemSettingsModule,
+    MediaModule,
   ],
   controllers: [AppController],
   providers: [

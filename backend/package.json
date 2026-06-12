@@ -16,6 +16,7 @@
     "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts"
   },
   "dependencies": {
+    "@googleapis/drive": "^20.2.0",
     "@line/bot-sdk": "^11.0.1",
     "@nestjs/common": "^10.4.4",
     "@nestjs/config": "^3.2.3",
@@ -26,6 +27,7 @@
     "@nestjs/platform-socket.io": "^10.4.22",
     "@nestjs/typeorm": "^10.0.2",
     "@nestjs/websockets": "^10.4.22",
+    "@types/sharp": "^0.31.1",
     "bcrypt": "^5.1.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
@@ -38,6 +40,7 @@
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "sharp": "^0.35.1",
     "socket.io": "^4.8.3",
     "typeorm": "^0.3.20"
   },

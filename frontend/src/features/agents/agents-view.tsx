@@ -1,12 +1,23 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Bot, Play, Pause, Loader2, CheckCircle2, Clock, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
+import {
+  AlertCircle,
+  Bot,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Loader2,
+  Pause,
+  Play,
+  RefreshCw,
+  Sparkles,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { listAgents, runAgent, stopAgent, getAgentStats } from '@/lib/agents-api';
-import type { AiAgent, AgentStats } from '@/lib/agents-api';
+import { listAgents, runAgent, stopAgent, getAgentStats, listTasks } from '@/lib/agents-api';
+import type { AiAgent, AgentStats, AiTask } from '@/lib/agents-api';
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Bot }> = {
   running:  { label: 'กำลังรัน',   icon: Loader2      },
@@ -20,17 +31,37 @@ export function AgentsView() {
   const [stats, setStats]   = useState<AgentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<number | null>(null);
+  const [latestTasks, setLatestTasks] = useState<Record<number, AiTask>>({});
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  const loadTasks = useCallback(async (agentList: AiAgent[]) => {
+    const tasks = await listTasks().catch(() => [] as AiTask[]);
+    const byAgent: Record<number, AiTask> = {};
+    for (const task of tasks) {
+      if (task.agentId != null && !byAgent[task.agentId]) {
+        byAgent[task.agentId] = task;
+      }
+    }
+    // pre-expand agent if it has a result
+    for (const agent of agentList) {
+      if (byAgent[agent.id]?.result) {
+        setExpandedId((prev) => prev ?? agent.id);
+      }
+    }
+    setLatestTasks(byAgent);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [ag, st] = await Promise.all([
-      listAgents().catch(() => []),
+      listAgents().catch(() => [] as AiAgent[]),
       getAgentStats().catch(() => null),
     ]);
     setAgents(ag);
     setStats(st);
     setLoading(false);
-  }, []);
+    await loadTasks(ag);
+  }, [loadTasks]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -41,14 +72,21 @@ export function AgentsView() {
         ? await stopAgent(agent.id)
         : await runAgent(agent.id);
       setAgents((prev) => prev.map((a) => a.id === agent.id ? updated : a));
-      const st = await getAgentStats();
+      const [st, tasks] = await Promise.all([
+        getAgentStats(),
+        listTasks(agent.id).catch(() => [] as AiTask[]),
+      ]);
       setStats(st);
+      if (tasks.length > 0) {
+        setLatestTasks((prev) => ({ ...prev, [agent.id]: tasks[0] }));
+        setExpandedId(agent.id);
+      }
     } catch { /* ignore */ }
     setActingId(null);
   };
 
-  const running = stats?.running ?? agents.filter((a) => a.status === 'running').length;
-  const errors  = stats?.errors ?? agents.filter((a) => a.status === 'error').length;
+  const running    = stats?.running          ?? agents.filter((a) => a.status === 'running').length;
+  const errors     = stats?.errors           ?? agents.filter((a) => a.status === 'error').length;
   const totalTasks = stats?.totalTasksCompleted ?? agents.reduce((s, a) => s + a.tasksCompleted, 0);
 
   return (
@@ -116,6 +154,9 @@ export function AgentsView() {
             const cfg = STATUS_CONFIG[agent.status] ?? STATUS_CONFIG['idle'];
             const Icon = cfg.icon;
             const isActing = actingId === agent.id;
+            const latestTask = latestTasks[agent.id];
+            const isExpanded = expandedId === agent.id;
+
             return (
               <Card key={agent.id} className={agent.status === 'error' ? 'border-destructive/30' : ''}>
                 <CardHeader className="pb-2">
@@ -138,30 +179,62 @@ export function AgentsView() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground">{agent.description}</p>
-                  <div className="mt-3 flex items-center justify-between">
+
+                  <div className="mt-3 flex items-center justify-between gap-2">
                     <div className="text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">{agent.tasksCompleted}</span> งานที่เสร็จ
                       {agent.lastRunAt && (
                         <> · {new Date(agent.lastRunAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}</>
                       )}
                     </div>
-                    {agent.status !== 'disabled' && (
-                      <Button
-                        variant={agent.status === 'running' ? 'destructive' : 'outline'}
-                        size="sm"
-                        disabled={isActing || (actingId !== null && actingId !== agent.id)}
-                        onClick={() => void handleToggle(agent)}
-                      >
-                        {isActing ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : agent.status === 'running' ? (
-                          <><Pause className="mr-1.5 h-3.5 w-3.5" />หยุด</>
-                        ) : (
-                          <><Play className="mr-1.5 h-3.5 w-3.5" />รัน</>
-                        )}
-                      </Button>
-                    )}
+                    <div className="flex gap-1 shrink-0">
+                      {latestTask?.result && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setExpandedId(isExpanded ? null : agent.id)}
+                        >
+                          ผลลัพธ์
+                          {isExpanded
+                            ? <ChevronUp className="ml-1 h-3 w-3" />
+                            : <ChevronDown className="ml-1 h-3 w-3" />}
+                        </Button>
+                      )}
+                      {agent.status !== 'disabled' && (
+                        <Button
+                          variant={agent.status === 'running' ? 'destructive' : 'outline'}
+                          size="sm"
+                          disabled={isActing || (actingId !== null && actingId !== agent.id)}
+                          onClick={() => void handleToggle(agent)}
+                        >
+                          {isActing ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : agent.status === 'running' ? (
+                            <><Pause className="mr-1.5 h-3.5 w-3.5" />หยุด</>
+                          ) : (
+                            <><Play className="mr-1.5 h-3.5 w-3.5" />รัน</>
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Latest task result */}
+                  {isExpanded && latestTask?.result && (
+                    <div className="mt-3 rounded-md bg-muted/50 border p-3">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        ผลลัพธ์ล่าสุด
+                        {latestTask.createdAt && (
+                          <span className="font-normal normal-case ml-1">
+                            · {new Date(latestTask.createdAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{latestTask.result}</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
