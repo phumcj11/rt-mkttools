@@ -6,9 +6,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart2,
-  CalendarDays,
   CheckCircle2,
-  ChevronDown,
   Clock,
   FileImage,
   Gift,
@@ -21,13 +19,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -193,24 +184,21 @@ export function PromotionsView() {
             </span>
           )}
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <CalendarDays className="mr-2 h-4 w-4" />
-                {RANGE_OPTIONS.find((r) => r.key === rangeKey)?.label}
-                <ChevronDown className="ml-2 h-3 w-3 opacity-60" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuRadioGroup value={rangeKey} onValueChange={setRangeKey}>
-                {RANGE_OPTIONS.map((r) => (
-                  <DropdownMenuRadioItem key={r.key} value={r.key}>
-                    {r.label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex rounded-md border">
+            {RANGE_OPTIONS.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setRangeKey(r.key)}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md ${
+                  rangeKey === r.key
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
 
           <Button
             variant="outline"
