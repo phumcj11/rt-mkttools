@@ -291,6 +291,7 @@ export class ErpService {
 
     // Build a map: sku → aggregated sales across branches
     const salesMap = new Map<string, {
+      sku: string;
       qtySold: number; revenue: number; gpBaht: number; gpPct: number;
       abcCompany: string; name: string; category: string; brand: string; productId: number;
     }>();
