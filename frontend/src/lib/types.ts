@@ -437,6 +437,36 @@ export interface ErpCategoryPerformance {
   gpPct: number;
 }
 
+export interface ErpProductListItem {
+  id: number;
+  sku: string;
+  name: string;
+  category: string;
+  brand: string;
+  abcCompany: string;
+  costSales: number;
+  retailPrice: number;
+  imageUrl: string;
+  productType: string;
+}
+
+export interface ErpCampaignCandidate {
+  sku: string;
+  productId: number;
+  name: string;
+  category: string;
+  brand: string;
+  gpPct: number;
+  gpBaht: number;
+  revenue: number;
+  qtySold: number;
+  abcCompany: string;
+  score: number;
+  reasons: string[];
+  warnings: string[];
+  hasExistingPromo: boolean;
+}
+
 export interface ErpInsights {
   source: 'ai' | 'heuristic';
   insights: string[];

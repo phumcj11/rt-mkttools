@@ -2,9 +2,11 @@ import { apiRequest } from './api';
 import type {
   ErpAlert,
   ErpBranchSales,
+  ErpCampaignCandidate,
   ErpCategoryPerformance,
   ErpDashboard,
   ErpInsights,
+  ErpProductListItem,
   ErpPromotion,
   ErpSalesSummary,
   ErpSyncResult,
@@ -49,6 +51,46 @@ export function getErpPromotions(limit = 50, force = false) {
 
 export function getErpCategoryPerformance(days = 30, opts?: ErpRangeOpts) {
   return apiRequest<ErpCategoryPerformance[]>(`/erp/category-performance?${rangeParams(days, opts)}`);
+}
+
+export interface ErpProductsOpts {
+  search?: string;
+  category?: number;
+  abc?: string;
+  hasStock?: boolean;
+  page?: number;
+  limit?: number;
+}
+
+export function getErpProducts(opts?: ErpProductsOpts) {
+  const p = new URLSearchParams();
+  if (opts?.search)               p.set('search', opts.search);
+  if (opts?.category !== undefined) p.set('category', String(opts.category));
+  if (opts?.abc)                  p.set('abc', opts.abc);
+  if (opts?.hasStock !== undefined) p.set('hasStock', opts.hasStock ? '1' : '0');
+  if (opts?.page)                 p.set('page', String(opts.page));
+  if (opts?.limit)                p.set('limit', String(opts.limit));
+  return apiRequest<ErpProductListItem[]>(`/erp/products?${p.toString()}`);
+}
+
+export interface ErpCampaignCandidatesOpts extends ErpRangeOpts {
+  targetPrice?: number;
+  minGpPct?: number;
+  category?: number;
+  abc?: string;
+  limit?: number;
+}
+
+export function getErpCampaignCandidates(opts?: ErpCampaignCandidatesOpts) {
+  const p = new URLSearchParams();
+  if (opts?.targetPrice !== undefined) p.set('targetPrice', String(opts.targetPrice));
+  if (opts?.minGpPct !== undefined)    p.set('minGpPct', String(opts.minGpPct));
+  if (opts?.from)                     p.set('from', opts.from);
+  if (opts?.to)                       p.set('to', opts.to);
+  if (opts?.category !== undefined)   p.set('category', String(opts.category));
+  if (opts?.abc)                      p.set('abc', opts.abc);
+  if (opts?.limit)                    p.set('limit', String(opts.limit));
+  return apiRequest<ErpCampaignCandidate[]>(`/erp/campaign-candidates?${p.toString()}`);
 }
 
 export function getErpAiInsights(days = 30, force = false) {

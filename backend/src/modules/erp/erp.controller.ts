@@ -116,6 +116,48 @@ export class ErpController {
     return this.erp.categoryPerformance(from || r.from, to || r.to, isForce(force));
   }
 
+  @Get('products')
+  productsList(
+    @Query('search') search?: string,
+    @Query('category') category?: string,
+    @Query('abc') abc?: string,
+    @Query('hasStock') hasStock?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit = 50,
+    @Query('force') force?: string,
+  ) {
+    return this.erp.productsList({
+      q: search,
+      category: this.toInt(category),
+      abc,
+      hasStock: hasStock === '1' ? 1 : hasStock === '0' ? 0 : undefined,
+      page,
+      limit,
+    }, isForce(force));
+  }
+
+  @Get('campaign-candidates')
+  campaignCandidates(
+    @Query('targetPrice', new DefaultValuePipe(100), ParseIntPipe) targetPrice: number,
+    @Query('minGpPct', new DefaultValuePipe(30), ParseIntPipe) minGpPct: number,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('category') category?: string,
+    @Query('abc') abc?: string,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit = 50,
+  ) {
+    const r = defaultRange();
+    return this.erp.campaignCandidates({
+      targetPrice,
+      minGpPct,
+      from: from || r.from,
+      to: to || r.to,
+      category: this.toInt(category),
+      abc,
+      limit,
+    });
+  }
+
   @Get('ai-insights')
   aiInsights(
     @CurrentUser() user: AuthUser,

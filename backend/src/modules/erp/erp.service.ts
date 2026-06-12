@@ -186,6 +186,174 @@ export class ErpService {
     }));
   }
 
+  // ---------- new normalizers for Campaign Planner ----------
+
+  async productsList(params: {
+    q?: string;
+    category?: number;
+    abc?: string;
+    hasStock?: 1 | 0;
+    page?: number;
+    limit?: number;
+  } = {}, force = false) {
+    const q: Query = {};
+    if (params.q)        q.q = params.q;
+    if (params.category) q.category = params.category;
+    if (params.abc)      q.abc = params.abc;
+    if (params.hasStock !== undefined) q.has_stock = params.hasStock;
+    if (params.page)     q.page = params.page;
+    q.limit = params.limit ?? 50;
+    const d = await this.call<any[]>('products', 'list', q, force, TTL_STATIC);
+    return (d ?? []).map((p) => ({
+      id: num(p.id),
+      sku: String(p.sku ?? ''),
+      name: String(p.name ?? ''),
+      category: String(p.category ?? ''),
+      brand: String(p.brand ?? ''),
+      abcCompany: String(p.abc_company ?? ''),
+      costSales: num(p.cost_sales ?? p.cost ?? 0),
+      retailPrice: num(p.retail_price ?? p.price ?? 0),
+      imageUrl: String(p.image_url ?? ''),
+      productType: String(p.product_type ?? ''),
+    }));
+  }
+
+  async skuBranchSales(from: string, to: string, params: {
+    category?: number;
+    abc?: string;
+    page?: number;
+    limit?: number;
+  } = {}, force = false) {
+    const q: Query = { from, to };
+    if (params.category) q.category_id = params.category;
+    if (params.abc)      q.abc = params.abc;
+    q.limit = params.limit ?? 100;
+    const d = await this.call<any[]>('sales', 'by_sku_branch', q, force, TTL_SALES);
+    return (d ?? []).map((r) => ({
+      sku: String(r.sku ?? ''),
+      productId: num(r.product_id),
+      name: String(r.name ?? ''),
+      category: String(r.category ?? ''),
+      brand: String(r.brand ?? ''),
+      qtySold: num(r.qty_sold),
+      revenue: num(r.revenue),
+      gpBaht: num(r.gp_baht),
+      gpPct: num(r.gp_pct),
+      abcCompany: String(r.abc_company ?? ''),
+      abcBranch: String(r.abc_branch ?? ''),
+    }));
+  }
+
+  async inventorySnapshot(params: {
+    abc?: string;
+    limit?: number;
+  } = {}, force = false) {
+    const q: Query = { limit: params.limit ?? 200 };
+    if (params.abc) q.abc = params.abc;
+    const d = await this.call<any[]>('inventory', 'snapshot_all', q, force, TTL_STATIC);
+    return (d ?? []).map((r) => ({
+      sku: String(r.sku ?? ''),
+      productId: num(r.product_id),
+      branchId: num(r.branch_id),
+      qty: num(r.quantity_balance ?? r.qty ?? 0),
+      minStock: num(r.min_stock ?? 0),
+    }));
+  }
+
+  async promotionsByProduct(productId: number) {
+    const d = await this.call<any[]>('promotions', 'by_product', { product_id: productId, active_only: 1 }, false, TTL_STATIC);
+    return (d ?? []).map((p) => ({
+      id: num(p.id),
+      name: String(p.promotion_name ?? p.name ?? ''),
+      type: String(p.promotion_type ?? ''),
+    }));
+  }
+
+  async campaignCandidates(params: {
+    targetPrice: number;
+    minGpPct: number;
+    from: string;
+    to: string;
+    category?: number;
+    abc?: string;
+    limit?: number;
+  }) {
+    const limit = params.limit ?? 50;
+
+    // Fetch products + sales in parallel; inventory is large so skip per-product fetch
+    const [salesRows] = await Promise.all([
+      this.skuBranchSales(params.from, params.to, {
+        category: params.category,
+        abc: params.abc,
+        limit: 200,
+      }, false),
+    ]);
+
+    // Build a map: sku → aggregated sales across branches
+    const salesMap = new Map<string, {
+      qtySold: number; revenue: number; gpBaht: number; gpPct: number;
+      abcCompany: string; name: string; category: string; brand: string; productId: number;
+    }>();
+    for (const row of salesRows) {
+      const existing = salesMap.get(row.sku);
+      if (existing) {
+        existing.qtySold += row.qtySold;
+        existing.revenue += row.revenue;
+        existing.gpBaht  += row.gpBaht;
+        // keep the higher gpPct (approximate)
+        if (row.gpPct > existing.gpPct) existing.gpPct = row.gpPct;
+      } else {
+        salesMap.set(row.sku, { ...row });
+      }
+    }
+
+    // Filter by GP threshold
+    const candidates = Array.from(salesMap.values()).filter(
+      (s) => s.gpPct >= params.minGpPct,
+    );
+
+    // Score: GP weight + sales volume weight
+    const maxRevenue = Math.max(...candidates.map((c) => c.revenue), 1);
+    const scored = candidates.map((c) => {
+      const gpScore      = Math.min(c.gpPct / 100, 1) * 40;
+      const salesScore   = (c.revenue / maxRevenue) * 40;
+      const abcBonus     = c.abcCompany === 'ACOM' ? 20 : c.abcCompany === 'BCOM' ? 10 : 0;
+      const score        = gpScore + salesScore + abcBonus;
+
+      const reasons: string[] = [];
+      if (c.gpPct >= 40)         reasons.push(`GP สูง ${c.gpPct.toFixed(0)}%`);
+      else if (c.gpPct >= params.minGpPct) reasons.push(`GP ผ่านเกณฑ์ ${c.gpPct.toFixed(0)}%`);
+      if (c.abcCompany === 'ACOM') reasons.push('สินค้า A (ขายดีมาก)');
+      else if (c.abcCompany === 'BCOM') reasons.push('สินค้า B (ขายดี)');
+      if (c.revenue > maxRevenue * 0.5) reasons.push('ยอดขายสูง');
+
+      const warnings: string[] = [];
+      if (c.gpPct < params.minGpPct + 5) warnings.push('GP ใกล้ขีดต่ำสุด');
+      if (!['ACOM', 'BCOM'].includes(c.abcCompany)) warnings.push('ยอดขายระดับ C/D');
+
+      return {
+        sku: c.sku,
+        productId: c.productId,
+        name: c.name,
+        category: c.category,
+        brand: c.brand,
+        gpPct: c.gpPct,
+        gpBaht: c.gpBaht,
+        revenue: c.revenue,
+        qtySold: c.qtySold,
+        abcCompany: c.abcCompany,
+        score: Math.round(score),
+        reasons,
+        warnings,
+        hasExistingPromo: false, // set later if needed
+      };
+    });
+
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
   /** Aggregates category-level performance from topProducts */
   async categoryPerformance(from: string, to: string, force = false) {
     const products = await this.topProducts(from, to, 100, undefined, force);
