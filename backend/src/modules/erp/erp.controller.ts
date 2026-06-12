@@ -100,10 +100,20 @@ export class ErpController {
 
   @Get('promotions')
   promotions(
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('force') force?: string,
   ) {
     return this.erp.promotions(limit, isForce(force));
+  }
+
+  @Get('category-performance')
+  categoryPerformance(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('force') force?: string,
+  ) {
+    const r = defaultRange();
+    return this.erp.categoryPerformance(from || r.from, to || r.to, isForce(force));
   }
 
   @Get('ai-insights')

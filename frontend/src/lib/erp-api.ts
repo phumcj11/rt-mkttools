@@ -2,6 +2,7 @@ import { apiRequest } from './api';
 import type {
   ErpAlert,
   ErpBranchSales,
+  ErpCategoryPerformance,
   ErpDashboard,
   ErpInsights,
   ErpPromotion,
@@ -42,8 +43,12 @@ export function getErpTopProducts(days = 30, limit = 10, opts?: ErpRangeOpts) {
   return apiRequest<ErpTopProduct[]>(`/erp/top-products?${rangeParams(days, opts)}&limit=${limit}`);
 }
 
-export function getErpPromotions(limit = 12, force = false) {
+export function getErpPromotions(limit = 50, force = false) {
   return apiRequest<ErpPromotion[]>(`/erp/promotions?limit=${limit}${force ? '&force=true' : ''}`);
+}
+
+export function getErpCategoryPerformance(days = 30, opts?: ErpRangeOpts) {
+  return apiRequest<ErpCategoryPerformance[]>(`/erp/category-performance?${rangeParams(days, opts)}`);
 }
 
 export function getErpAiInsights(days = 30, force = false) {

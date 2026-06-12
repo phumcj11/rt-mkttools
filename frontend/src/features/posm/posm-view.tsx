@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { FileImage, ImagePlus, Download, Layers, Loader2, Sparkles, Tag, Megaphone, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,10 +21,11 @@ const POSM_TYPES = [
 ];
 
 export function PosmView() {
+  const searchParams = useSearchParams();
   const [selectedType, setSelectedType] = useState(POSM_TYPES[0].id);
-  const [productName, setProductName] = useState('');
-  const [price, setPrice] = useState('');
-  const [promotion, setPromotion] = useState('');
+  const [productName, setProductName] = useState(searchParams.get('product') ?? '');
+  const [price, setPrice] = useState(searchParams.get('price') ?? '');
+  const [promotion, setPromotion] = useState(searchParams.get('promo') ?? '');
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<GeneratePosmResult | null>(null);
   const [history, setHistory] = useState<PosmProject[]>([]);

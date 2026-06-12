@@ -2,6 +2,7 @@ import {
   Bot,
   BarChart3,
   FileImage,
+  Gift,
   Globe,
   LayoutDashboard,
   MessageCircle,
@@ -18,14 +19,15 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { key: 'dashboard',     href: '/dashboard', icon: LayoutDashboard },
-  { key: 'posm',          href: '/posm',       icon: FileImage       },
-  { key: 'contentStudio', href: '/content',    icon: Sparkles        },
-  { key: 'reviews',       href: '/reviews',    icon: Globe           },
-  { key: 'chat',          href: '/chat',       icon: MessageCircle   },
-  { key: 'social',        href: '/social',     icon: Radio           },
-  { key: 'agents',        href: '/agents',     icon: Bot             },
-  { key: 'userAdmin',     href: '/admin',      icon: Settings2       },
+  { key: 'dashboard',     href: '/dashboard',   icon: LayoutDashboard },
+  { key: 'promotions',    href: '/promotions',  icon: Gift            },
+  { key: 'posm',          href: '/posm',        icon: FileImage       },
+  { key: 'contentStudio', href: '/content',     icon: Sparkles        },
+  { key: 'reviews',       href: '/reviews',     icon: Globe           },
+  { key: 'chat',          href: '/chat',        icon: MessageCircle   },
+  { key: 'social',        href: '/social',      icon: Radio           },
+  { key: 'agents',        href: '/agents',      icon: Bot             },
+  { key: 'userAdmin',     href: '/admin',       icon: Settings2       },
 ];
 
 /** Analytics, ERP, audit etc. are now sub-pages reachable from within modules */

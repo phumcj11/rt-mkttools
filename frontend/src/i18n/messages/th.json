@@ -17,6 +17,7 @@
   },
   "nav": {
     "dashboard": "แดชบอร์ดผู้บริหาร",
+    "promotions": "Promotion Center",
     "posm": "AI POSM Generator",
     "contentStudio": "AI Content Factory",
     "reviews": "Google Review Center",

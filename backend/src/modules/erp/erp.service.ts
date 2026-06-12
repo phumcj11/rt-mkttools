@@ -165,7 +165,7 @@ export class ErpService {
     }));
   }
 
-  async promotions(limit = 20, force = false) {
+  async promotions(limit = 50, force = false) {
     const d = await this.call<any[]>('promotions', 'list', { active_only: 1, limit }, force, TTL_STATIC);
     return (d ?? []).map((p) => ({
       id: num(p.id),
@@ -175,10 +175,39 @@ export class ErpService {
       typeName: String(p.promotion_type_name ?? ''),
       dateStart: String(p.date_start ?? ''),
       dateStop: String(p.date_stop ?? ''),
-      price: num(p.price),
+      retailPrice: num(p.retail_price ?? p.price ?? 0),
+      promoPrice: num(p.promo_price ?? p.promotion_price ?? 0),
+      wholesalePrice: num(p.wholesale_price ?? 0),
       productCount: num(p.product_count),
       freeItemCount: num(p.free_item_count),
+      discountPct: num(p.discount_pct ?? p.discount_percent ?? 0),
+      branch: p.branch_id ? num(p.branch_id) : null,
+      branchName: p.branch_name ? String(p.branch_name) : null,
     }));
+  }
+
+  /** Aggregates category-level performance from topProducts */
+  async categoryPerformance(from: string, to: string, force = false) {
+    const products = await this.topProducts(from, to, 100, undefined, force);
+    const map = new Map<string, { revenue: number; qtySold: number; gpSum: number; count: number }>();
+    for (const p of products) {
+      const cat = p.category || 'ไม่ระบุหมวด';
+      const existing = map.get(cat) ?? { revenue: 0, qtySold: 0, gpSum: 0, count: 0 };
+      existing.revenue  += p.revenue;
+      existing.qtySold  += p.qtySold;
+      existing.gpSum    += p.gpPct;
+      existing.count    += 1;
+      map.set(cat, existing);
+    }
+    return Array.from(map.entries())
+      .map(([category, v]) => ({
+        category,
+        revenue: v.revenue,
+        qtySold: v.qtySold,
+        productCount: v.count,
+        gpPct: v.count > 0 ? Math.round((v.gpSum / v.count) * 10) / 10 : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
   }
 
   // ---------- low-level HTTP (with cache) ----------

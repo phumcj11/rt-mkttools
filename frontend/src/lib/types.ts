@@ -419,9 +419,22 @@ export interface ErpPromotion {
   typeName: string;
   dateStart: string;
   dateStop: string;
-  price: number;
+  retailPrice: number;
+  promoPrice: number;
+  wholesalePrice: number;
   productCount: number;
   freeItemCount: number;
+  discountPct: number;
+  branch: number | null;
+  branchName: string | null;
+}
+
+export interface ErpCategoryPerformance {
+  category: string;
+  revenue: number;
+  qtySold: number;
+  productCount: number;
+  gpPct: number;
 }
 
 export interface ErpInsights {

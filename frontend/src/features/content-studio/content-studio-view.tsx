@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Check, Copy, Loader2, Save, Sparkles, Calendar, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -39,14 +40,17 @@ const TONE_LABELS: Record<ContentTone, string> = {
 export function ContentStudioView() {
   const t = useTranslations('studio');
   const locale = useLocale();
+  const searchParams = useSearchParams();
 
   const [templates, setTemplates] = useState<ContentTemplate[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   const [type, setType] = useState<GenerateContentType>('fb_post');
-  const [productName, setProductName] = useState('');
-  const [price, setPrice] = useState('');
-  const [details, setDetails] = useState('');
+  const [productName, setProductName] = useState(searchParams.get('product') ?? '');
+  const [price, setPrice] = useState(searchParams.get('price') ?? '');
+  const [details, setDetails] = useState(
+    searchParams.get('promo') ? `โปรโมชัน: ${searchParams.get('promo')}` : '',
+  );
   const [tone, setTone] = useState<ContentTone>('friendly');
 
   const [result, setResult] = useState('');
