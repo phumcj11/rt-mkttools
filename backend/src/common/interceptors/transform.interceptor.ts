@@ -16,6 +16,15 @@ export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<T
   intercept(_context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T> | any> {
     return next.handle().pipe(
       map((payload) => {
+        // OAuth redirect handlers return { url } — must pass through unchanged
+        if (
+          payload &&
+          typeof payload === 'object' &&
+          'url' in payload &&
+          typeof (payload as { url: unknown }).url === 'string'
+        ) {
+          return payload;
+        }
         if (
           payload &&
           typeof payload === 'object' &&

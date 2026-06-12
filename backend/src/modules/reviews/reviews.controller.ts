@@ -10,8 +10,9 @@ import {
   ParseIntPipe,
   Post,
   Query,
-  Redirect,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { getFrontendBaseUrl } from '../../common/utils/app-urls';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -89,26 +90,28 @@ export class ReviewsController {
    */
   @Public()
   @Get('google/callback')
-  @Redirect()
   async googleCallback(
     @Query('code') code: string,
     @Query('error') error: string,
+    @Res() res: Response,
   ) {
     const frontendBase = getFrontendBaseUrl();
+    const locale = process.env.DEFAULT_LOCALE ?? 'th';
+    const reviewsPage = `${frontendBase}/${locale}/reviews`;
 
     if (error) {
-      return { url: `${frontendBase}/reviews?google=error&reason=${encodeURIComponent(error)}` };
+      return res.redirect(`${reviewsPage}?google=error&reason=${encodeURIComponent(error)}`);
     }
     if (!code) {
-      return { url: `${frontendBase}/reviews?google=error&reason=no_code` };
+      return res.redirect(`${reviewsPage}?google=error&reason=no_code`);
     }
 
     try {
       await this.reviewsService.handleGoogleCallback(code);
-      return { url: `${frontendBase}/reviews?google=connected` };
+      return res.redirect(`${reviewsPage}?google=connected`);
     } catch (err) {
       const msg = encodeURIComponent((err as Error).message);
-      return { url: `${frontendBase}/reviews?google=error&reason=${msg}` };
+      return res.redirect(`${reviewsPage}?google=error&reason=${msg}`);
     }
   }
 
