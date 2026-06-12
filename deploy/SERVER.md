@@ -6,10 +6,10 @@
 ## โดเมน
 | รายการ | ค่า |
 | --- | --- |
-| โดเมนหลัก (production) | `marketing.100bahtshopthailand.com` |
-| Frontend URL | `https://marketing.100bahtshopthailand.com` |
-| API URL | `https://marketing.100bahtshopthailand.com/api` |
-| Socket.io URL | `https://marketing.100bahtshopthailand.com` (path `/socket.io`) |
+| โดเมนหลัก (production) | `rt.k-mkt.com` |
+| Frontend URL | `https://rt.k-mkt.com` |
+| API URL | `https://rt.k-mkt.com/api` |
+| Socket.io URL | `https://rt.k-mkt.com` (path `/socket.io`) |
 
 ## VPS / SSH
 | รายการ | ค่า |
@@ -44,11 +44,9 @@ ssh root@119.59.102.235
 ## ฐานข้อมูล (MySQL)
 | รายการ | ค่า |
 | --- | --- |
-| ชื่อ DB | `marketing_ai_100baht` (เปลี่ยนจาก `rt_mkttools` ใน Phase 8) |
+| ชื่อ DB | `rt_mkttools` |
 | Charset | `utf8mb4_unicode_ci` |
 | Migration ล่าสุด | `2026_06_phase8_new_modules.sql` |
-
-> หมายเหตุ: ถ้า DB ยังชื่อ `rt_mkttools` อยู่ให้เปลี่ยน `DB_DATABASE` ใน `.env` production หลัง rename DB
 
 > หมายเหตุ: เครื่องนี้ดูเหมือนใช้ control panel (DirectAdmin) ที่มี docroot
 > `/domains/rt.k-mkt.com/public_html` — ถ้าใช้ Apache/LiteSpeed ของ panel ร่วมด้วย

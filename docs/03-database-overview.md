@@ -1,7 +1,7 @@
 # 03 — Database Overview
 
 MySQL 8.x · InnoDB · `utf8mb4_unicode_ci` (รองรับภาษาไทย + emoji) · **Single-tenant** (tenant_id = 1 เสมอ)
-ชื่อ DB: `marketing_ai_100baht`
+ชื่อ DB: `rt_mkttools` (production และ local dev)
 
 > DDL: [`../database/schema/schema.sql`](../database/schema/schema.sql) · ERD: [`../database/erd/erd.md`](../database/erd/erd.md)
 
