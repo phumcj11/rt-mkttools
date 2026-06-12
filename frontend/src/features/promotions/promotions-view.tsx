@@ -407,11 +407,17 @@ function OverviewTab({ router }: { router: ReturnType<typeof useRouter> }) {
 
 function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }) {
   const [campaignName, setCampaignName] = useState('Buffet 100');
+  const [pieceQty, setPieceQty]         = useState('1');
   const [targetPrice, setTargetPrice]   = useState('100');
   const [minGpPct, setMinGpPct]         = useState('30');
   const [lookback, setLookback]         = useState('30');
   const [abcFilter, setAbcFilter]       = useState('');
   const [withAi, setWithAi]             = useState(true);
+
+  const qtyNum = Math.max(1, Number(pieceQty) || 1);
+  const priceNum = Number(targetPrice) || 100;
+  const priceLabel = qtyNum > 1 ? `${qtyNum} ชิ้น ฿${priceNum}` : `฿${priceNum}`;
+  const perPiece = Math.round((priceNum / qtyNum) * 100) / 100;
 
   const [candidates, setCandidates] = useState<ErpCampaignCandidate[]>([]);
   const [summary, setSummary]       = useState<CampaignAnalysisSummary | null>(null);
@@ -430,13 +436,14 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
       from.setDate(from.getDate() - (Number(lookback) - 1));
       const fmtD  = (d: Date) => d.toISOString().slice(0, 10);
       const result = await getErpCampaignCandidates({
-        targetPrice:  Number(targetPrice) || 100,
+        targetPrice:  priceNum,
+        pieceQty:     qtyNum,
         minGpPct:     Number(minGpPct)    || 30,
         campaignName: campaignName || 'Campaign',
         from: fmtD(from),
         to:   fmtD(today),
         abc:  abcFilter || undefined,
-        limit: 60,
+        limit: 80,
         withAi,
       });
       setCandidates(result?.candidates ?? []);
@@ -463,19 +470,34 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <div className="lg:col-span-2">
               <Label htmlFor="campaign-name">ชื่อ Campaign</Label>
               <Input
                 id="campaign-name"
-                placeholder="เช่น Buffet 100, 9.9, Songkran Sale"
+                placeholder="เช่น Buffet 3 ชิ้น 100, 9.9 Sale"
                 value={campaignName}
                 onChange={(e) => setCampaignName(e.target.value)}
                 className="mt-1"
               />
             </div>
             <div>
-              <Label htmlFor="target-price">ราคาเป้าหมาย (บาท)</Label>
+              <Label htmlFor="piece-qty">จำนวนชิ้น</Label>
+              <Input
+                id="piece-qty"
+                type="number"
+                min={1}
+                placeholder="1"
+                value={pieceQty}
+                onChange={(e) => setPieceQty(e.target.value)}
+                className="mt-1"
+              />
+              {qtyNum > 1 && (
+                <p className="mt-0.5 text-xs text-muted-foreground">≈ ฿{perPiece}/ชิ้น</p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="target-price">ราคารวม (บาท)</Label>
               <Input
                 id="target-price"
                 type="number"
@@ -592,7 +614,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Star className="h-4 w-4 text-amber-500" />
-              สินค้าที่ขาย ฿{targetPrice} แล้ว GP ≥ {minGpPct}%
+              สินค้าที่ {priceLabel} GP ≥ {minGpPct}%
               <Badge className="ml-2 bg-primary/10 text-primary">{candidates.length} รายการ</Badge>
               {candidates.filter((c) => c.eligibleForTarget && c.dataQuality.length === 0).length > 0 && (
                 <Badge className="ml-1 bg-green-100 text-green-800">
@@ -613,11 +635,11 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-8">#</TableHead>
-                      <TableHead>ชื่อสินค้า / SKU</TableHead>
+                      <TableHead>สินค้า</TableHead>
                       <TableHead className="text-right">Score</TableHead>
-                      <TableHead className="text-right">GP ที่ ฿{targetPrice}</TableHead>
-                      <TableHead className="text-right">ราคาขายปัจจุบัน</TableHead>
-                      <TableHead className="text-right">ราคาขั้นต่ำ (GP {minGpPct}%)</TableHead>
+                      <TableHead className="text-right">GP {priceLabel}</TableHead>
+                      <TableHead className="text-right">ราคา/ชิ้น</TableHead>
+                      <TableHead className="text-right">ราคาขั้นต่ำ</TableHead>
                       <TableHead className="text-right">ยอดขาย</TableHead>
                       <TableHead>ABC</TableHead>
                       <TableHead>เหตุผล / คำเตือน</TableHead>
@@ -629,43 +651,60 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                       <TableRow key={c.sku} className={c.eligibleForTarget && c.dataQuality.length === 0 ? 'bg-green-50/40' : ''}>
                         <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            {c.eligibleForTarget && c.dataQuality.length === 0
-                              ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />
-                              : c.dataQuality.includes('no_cost')
-                              ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                              : <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
-                            <div>
-                              <div className="font-medium leading-tight">{c.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {c.sku}{c.category ? ` · ${c.category}` : ''}{c.brand ? ` · ${c.brand}` : ''}
+                          <div className="flex items-center gap-2.5">
+                            {c.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={c.imageUrl}
+                                alt={c.name}
+                                className="h-10 w-10 shrink-0 rounded-md border object-cover bg-muted"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
+                                N/A
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1">
+                                {c.eligibleForTarget && c.dataQuality.length === 0
+                                  ? <CheckCircle2 className="h-3 w-3 shrink-0 text-green-600" />
+                                  : c.dataQuality.includes('no_cost')
+                                  ? <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />
+                                  : null}
+                                <span className="font-medium leading-tight truncate">{c.name}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {c.sku}{c.category ? ` · ${c.category}` : ''}
                               </div>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className={`text-right text-lg ${scoreColor(c.score)}`}>{c.score}</TableCell>
                         <TableCell className="text-right">
-                          {c.campaignGpPct !== null ? (
-                            <span className={c.campaignGpPct >= 40 ? 'font-bold text-green-600' : c.campaignGpPct >= Number(minGpPct) ? 'text-green-600' : 'text-amber-600'}>
-                              {c.campaignGpPct.toFixed(1)}%
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">ประวัติ {c.gpPct.toFixed(0)}%</span>
+                          <span className={
+                            c.effectiveGpPct >= 40 ? 'font-bold text-green-600' :
+                            c.effectiveGpPct >= Number(minGpPct) ? 'text-green-600' : 'text-amber-600'
+                          }>
+                            {c.effectiveGpPct.toFixed(1)}%
+                          </span>
+                          {c.campaignGpPct !== null && c.effectiveGpPct > c.campaignGpPct && (
+                            <div className="text-[10px] text-muted-foreground">คำนวณ {c.campaignGpPct.toFixed(0)}%</div>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
                           {c.retailPrice > 0 ? (
-                            <span className={c.retailPrice <= Number(targetPrice) ? 'text-green-700' : 'text-muted-foreground'}>
+                            <span className={c.retailPrice <= perPiece ? 'text-green-700 font-medium' : 'text-muted-foreground'}>
                               ฿{c.retailPrice.toLocaleString()}
                               {c.discountNeeded > 0 && (
                                 <span className="ml-1 text-xs text-amber-500">(-{c.discountNeeded}%)</span>
                               )}
                             </span>
-                          ) : <span className="text-muted-foreground text-xs">ไม่มีข้อมูล</span>}
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="text-right">
                           {c.minSellPrice > 0 ? (
-                            <span className={`font-semibold ${c.minSellPrice <= Number(targetPrice) ? 'text-primary' : 'text-amber-600'}`}>
+                            <span className={`font-semibold ${c.minSellPrice <= priceNum ? 'text-primary' : 'text-amber-600'}`}>
                               ฿{c.minSellPrice.toLocaleString()}
                             </span>
                           ) : <span className="text-muted-foreground">—</span>}
@@ -731,7 +770,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
             กรอกชื่อ Campaign, ราคาเป้าหมาย และ GP ขั้นต่ำ แล้วกด
             <strong className="text-foreground"> วิเคราะห์สินค้าเข้าร่วม</strong>
           </p>
-          <p className="text-xs">ระบบดึง product master + ยอดขาย + ABC จาก ERP คำนวณว่าถ้าขายที่ราคาเป้าหมายแล้ว GP จะเป็นเท่าไร{withAi ? ' พร้อม AI สรุปคำแนะนำ' : ''}</p>
+          <p className="text-xs">กำหนดจำนวนชิ้น + ราคารวม เช่น 3 ชิ้น ฿100 → ระบบดึงสินค้าที่ GP ผ่านเกณฑ์ (ใช้ GP ที่ดีกว่าระหว่างคำนวณ/ประวัติ){withAi ? ' + AI สรุป' : ''}</p>
         </div>
       )}
     </div>

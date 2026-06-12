@@ -141,17 +141,18 @@ export class ErpController {
     @CurrentUser() user: AuthUser,
     @Query('targetPrice', new DefaultValuePipe(100), ParseIntPipe) targetPrice: number,
     @Query('minGpPct', new DefaultValuePipe(30), ParseIntPipe) minGpPct: number,
+    @Query('pieceQty', new DefaultValuePipe(1), ParseIntPipe) pieceQty: number,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('category') category?: string,
     @Query('abc') abc?: string,
-    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit = 50,
+    @Query('limit', new DefaultValuePipe(80), ParseIntPipe) limit = 80,
     @Query('campaignName') campaignName?: string,
     @Query('withAi') withAi?: string,
   ) {
     const r = defaultRange();
     const candidates = await this.erp.campaignCandidates({
-      targetPrice, minGpPct,
+      targetPrice, minGpPct, pieceQty: Math.max(1, pieceQty),
       from: from || r.from,
       to: to || r.to,
       category: this.toInt(category),
@@ -161,7 +162,7 @@ export class ErpController {
     if (withAi === '1' || withAi === 'true') {
       const summary = await this.insights.analyzeCampaign(
         user,
-        { campaignName: campaignName || 'Campaign', targetPrice, minGpPct },
+        { campaignName: campaignName || 'Campaign', targetPrice, minGpPct, pieceQty: Math.max(1, pieceQty) },
         candidates,
       );
       return { candidates, summary };

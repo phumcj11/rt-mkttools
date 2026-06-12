@@ -124,16 +124,19 @@ export class ErpInsightsService {
       campaignName: string;
       targetPrice: number;
       minGpPct: number;
+      pieceQty?: number;
     },
     candidates: Array<{
       name: string; sku: string; category: string; brand: string;
-      campaignGpPct: number | null; eligibleForTarget: boolean;
+      campaignGpPct: number | null; effectiveGpPct?: number; eligibleForTarget: boolean;
       revenue: number; abcCompany: string; minSellPrice: number;
       warnings: string[];
     }>,
   ): Promise<ErpInsightsResult> {
     const eligible  = candidates.filter((c) => c.eligibleForTarget);
     const top10     = eligible.slice(0, 10);
+    const qty = params.pieceQty ?? 1;
+    const priceLabel = qty > 1 ? `${qty} ชิ้น ฿${params.targetPrice}` : `฿${params.targetPrice}`;
 
     if (this.openai.isConfigured() && top10.length > 0) {
       try {
@@ -145,13 +148,13 @@ export class ErpInsightsService {
         const rows = top10
           .map((c, i) =>
             `${i + 1}. ${c.name} (${c.category}) — ` +
-            `GP@฿${params.targetPrice}: ${c.campaignGpPct?.toFixed(1) ?? 'N/A'}%, ` +
+            `GP@${priceLabel}: ${(c.effectiveGpPct ?? c.campaignGpPct)?.toFixed(1) ?? 'N/A'}%, ` +
             `ยอดขาย: ฿${Math.round(c.revenue).toLocaleString()}, ABC: ${c.abcCompany}` +
             (c.warnings.length ? `, ⚠ ${c.warnings[0]}` : ''),
           )
           .join('\n');
         const userPrompt =
-          `แคมเปญ: "${params.campaignName}" ราคาเป้า ฿${params.targetPrice} GP ขั้นต่ำ ${params.minGpPct}%\n` +
+          `แคมเปญ: "${params.campaignName}" ${priceLabel} GP ขั้นต่ำ ${params.minGpPct}%\n` +
           `สินค้าที่ผ่านเกณฑ์ ${eligible.length} รายการ (แสดง 10 อันดับแรก):\n${rows}\n\n` +
           'กรุณาให้คำแนะนำสั้น ๆ: สินค้ากลุ่มใดควรเลือก, ควรระวังอะไร, และข้อเสนอแนะการจัดแคมเปญ';
         const result = await this.openai.complete(system, userPrompt);
@@ -176,14 +179,16 @@ export class ErpInsightsService {
   }
 
   private heuristicCampaign(
-    params: { campaignName: string; targetPrice: number; minGpPct: number },
+    params: { campaignName: string; targetPrice: number; minGpPct: number; pieceQty?: number },
     eligible: Array<{
       name: string; category: string; abcCompany: string;
-      campaignGpPct: number | null; revenue: number; warnings: string[];
+      campaignGpPct: number | null; effectiveGpPct?: number; revenue: number; warnings: string[];
     }>,
   ): string[] {
     const out: string[] = [];
-    out.push(`แคมเปญ "${params.campaignName}" มีสินค้าผ่านเกณฑ์ ${eligible.length} รายการที่ขาย ฿${params.targetPrice} แล้ว GP ≥ ${params.minGpPct}%`);
+    const qty = params.pieceQty ?? 1;
+    const priceLabel = qty > 1 ? `${qty} ชิ้น ฿${params.targetPrice}` : `฿${params.targetPrice}`;
+    out.push(`แคมเปญ "${params.campaignName}" (${priceLabel}) มีสินค้าผ่านเกณฑ์ ${eligible.length} รายการ GP ≥ ${params.minGpPct}%`);
 
     const aClass = eligible.filter((c) => c.abcCompany === 'ACOM');
     if (aClass.length)

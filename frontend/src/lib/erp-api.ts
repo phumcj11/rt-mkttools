@@ -80,6 +80,7 @@ export function getErpProducts(opts?: ErpProductsOpts) {
 export interface ErpCampaignCandidatesOpts extends ErpRangeOpts {
   targetPrice?: number;
   minGpPct?: number;
+  pieceQty?: number;
   campaignName?: string;
   category?: number;
   abc?: string;
@@ -91,6 +92,7 @@ export function getErpCampaignCandidates(opts?: ErpCampaignCandidatesOpts) {
   const p = new URLSearchParams();
   if (opts?.targetPrice !== undefined) p.set('targetPrice', String(opts.targetPrice));
   if (opts?.minGpPct !== undefined)    p.set('minGpPct', String(opts.minGpPct));
+  if (opts?.pieceQty !== undefined)    p.set('pieceQty', String(opts.pieceQty));
   if (opts?.from)                      p.set('from', opts.from);
   if (opts?.to)                        p.set('to', opts.to);
   if (opts?.campaignName)              p.set('campaignName', opts.campaignName);

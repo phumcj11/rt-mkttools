@@ -456,24 +456,26 @@ export interface ErpCampaignCandidate {
   name: string;
   category: string;
   brand: string;
+  imageUrl: string;
+  /** Number of pieces in the bundle (e.g. 3 for "3 ชิ้น 100") */
+  pieceQty: number;
+  /** Target price per piece = targetPrice / pieceQty */
+  perPieceTarget: number;
   gpPct: number;
   gpBaht: number;
   revenue: number;
   qtySold: number;
   abcCompany: string;
-  /** Retail price from ERP product master (0 if not available) */
   retailPrice: number;
-  /** Cost/sales price from ERP product master */
   costSales: number;
-  /** Minimum sell price that still hits minGpPct, rounded up to nearest ฿5 */
+  /** Total cost for the bundle (costSales × pieceQty) */
+  bundleCost: number;
   minSellPrice: number;
-  /** GP% if we sell this product at targetPrice (null when costSales unknown) */
   campaignGpPct: number | null;
-  /** True when selling at targetPrice still meets minGpPct (or historical GP passes when no cost) */
+  /** max(campaignGpPct, historical gpPct) — used for eligibility */
+  effectiveGpPct: number;
   eligibleForTarget: boolean;
-  /** How much % discount is needed to bring retail price down to targetPrice */
   discountNeeded: number;
-  /** Data quality flags: 'no_master' | 'no_cost' | 'no_price' */
   dataQuality: string[];
   score: number;
   reasons: string[];
