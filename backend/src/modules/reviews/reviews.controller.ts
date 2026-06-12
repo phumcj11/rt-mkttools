@@ -12,6 +12,7 @@ import {
   Query,
   Redirect,
 } from '@nestjs/common';
+import { getFrontendBaseUrl } from '../../common/utils/app-urls';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -93,10 +94,7 @@ export class ReviewsController {
     @Query('code') code: string,
     @Query('error') error: string,
   ) {
-    const frontendBase =
-      process.env.FRONTEND_URL ??
-      process.env.CORS_ORIGINS?.split(',')[0]?.trim() ??
-      'http://localhost:3000';
+    const frontendBase = getFrontendBaseUrl();
 
     if (error) {
       return { url: `${frontendBase}/reviews?google=error&reason=${encodeURIComponent(error)}` };

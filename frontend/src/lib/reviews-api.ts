@@ -93,9 +93,11 @@ export function disconnectGoogle() {
 // ─── System settings for Google credentials ────────────────────────────────
 
 export function getGoogleSettings() {
-  return apiRequest<{ google_configured: boolean; google_client_id_preview: string | null }>(
-    '/settings/system/google',
-  );
+  return apiRequest<{
+    google_configured: boolean;
+    google_client_id_preview: string | null;
+    google_redirect_uri: string;
+  }>('/settings/system/google');
 }
 
 export function saveGoogleCredentials(clientId: string, clientSecret: string) {

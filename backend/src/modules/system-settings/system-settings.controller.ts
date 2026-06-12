@@ -7,6 +7,7 @@ import {
   Patch,
 } from '@nestjs/common';
 import { IsOptional, IsString } from 'class-validator';
+import { getGoogleOAuthRedirectUri } from '../../common/utils/app-urls';
 import { SystemSettingsService } from './system-settings.service';
 
 class UpdateAiSettingsDto {
@@ -71,6 +72,7 @@ export class SystemSettingsController {
     return {
       google_configured: clientId.length > 5,
       google_client_id_preview: clientId.length > 5 ? `...${clientId.slice(-6)}` : null,
+      google_redirect_uri: getGoogleOAuthRedirectUri(),
     };
   }
 

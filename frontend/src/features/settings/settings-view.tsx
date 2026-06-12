@@ -71,6 +71,7 @@ export function SettingsView() {
   const [showSecret, setShowSecret] = useState(false);
   const [googleSaving, setGoogleSaving] = useState(false);
   const [googleSaveMsg, setGoogleSaveMsg] = useState<string | null>(null);
+  const [googleRedirectUri, setGoogleRedirectUri] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -88,7 +89,10 @@ export function SettingsView() {
         setAiUsage(usageData);
         setSysSettings(sysData);
         if (sysData?.openai_model) setModel(sysData.openai_model);
-        if (googleData) setGoogleConfigured(googleData.google_configured);
+        if (googleData) {
+          setGoogleConfigured(googleData.google_configured);
+          setGoogleRedirectUri(googleData.google_redirect_uri);
+        }
       } catch {
         setError('ไม่สามารถโหลดข้อมูลได้');
       } finally {
@@ -137,8 +141,9 @@ export function SettingsView() {
     }
   };
 
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
-  const callbackUrl = `${apiBaseUrl}/reviews/google/callback`;
+  const callbackUrl =
+    googleRedirectUri ||
+    `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api'}/reviews/google/callback`;
 
   const handleCopyCallback = () => {
     void navigator.clipboard.writeText(callbackUrl);

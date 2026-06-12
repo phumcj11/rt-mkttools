@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { getGoogleOAuthRedirectUri } from '../../common/utils/app-urls';
 import { NotFoundAppException } from '../../common/exceptions/app.exception';
 import { GoogleReview } from '../../database/entities';
 import { OpenAiService } from '../ai/openai.service';
@@ -360,10 +361,7 @@ export class ReviewsService {
 
   /** URL ที่ Google จะ redirect กลับมาหลัง OAuth */
   private buildRedirectUri(): string {
-    const base =
-      process.env.API_BASE_URL ??
-      `http://localhost:${process.env.BACKEND_PORT ?? 4000}/api`;
-    return `${base}/reviews/google/callback`;
+    return getGoogleOAuthRedirectUri();
   }
 
   private starToNumber(star: string): number {
