@@ -104,19 +104,19 @@ export function PromotionsView() {
   const [tab, setTab] = useState<Tab>('overview');
 
   return (
-    <div className="flex flex-col gap-0">
-      {/* Page header */}
-      <div className="border-b bg-background px-6 pt-6 pb-0">
+    <div className="-mx-4 -mt-4 mb-2 flex flex-col gap-0 lg:-mx-6 lg:-mt-6">
+      {/* Page header — full-bleed within dashboard main */}
+      <div className="border-b bg-card px-4 pt-5 pb-0 lg:px-6">
         <h1 className="flex items-center gap-2 text-2xl font-bold">
           <Gift className="h-6 w-6 text-primary" />
           Promotion Center
         </h1>
         <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          ภาพรวมโปรโมชัน · Campaign Planner · ข้อมูลสินค้า
+          ภาพรวมโปรโมชัน · วางแผน Campaign · ค้นหาสินค้า
         </p>
 
-        {/* Tab bar */}
-        <div className="flex gap-0">
+        {/* Tab bar — pill style, always visible */}
+        <div className="mb-4 inline-flex rounded-lg border bg-muted/60 p-1">
           {(
             [
               { key: 'overview', label: 'Overview', icon: BarChart2 },
@@ -126,21 +126,22 @@ export function PromotionsView() {
           ).map(({ key, label, icon: Icon }) => (
             <button
               key={key}
+              type="button"
               onClick={() => setTab(key)}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                 tab === key
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  ? 'bg-background text-primary shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4 shrink-0" />
               {label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="px-4 pt-4 lg:px-6">
         {tab === 'overview'  && <OverviewTab router={router} />}
         {tab === 'planner'   && <CampaignPlannerTab router={router} />}
         {tab === 'products'  && <ProductsTab router={router} />}
