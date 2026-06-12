@@ -21,6 +21,11 @@ const GBP_ACCOUNTS_V1_URL = 'https://mybusinessaccountmanagement.googleapis.com/
 @Injectable()
 export class ReviewsService {
   private readonly logger = new Logger(ReviewsService.name);
+  private locationsCache: {
+    at: number;
+    data: Array<{ name: string; title: string; accountName: string }>;
+  } | null = null;
+  private readonly locationsCacheMs = 5 * 60 * 1000;
 
   constructor(
     @InjectRepository(GoogleReview) private readonly repo: Repository<GoogleReview>,
@@ -230,37 +235,33 @@ export class ReviewsService {
   async listGoogleLocations(): Promise<
     Array<{ name: string; title: string; accountName: string }>
   > {
+    if (
+      this.locationsCache &&
+      Date.now() - this.locationsCache.at < this.locationsCacheMs
+    ) {
+      return this.locationsCache.data;
+    }
+
     await this.refreshGoogleTokenIfNeeded();
     const accessToken = await this.settings.get('google_access_token');
     if (!accessToken) throw new Error('Not connected to Google');
 
-    const errors: string[] = [];
-
-    // Primary: Google My Business API v4 (ใช้ร่วมกับ Reviews API)
     try {
-      const locations = await this.fetchLocationsV4(accessToken);
-      if (locations.length > 0) return locations;
-      errors.push('v4: no locations returned');
+      const locations = await this.fetchAllLocations(accessToken);
+      if (locations.length === 0) {
+        throw new Error(
+          'ไม่พบ Location — ตรวจสอบว่าเปิดใช้งาน "My Business Business Information API" ใน Google Cloud Console',
+        );
+      }
+      this.locationsCache = { at: Date.now(), data: locations };
+      return locations;
     } catch (err) {
-      const msg = (err as Error).message;
-      this.logger.warn(`GBP v4 locations failed: ${msg}`);
-      errors.push(`v4: ${msg}`);
+      if (this.locationsCache) {
+        this.logger.warn('Returning stale locations cache after API error');
+        return this.locationsCache.data;
+      }
+      throw err;
     }
-
-    // Fallback: Account Management + Business Information v1
-    try {
-      const locations = await this.fetchLocationsV1(accessToken);
-      if (locations.length > 0) return locations;
-      errors.push('v1: no locations returned');
-    } catch (err) {
-      const msg = (err as Error).message;
-      this.logger.warn(`GBP v1 locations failed: ${msg}`);
-      errors.push(`v1: ${msg}`);
-    }
-
-    throw new Error(
-      `ไม่พบ Location — ตรวจสอบว่าเปิดใช้งาน "Google My Business API" ใน Google Cloud Console แล้ว (${errors.join('; ')})`,
-    );
   }
 
   /** บันทึก location ที่เลือก */
@@ -343,6 +344,7 @@ export class ReviewsService {
 
   /** ยกเลิกการเชื่อมต่อ Google */
   async disconnectGoogle(): Promise<void> {
+    this.locationsCache = null;
     await Promise.all([
       this.settings.set('google_access_token',  ''),
       this.settings.set('google_refresh_token',  ''),
@@ -369,70 +371,69 @@ export class ReviewsService {
       data = { raw: text };
     }
     if (!res.ok) {
-      const googleMsg = data?.error?.message ?? text.slice(0, 300);
+      if (res.status === 429) {
+        throw new Error('429 Quota exceeded — กรุณารอ 1 นาทีแล้วลองใหม่');
+      }
+      const googleMsg =
+        data?.error?.message ??
+        (text.includes('<!DOCTYPE') ? 'API ไม่พร้อมใช้งาน — ตรวจสอบว่าเปิด API ใน Google Cloud Console' : text.slice(0, 200));
       throw new Error(`${res.status} ${googleMsg}`);
     }
     return data;
   }
 
-  /** ดึง locations ผ่าน Google My Business API v4 */
-  private async fetchLocationsV4(
+  /**
+   * ดึง locations ทั้งหมดด้วย Business Information API
+   * ใช้ accounts/-/locations (1 call + pagination) แทน loop หลาย account
+   */
+  private async fetchAllLocations(
     accessToken: string,
   ): Promise<Array<{ name: string; title: string; accountName: string }>> {
-    const accData = await this.googleApiGet(accessToken, `${GBP_V4_BASE}/accounts`);
-    const accounts: Array<{ name: string }> = (accData.accounts as Array<{ name: string }>) ?? [];
-    const locations: Array<{ name: string; title: string; accountName: string }> = [];
-
-    for (const account of accounts) {
-      const accountName = account.name;
-      let pageToken: string | undefined;
-      do {
-        const params = new URLSearchParams({ pageSize: '100' });
-        if (pageToken) params.set('pageToken', pageToken);
-        const locData = await this.googleApiGet(
-          accessToken,
-          `${GBP_V4_BASE}/${accountName}/locations?${params}`,
-        );
-        for (const loc of (locData.locations as Array<Record<string, string>>) ?? []) {
-          locations.push({
-            name: loc.name,
-            title: String(loc.locationName ?? loc.title ?? loc.name),
-            accountName,
-          });
-        }
-        pageToken = locData.nextPageToken as string | undefined;
-      } while (pageToken);
+    // ดึง account หลักไว้ normalize location name สำหรับ Reviews API v4
+    let primaryAccount = '';
+    try {
+      const accData = await this.googleApiGet(accessToken, GBP_ACCOUNTS_V1_URL);
+      const accounts = (accData.accounts as Array<{ name: string; type?: string }>) ?? [];
+      const group =
+        accounts.find((a) => a.type === 'LOCATION_GROUP') ??
+        accounts.find((a) => a.type === 'ORGANIZATION') ??
+        accounts[0];
+      primaryAccount = group?.name ?? '';
+    } catch (err) {
+      this.logger.warn(`Could not list GBP accounts: ${(err as Error).message}`);
     }
-    return locations;
-  }
 
-  /** ดึง locations ผ่าน Account Management + Business Information v1 */
-  private async fetchLocationsV1(
-    accessToken: string,
-  ): Promise<Array<{ name: string; title: string; accountName: string }>> {
-    const accData = await this.googleApiGet(accessToken, GBP_ACCOUNTS_V1_URL);
-    const accounts: Array<{ name: string }> = (accData.accounts as Array<{ name: string }>) ?? [];
     const locations: Array<{ name: string; title: string; accountName: string }> = [];
+    let pageToken: string | undefined;
 
-    for (const account of accounts) {
-      const accountName = account.name;
-      let pageToken: string | undefined;
-      do {
-        const params = new URLSearchParams({ pageSize: '100', readMask: 'name,title' });
-        if (pageToken) params.set('pageToken', pageToken);
-        const locUrl =
-          `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?${params}`;
-        const locData = await this.googleApiGet(accessToken, locUrl);
-        for (const loc of (locData.locations as Array<Record<string, string>>) ?? []) {
-          locations.push({
-            name: loc.name,
-            title: String(loc.title ?? loc.name),
-            accountName,
-          });
+    do {
+      const params = new URLSearchParams({
+        readMask: 'name,title,storeCode',
+        pageSize: '100',
+      });
+      if (pageToken) params.set('pageToken', pageToken);
+
+      const url =
+        `https://mybusinessbusinessinformation.googleapis.com/v1/accounts/-/locations?${params}`;
+      const locData = await this.googleApiGet(accessToken, url);
+
+      for (const loc of (locData.locations as Array<Record<string, string>>) ?? []) {
+        const rawName = loc.name;
+        // Business Information API อาจคืน "locations/123" — normalize เป็น full path
+        let fullName = rawName;
+        if (rawName.startsWith('locations/') && primaryAccount) {
+          fullName = `${primaryAccount}/${rawName}`;
         }
-        pageToken = locData.nextPageToken as string | undefined;
-      } while (pageToken);
-    }
+
+        locations.push({
+          name: fullName,
+          title: String(loc.title ?? loc.storeCode ?? rawName),
+          accountName: primaryAccount || fullName.split('/locations/')[0] || '',
+        });
+      }
+      pageToken = locData.nextPageToken as string | undefined;
+    } while (pageToken);
+
     return locations;
   }
 
