@@ -550,6 +550,12 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
               <Star className="h-4 w-4 text-amber-500" />
               สินค้าแนะนำสำหรับ &quot;{campaignName}&quot; — GP ≥ {minGpPct}%
               <Badge className="ml-2 bg-primary/10 text-primary">{candidates.length} รายการ</Badge>
+              {candidates.filter((c) => c.fitsTargetPrice).length > 0 && (
+                <Badge className="ml-1 bg-green-100 text-green-800">
+                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                  {candidates.filter((c) => c.fitsTargetPrice).length} เข้าเกณฑ์ ฿{targetPrice}
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -566,6 +572,8 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                       <TableHead>สินค้า / หมวด</TableHead>
                       <TableHead className="text-right">Score</TableHead>
                       <TableHead className="text-right">GP%</TableHead>
+                      <TableHead className="text-right">ราคาขาย</TableHead>
+                      <TableHead className="text-right">แนะนำ Buffet</TableHead>
                       <TableHead className="text-right">ยอดขาย</TableHead>
                       <TableHead>ABC</TableHead>
                       <TableHead>เหตุผล / คำเตือน</TableHead>
@@ -574,17 +582,39 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                   </TableHeader>
                   <TableBody>
                     {candidates.map((c, i) => (
-                      <TableRow key={c.sku}>
+                      <TableRow key={c.sku} className={c.fitsTargetPrice ? 'bg-green-50/40' : ''}>
                         <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                         <TableCell>
-                          <div className="font-medium">{c.name}</div>
-                          <div className="text-xs text-muted-foreground">{c.sku} · {c.category}{c.brand ? ` · ${c.brand}` : ''}</div>
+                          <div className="flex items-center gap-1.5">
+                            {c.fitsTargetPrice
+                              ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                              : <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
+                            <div>
+                              <div className="font-medium">{c.name}</div>
+                              <div className="text-xs text-muted-foreground">{c.sku} · {c.category}{c.brand ? ` · ${c.brand}` : ''}</div>
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell className={`text-right text-lg ${scoreColor(c.score)}`}>{c.score}</TableCell>
                         <TableCell className="text-right">
                           <span className={c.gpPct >= 40 ? 'font-bold text-green-600' : c.gpPct >= 30 ? 'text-green-600' : 'text-amber-600'}>
                             {c.gpPct.toFixed(1)}%
                           </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {c.retailPrice > 0 ? (
+                            <span className={c.fitsTargetPrice ? 'font-semibold text-green-700' : 'text-amber-600'}>
+                              ฿{c.retailPrice.toLocaleString()}
+                              {!c.fitsTargetPrice && c.discountNeeded > 0 && (
+                                <span className="ml-1 text-xs text-amber-500">(-{c.discountNeeded}%)</span>
+                              )}
+                            </span>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {c.suggestedBuffetPrice > 0 ? (
+                            <span className="font-semibold text-primary">฿{c.suggestedBuffetPrice}</span>
+                          ) : <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell className="text-right">{thb(c.revenue)}</TableCell>
                         <TableCell>
@@ -594,7 +624,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                             'text-muted-foreground'
                           }>{c.abcCompany || '—'}</span>
                         </TableCell>
-                        <TableCell className="max-w-[240px]">
+                        <TableCell className="max-w-[220px]">
                           <div className="flex flex-wrap gap-1">
                             {c.reasons.map((r) => (
                               <span key={r} className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700">
@@ -617,7 +647,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                           <div className="flex gap-1">
                             <Button
                               size="sm" variant="outline" className="h-7 px-2 text-xs"
-                              onClick={() => router.push(`/posm?product=${encodeURIComponent(c.name)}&promo=${encodeURIComponent(campaignName)}`)}
+                              onClick={() => router.push(`/posm?product=${encodeURIComponent(c.name)}&price=${c.suggestedBuffetPrice || c.retailPrice}&promo=${encodeURIComponent(campaignName)}`)}
                             >
                               <FileImage className="mr-1 h-3 w-3" />POSM
                             </Button>

@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { AiConfig } from '../../config/configuration';
+import { SystemSettingsService } from '../system-settings/system-settings.service';
 
 export interface CompletionResult {
   content: string;
@@ -20,13 +21,18 @@ export class OpenAiService {
   private readonly logger = new Logger(OpenAiService.name);
   private readonly config: AiConfig;
   private client: OpenAI | null = null;
+  private currentKey: string | null = null;
 
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    @Optional() private readonly settingsSvc?: SystemSettingsService,
+  ) {
     this.config = configService.getOrThrow<AiConfig>('ai');
     if (this.config.apiKey) {
       this.client = new OpenAI({ apiKey: this.config.apiKey });
+      this.currentKey = this.config.apiKey;
     } else {
-      this.logger.warn('OPENAI_API_KEY ยังไม่ได้ตั้งค่า — ฟีเจอร์ AI จะใช้งานไม่ได้');
+      this.logger.warn('OPENAI_API_KEY ยังไม่ได้ตั้งค่าใน .env — ระบบจะลองโหลดจาก DB');
     }
   }
 
@@ -34,12 +40,39 @@ export class OpenAiService {
     return this.client !== null;
   }
 
-  async complete(systemPrompt: string, userPrompt: string): Promise<CompletionResult> {
-    if (!this.client) {
+  /**
+   * Resolve the active API key: DB setting takes precedence over .env
+   * Re-initializes client automatically when key changes.
+   */
+  private async ensureClient(): Promise<OpenAI> {
+    let apiKey = this.config.apiKey || null;
+
+    // DB key overrides env key
+    if (this.settingsSvc) {
+      const dbKey = await this.settingsSvc.get('openai_api_key');
+      if (dbKey && dbKey.length > 5) {
+        apiKey = dbKey;
+      }
+    }
+
+    if (!apiKey) {
       throw new Error('OPENAI_NOT_CONFIGURED');
     }
 
-    const completion = await this.client.chat.completions.create({
+    // Reinitialize when key changes
+    if (!this.client || this.currentKey !== apiKey) {
+      this.client = new OpenAI({ apiKey });
+      this.currentKey = apiKey;
+      this.logger.log('OpenAI client initialized');
+    }
+
+    return this.client;
+  }
+
+  async complete(systemPrompt: string, userPrompt: string): Promise<CompletionResult> {
+    const client = await this.ensureClient();
+
+    const completion = await client.chat.completions.create({
       model: this.config.model,
       max_tokens: this.config.maxTokens,
       temperature: this.config.temperature,
@@ -66,11 +99,9 @@ export class OpenAiService {
     messages: ChatMessageInput[],
     onToken: (delta: string) => void,
   ): Promise<CompletionResult> {
-    if (!this.client) {
-      throw new Error('OPENAI_NOT_CONFIGURED');
-    }
+    const client = await this.ensureClient();
 
-    const stream = await this.client.chat.completions.create({
+    const stream = await client.chat.completions.create({
       model: this.config.model,
       max_tokens: this.config.maxTokens,
       temperature: this.config.temperature,

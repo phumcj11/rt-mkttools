@@ -25,3 +25,4 @@ export * from './ai-agent.entity';
 export * from './channel-config.entity';
 export * from './conversation.entity';
 export * from './inbox-message.entity';
+export * from './system-setting.entity';

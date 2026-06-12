@@ -461,6 +461,16 @@ export interface ErpCampaignCandidate {
   revenue: number;
   qtySold: number;
   abcCompany: string;
+  /** Retail price from ERP product master (0 if not available) */
+  retailPrice: number;
+  /** Cost/sales price from ERP product master */
+  costSales: number;
+  /** Minimum sell price to hit minGpPct, rounded up to nearest ฿5 */
+  suggestedBuffetPrice: number;
+  /** True when retail_price ≤ targetPrice (fits the buffet tier) */
+  fitsTargetPrice: boolean;
+  /** How much % discount is needed to bring retail down to targetPrice */
+  discountNeeded: number;
   score: number;
   reasons: string[];
   warnings: string[];

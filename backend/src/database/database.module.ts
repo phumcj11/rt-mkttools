@@ -30,6 +30,7 @@ import {
   Role,
   SalesRecord,
   SocialMention,
+  SystemSetting,
   Tenant,
   User,
 } from './entities';
@@ -80,6 +81,7 @@ import {
             ChannelConfig,
             Conversation,
             InboxMessage,
+            SystemSetting,
           ],
           synchronize: db.synchronize,
           logging: db.logging,

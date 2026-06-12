@@ -280,14 +280,25 @@ export class ErpService {
   }) {
     const limit = params.limit ?? 50;
 
-    // Fetch products + sales in parallel; inventory is large so skip per-product fetch
-    const [salesRows] = await Promise.all([
+    // Fetch products + sales in parallel
+    const [salesRows, productRows] = await Promise.all([
       this.skuBranchSales(params.from, params.to, {
         category: params.category,
         abc: params.abc,
         limit: 200,
       }, false),
+      this.productsList({
+        category: params.category,
+        abc: params.abc,
+        limit: 500,
+      }, false),
     ]);
+
+    // Build product price map: sku → { retailPrice, costSales }
+    const productMap = new Map<string, { retailPrice: number; costSales: number }>();
+    for (const p of productRows) {
+      productMap.set(p.sku, { retailPrice: p.retailPrice, costSales: p.costSales });
+    }
 
     // Build a map: sku → aggregated sales across branches
     const salesMap = new Map<string, {
@@ -316,10 +327,28 @@ export class ErpService {
     // Score: GP weight + sales volume weight
     const maxRevenue = Math.max(...candidates.map((c) => c.revenue), 1);
     const scored = candidates.map((c) => {
-      const gpScore      = Math.min(c.gpPct / 100, 1) * 40;
-      const salesScore   = (c.revenue / maxRevenue) * 40;
-      const abcBonus     = c.abcCompany === 'ACOM' ? 20 : c.abcCompany === 'BCOM' ? 10 : 0;
-      const score        = gpScore + salesScore + abcBonus;
+      const prod = productMap.get(c.sku);
+      const retailPrice = prod?.retailPrice ?? 0;
+      const costSales   = prod?.costSales   ?? 0;
+
+      // Suggested buffet price: cost / (1 − minGP%) rounded up to nearest 5 baht
+      const rawSuggested = costSales > 0
+        ? costSales / (1 - params.minGpPct / 100)
+        : retailPrice;
+      const suggestedBuffetPrice = rawSuggested > 0
+        ? Math.ceil(rawSuggested / 5) * 5
+        : 0;
+
+      const fitsTargetPrice = retailPrice > 0 && retailPrice <= params.targetPrice;
+      const discountNeeded  = retailPrice > params.targetPrice
+        ? Math.round(((retailPrice - params.targetPrice) / retailPrice) * 100)
+        : 0;
+
+      const gpScore    = Math.min(c.gpPct / 100, 1) * 40;
+      const salesScore = (c.revenue / maxRevenue) * 40;
+      const abcBonus   = c.abcCompany === 'ACOM' ? 20 : c.abcCompany === 'BCOM' ? 10 : 0;
+      const priceBonus = fitsTargetPrice ? 10 : 0;
+      const score      = gpScore + salesScore + abcBonus + priceBonus;
 
       const reasons: string[] = [];
       if (c.gpPct >= 40)         reasons.push(`GP สูง ${c.gpPct.toFixed(0)}%`);
@@ -327,10 +356,13 @@ export class ErpService {
       if (c.abcCompany === 'ACOM') reasons.push('สินค้า A (ขายดีมาก)');
       else if (c.abcCompany === 'BCOM') reasons.push('สินค้า B (ขายดี)');
       if (c.revenue > maxRevenue * 0.5) reasons.push('ยอดขายสูง');
+      if (fitsTargetPrice) reasons.push(`ราคา ฿${retailPrice} เข้าเกณฑ์ Buffet`);
 
       const warnings: string[] = [];
       if (c.gpPct < params.minGpPct + 5) warnings.push('GP ใกล้ขีดต่ำสุด');
       if (!['ACOM', 'BCOM'].includes(c.abcCompany)) warnings.push('ยอดขายระดับ C/D');
+      if (retailPrice > 0 && !fitsTargetPrice)
+        warnings.push(`ราคา ฿${retailPrice} เกิน ฿${params.targetPrice} (ต้องลด ${discountNeeded}%)`);
 
       return {
         sku: c.sku,
@@ -343,10 +375,15 @@ export class ErpService {
         revenue: c.revenue,
         qtySold: c.qtySold,
         abcCompany: c.abcCompany,
+        retailPrice,
+        costSales,
+        suggestedBuffetPrice,
+        fitsTargetPrice,
+        discountNeeded,
         score: Math.round(score),
         reasons,
         warnings,
-        hasExistingPromo: false, // set later if needed
+        hasExistingPromo: false,
       };
     });
 
