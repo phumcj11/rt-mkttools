@@ -402,7 +402,7 @@ export function DashboardView() {
             </ul>
           ) : !insightsLoading ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
-              กด "สร้าง AI Insight" เพื่อวิเคราะห์ข้อมูลยอดขายด้วย AI
+              กด &quot;สร้าง AI Insight&quot; เพื่อวิเคราะห์ข้อมูลยอดขายด้วย AI
             </p>
           ) : null}
         </CardContent>
