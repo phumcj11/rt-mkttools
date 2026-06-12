@@ -30,6 +30,7 @@ import {
   submitProductVideo,
   syncToDrive,
   uploadFileToDrive,
+  resolveMediaUrl,
   type DriveSettings,
   type ErpProduct,
   type MediaFile,
@@ -98,8 +99,12 @@ export function MediaView() {
     try {
       const res = await generateBenefitImage(sku);
       setResults((prev) => ({ ...prev, [sku]: res }));
-    } catch {
-      alert(`สร้างรูปไม่สำเร็จสำหรับ ${sku}`);
+      if (res.source === 'erp_composite') {
+        alert(`สร้างรูปสำเร็จ (ใช้รูป ERP + ป้ายราคา — DALL-E ไม่พร้อมหรือถูกปฏิเสธ)`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'สร้างรูปไม่สำเร็จ';
+      alert(`${sku}: ${msg}`);
     } finally {
       setGenerating(null);
     }
@@ -114,10 +119,14 @@ export function MediaView() {
       res.success.forEach((r) => { newResults[r.sku] = r; });
       setResults((prev) => ({ ...prev, ...newResults }));
       if (res.failed.length > 0) {
-        alert(`สำเร็จ ${res.success.length} รายการ, ล้มเหลว ${res.failed.length} รายการ`);
+        const detail = res.failed.map((f) => `${f.sku}: ${f.error}`).join('\n');
+        alert(`สำเร็จ ${res.success.length} รายการ, ล้มเหลว ${res.failed.length} รายการ\n\n${detail}`);
+      } else if (res.success.some((r) => r.source === 'erp_composite')) {
+        alert(`สำเร็จ ${res.success.length} รายการ (บางรายการใช้รูป ERP แทน DALL-E)`);
       }
-    } catch {
-      alert('Batch generate ล้มเหลว');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Batch generate ล้มเหลว';
+      alert(msg);
     } finally {
       setBatchRunning(false);
       setSelected(new Set());
@@ -280,7 +289,7 @@ export function MediaView() {
                       <div className="aspect-square rounded-lg overflow-hidden bg-muted/50 relative">
                         {result ? (
                           <img
-                            src={result.imageUrl}
+                            src={resolveMediaUrl(result.imageUrl)}
                             alt={result.productName}
                             className="w-full h-full object-cover"
                           />
@@ -405,7 +414,7 @@ export function MediaView() {
                         asChild
                         title="ดาวน์โหลด"
                       >
-                        <a href={file.url} download={file.filename}>
+                        <a href={resolveMediaUrl(file.url)} download={file.filename}>
                           <Download className="h-4 w-4" />
                         </a>
                       </Button>

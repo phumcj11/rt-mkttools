@@ -4,11 +4,17 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
 import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
@@ -72,6 +78,18 @@ export class MediaController {
   @Get('files')
   listFiles() {
     return this.media.listGeneratedFiles();
+  }
+
+  /** Serve a generated media file (public — img tags cannot send JWT) */
+  @Public()
+  @Get('serve/:filename')
+  serveFile(@Param('filename') filename: string, @Res() res: Response) {
+    const safe = path.basename(filename);
+    const filePath = path.join(process.cwd(), 'uploads', 'media', safe);
+    if (!fs.existsSync(filePath)) throw new NotFoundException('File not found');
+    const mime = safe.endsWith('.mp4') ? 'video/mp4' : 'image/png';
+    res.setHeader('Content-Type', mime);
+    res.sendFile(filePath);
   }
 
   /** Submit video generation task */

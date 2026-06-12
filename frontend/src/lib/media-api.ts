@@ -17,6 +17,17 @@ export interface ProductMediaResult {
   benefits: string;
   originalImageUrl: string;
   generatedAt: string;
+  source?: 'dalle' | 'erp_composite';
+}
+
+/** Static uploads served via /api/media/serve/:filename */
+export function resolveMediaUrl(path: string): string {
+  if (path.startsWith('http')) return path;
+  const api = (process.env.NEXT_PUBLIC_API_URL ?? '/api').replace(/\/$/, '');
+  if (path.startsWith('/media/')) return `${api}${path}`;
+  // legacy /uploads paths
+  const origin = api.replace(/\/api$/, '');
+  return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 export interface MediaFile {

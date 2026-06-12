@@ -149,17 +149,36 @@ export class OpenAiService {
     prompt: string,
     options: { size?: '1024x1024' | '1792x1024' | '1024x1792'; quality?: 'standard' | 'hd' } = {},
   ): Promise<ImageGenerationResult> {
-    const client = await this.ensureClient();
-    const response = await client.images.generate({
-      model: 'dall-e-3',
-      prompt,
-      n: 1,
-      size: options.size ?? '1024x1024',
-      quality: options.quality ?? 'standard',
-    });
-    const img = response.data?.[0];
-    if (!img?.url) throw new Error('DALL-E returned no image URL');
-    return { url: img.url, revisedPrompt: img.revised_prompt ?? undefined };
+    try {
+      const client = await this.ensureClient();
+      const response = await client.images.generate({
+        model: 'dall-e-3',
+        prompt,
+        n: 1,
+        size: options.size ?? '1024x1024',
+        quality: options.quality ?? 'standard',
+      });
+      const img = response.data?.[0];
+      if (!img?.url) throw new Error('DALL-E ไม่คืน URL รูป — ลองใหม่อีกครั้ง');
+      return { url: img.url, revisedPrompt: img.revised_prompt ?? undefined };
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'OPENAI_NOT_CONFIGURED') {
+        throw new Error('ยังไม่ได้ตั้งค่า OpenAI API Key — ไปที่ หน้าตั้งค่า → AI Configuration');
+      }
+      const apiMsg =
+        err && typeof err === 'object' && 'error' in err
+          ? String((err as { error?: { message?: string } }).error?.message ?? '')
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      if (apiMsg.includes('billing') || apiMsg.includes('quota')) {
+        throw new Error('OpenAI billing/quota หมด — ตรวจสอบบัญชี OpenAI');
+      }
+      if (apiMsg.includes('content_policy') || apiMsg.includes('safety')) {
+        throw new Error('DALL-E ปฏิเสธ prompt (content policy) — ระบบจะใช้รูป ERP แทน');
+      }
+      throw new Error(`DALL-E error: ${apiMsg.slice(0, 200)}`);
+    }
   }
 
   /**
