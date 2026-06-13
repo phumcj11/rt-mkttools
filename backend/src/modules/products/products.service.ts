@@ -135,7 +135,7 @@ export class ProductsService {
         qb.andWhere('p.is_active = 1 AND p.first_seen_at >= :today', { today });
         break;
       case 'new':
-        qb.andWhere('p.first_seen_at >= :since', { since });
+        qb.andWhere('p.is_active = 1 AND p.first_seen_at >= :since', { since });
         break;
       case 'changed':
         qb.andWhere('p.last_changed_at >= :since AND (p.first_seen_at IS NULL OR p.last_changed_at <> p.first_seen_at)', { since });
