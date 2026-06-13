@@ -273,10 +273,16 @@ export class VideoService {
 
     // Step 1 — Die-cut product hero (product only, no background)
     if (product.imageUrl && useCutout) {
-      const cutout = await this.cutoutProductImage(product.imageUrl, product.sku).catch((err) => {
+      let cutout = await this.cutoutProductImage(product.imageUrl, product.sku).catch((err) => {
         this.logger.warn(`Video cutout failed for ${product.sku}: ${String(err)}`);
         return null;
       });
+      if (!cutout) {
+        cutout = await this.extractProductPackaging(product).catch((err) => {
+          this.logger.warn(`Video AI packaging extraction failed for ${product.sku}: ${String(err)}`);
+          return null;
+        });
+      }
       if (cutout) {
         const filename = `video-cutout-${this.safeFilename(product.sku)}-${Date.now()}.png`;
         fs.writeFileSync(path.join(this.uploadsDir, filename), cutout);
@@ -293,7 +299,7 @@ export class VideoService {
 
     if (!cutoutUsed && product.imageUrl) {
       if (useCutout && prepareOptions.strictCutout) {
-        throw new Error('Die-cut product image unavailable — check n8n cutout webhook before generating video.');
+        throw new Error('ไม่สามารถแยกรูปสินค้าเดี่ยวได้ — ตรวจสอบ n8n cutout หรือ OpenAI image setting ก่อนสร้างวิดีโอ');
       }
       const original = await this.fetchImage(product.imageUrl, 'product original');
       if (original) referenceImages.push(original);
@@ -581,6 +587,26 @@ export class VideoService {
     if (!res.ok) return null;
     const contentType = res.headers.get('content-type') ?? 'image/jpeg';
     return { label, buffer: Buffer.from(await res.arrayBuffer()), mimeType: contentType, url };
+  }
+
+  private async extractProductPackaging(product: ErpProductCache): Promise<Buffer | null> {
+    if (!product.imageUrl) return null;
+    const original = await this.fetchImage(product.imageUrl, 'product source');
+    if (!original) return null;
+
+    const prompt = [
+      'Extract only the actual retail product packaging from this image.',
+      'The result must contain the product bottle, tube, pouch, box, or pack only.',
+      'Remove all price cards, red sale frames, discount badges, Thai promotion banners, shelf labels, backgrounds, hands, mascot, and store clutter.',
+      'Do not add new text, do not redesign the packaging, do not create an advertising poster.',
+      'Keep the packaging label and shape as recognizable as possible.',
+      'Place the isolated product packaging centered on a plain transparent or white background.',
+      `Product name: ${product.name}`,
+      product.brand ? `Brand: ${product.brand}` : '',
+    ].filter(Boolean).join('\n');
+
+    const edited = await this.openAi.editGptImage(prompt, original.buffer, original.mimeType, { size: '1024x1024' });
+    return edited.buffer;
   }
 
   private async cutoutProductImage(imageUrl: string, sku: string): Promise<Buffer | null> {
