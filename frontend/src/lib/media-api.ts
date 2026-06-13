@@ -84,6 +84,42 @@ export function generateGptBenefitImage(sku: string) {
   return apiRequest<ProductMediaResult>(`/media/products/${sku}/gpt-image`, { method: 'POST' });
 }
 
+// ---------------------------------------------------------------------------
+// POP Sticker Generator
+// ---------------------------------------------------------------------------
+
+export interface PopStickerCopy {
+  headline: string;
+  subheadline: string;
+  benefits: string[];
+  badges: string[];
+}
+
+export interface PopStickerVariation {
+  styleId: string;
+  styleName: string;
+  imageUrl: string;
+  filename: string;
+  promptUsed: string;
+  model: string;
+}
+
+export interface PopStickerResult {
+  sku: string;
+  productName: string;
+  copy: PopStickerCopy;
+  variations: PopStickerVariation[];
+  generatedAt: string;
+}
+
+/**
+ * AI Product POP Sticker Generator:
+ * analyzes ERP image → generates safe copy → 4 GPT Image shelf sticker variations
+ */
+export function generatePopStickers(sku: string) {
+  return apiRequest<PopStickerResult>(`/media/products/${sku}/pop-stickers`, { method: 'POST' });
+}
+
 export function uploadBenefitPoster(sku: string, dataUrl: string) {
   return apiRequest<{ imageUrl: string; filename: string }>(`/media/products/${sku}/poster`, {
     method: 'POST',

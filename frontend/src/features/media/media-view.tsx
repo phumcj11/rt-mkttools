@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { toPng } from 'html-to-image';
+import { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   CloudUpload,
@@ -12,7 +11,6 @@ import {
   RefreshCw,
   Sparkles,
   Video,
-  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,8 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  generateBenefitImage,
-  generateGptBenefitImage,
+  generatePopStickers,
   getDriveSettings,
   getN8nSettings,
   getVideoSettings,
@@ -33,17 +30,14 @@ import {
   submitProductVideo,
   syncToDrive,
   uploadFileToDrive,
-  uploadBenefitPoster,
-  proxyImageUrl,
   resolveMediaUrl,
   type DriveSettings,
   type ErpProduct,
   type MediaFile,
   type N8nSettings,
-  type ProductMediaResult,
+  type PopStickerResult,
   type VideoSettings,
 } from '@/lib/media-api';
-import { BenefitPosterTemplate, buildPosterData, POSTER_LAYOUTS, type BenefitPosterData, type PosterLayout } from './benefit-poster';
 import { PromoTab } from './promo-tab';
 
 type Tab = 'products' | 'promotion' | 'files' | 'settings';
@@ -53,10 +47,9 @@ export function MediaView() {
 
   const [products, setProducts] = useState<ErpProduct[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [generating, setGenerating] = useState<string | null>(null);
-  const [batchRunning, setBatchRunning] = useState(false);
-  const [results, setResults] = useState<Record<string, ProductMediaResult>>({});
+  const [popResults, setPopResults] = useState<Record<string, PopStickerResult>>({});
+  const [expandedSku, setExpandedSku] = useState<string | null>(null);
   const [videoSubmitting, setVideoSubmitting] = useState<string | null>(null);
   const [videoTasks, setVideoTasks] = useState<Record<string, string>>({});
 
@@ -74,57 +67,6 @@ export function MediaView() {
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
-  const [posterLayout, setPosterLayout] = useState<PosterLayout>('classic');
-
-  const posterRef = useRef<HTMLDivElement>(null);
-  const [posterRender, setPosterRender] = useState<{
-    sku: string;
-    data: BenefitPosterData;
-    layout: PosterLayout;
-    resolve: (imageUrl: string) => void;
-    reject: (err: Error) => void;
-  } | null>(null);
-
-  /** Off-screen poster → PNG → upload */
-  useEffect(() => {
-    if (!posterRender || !posterRef.current) return;
-    const timer = setTimeout(() => {
-      void (async () => {
-        try {
-          const dataUrl = await toPng(posterRef.current!, {
-            pixelRatio: 2,
-            cacheBust: true,
-          });
-          const saved = await uploadBenefitPoster(posterRender.sku, dataUrl);
-          posterRender.resolve(saved.imageUrl);
-        } catch (e) {
-          posterRender.reject(e instanceof Error ? e : new Error(String(e)));
-        } finally {
-          setPosterRender(null);
-        }
-      })();
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [posterRender]);
-
-  const capturePoster = (sku: string, product: ErpProduct, apiResult: ProductMediaResult) => {
-    const data = buildPosterData(product, apiResult.benefits, apiResult.benefitLines);
-    if (data.imageUrl) data.imageUrl = proxyImageUrl(data.imageUrl);
-    return new Promise<string>((resolve, reject) => {
-      setPosterRender({ sku, data, layout: posterLayout, resolve, reject });
-    });
-  };
-
-  const generateWithPoster = async (sku: string): Promise<ProductMediaResult> => {
-    if (posterLayout === 'ai_gpt') {
-      return generateGptBenefitImage(sku);
-    }
-    const product = products.find((p) => p.sku === sku);
-    if (!product) throw new Error(`ไม่พบสินค้า ${sku}`);
-    const apiResult = await generateBenefitImage(sku);
-    const imageUrl = await capturePoster(sku, product, apiResult);
-    return { ...apiResult, imageUrl, source: 'benefit_poster' };
-  };
 
   useEffect(() => {
     setProductsLoading(true);
@@ -149,52 +91,18 @@ export function MediaView() {
     }
   }, [tab]);
 
-  const toggleSelect = (sku: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(sku) ? next.delete(sku) : next.add(sku);
-      return next;
-    });
-
-  const handleGenerateOne = async (sku: string) => {
+  const handleGeneratePopStickers = async (sku: string) => {
     setGenerating(sku);
+    setExpandedSku(sku);
     try {
-      const res = await generateWithPoster(sku);
-      setResults((prev) => ({ ...prev, [sku]: res }));
+      const res = await generatePopStickers(sku);
+      setPopResults((prev) => ({ ...prev, [sku]: res }));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'สร้างรูปไม่สำเร็จ';
+      const msg = err instanceof Error ? err.message : 'สร้าง POP Sticker ไม่สำเร็จ';
       alert(`${sku}: ${msg}`);
     } finally {
       setGenerating(null);
     }
-  };
-
-  const handleBatchGenerate = async () => {
-    if (selected.size === 0) return;
-    setBatchRunning(true);
-    const skus = Array.from(selected);
-    const success: ProductMediaResult[] = [];
-    const failed: { sku: string; error: string }[] = [];
-
-    for (const sku of skus) {
-      try {
-        success.push(await generateWithPoster(sku));
-      } catch (err: unknown) {
-        failed.push({ sku, error: err instanceof Error ? err.message : String(err) });
-      }
-    }
-
-    const newResults: Record<string, ProductMediaResult> = {};
-    success.forEach((r) => { newResults[r.sku] = r; });
-    setResults((prev) => ({ ...prev, ...newResults }));
-
-    if (failed.length > 0) {
-      const detail = failed.map((f) => `${f.sku}: ${f.error}`).join('\n');
-      alert(`สำเร็จ ${success.length} รายการ, ล้มเหลว ${failed.length} รายการ\n\n${detail}`);
-    }
-
-    setBatchRunning(false);
-    setSelected(new Set());
   };
 
   const handleVideoSubmit = async (sku: string) => {
@@ -279,7 +187,7 @@ export function MediaView() {
   };
 
   const TABS: { id: Tab; label: string; icon: typeof Image }[] = [
-    { id: 'products',  label: 'Benefit Poster', icon: Sparkles },
+    { id: 'products',  label: 'POP Sticker AI', icon: Sparkles },
     { id: 'promotion', label: 'Promotion Poster', icon: Film },
     { id: 'files',     label: 'ไฟล์ที่สร้าง', icon: Image },
     { id: 'settings',  label: 'ตั้งค่า', icon: CheckCircle2 },
@@ -310,60 +218,27 @@ export function MediaView() {
         ))}
       </div>
 
-      {/* Products Tab */}
+      {/* POP Sticker AI Tab */}
       {tab === 'products' && (
         <div className="space-y-4">
-          {/* Layout picker */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">เลือกรูปแบบโปสเตอร์</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                {POSTER_LAYOUTS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setPosterLayout(opt.id)}
-                    className={`flex flex-col items-start rounded-lg border p-3 text-left transition-colors ${
-                      posterLayout === opt.id
-                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                        : 'border-border hover:bg-accent'
-                    }`}
-                  >
-                    <span className="text-sm font-semibold">{opt.label}</span>
-                    <span className="text-[11px] text-muted-foreground mt-0.5">{opt.description}</span>
-                    <Badge variant="outline" className="mt-2 text-[10px]">{opt.ratio}</Badge>
-                  </button>
-                ))}
+          {/* Header info */}
+          <Card className="border-violet-200 bg-violet-50/50">
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-start gap-3">
+                <Sparkles className="h-5 w-5 text-violet-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-violet-900">AI Product POP Sticker Generator</p>
+                  <p className="text-xs text-violet-700 mt-0.5">
+                    เลือกสินค้า → AI วิเคราะห์รูป + สร้าง copy ที่ปลอดภัย → สร้าง 4 แบบ shelf sticker สำหรับพิมพ์
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">ใช้เวลาประมาณ 1–2 นาที/สินค้า · ~$0.12–0.40/สินค้า (GPT Image ×4)</p>
+                </div>
               </div>
-              {posterLayout === 'ai_gpt' && (
-                <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                  GPT Image ใช้รูป ERP เป็นฐาน + AI ออกแบบโปสเตอร์ใหม่ ใช้เวลา ~15–30 วิ/ชิ้น มีค่าใช้จ่าย ~$0.04–0.12/รูป
-                </p>
-              )}
             </CardContent>
           </Card>
 
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">{products.length} สินค้า</span>
-            {selected.size > 0 && (
-              <>
-                <Badge variant="secondary">{selected.size} เลือกอยู่</Badge>
-                <Button
-                  size="sm"
-                  disabled={batchRunning}
-                  onClick={() => void handleBatchGenerate()}
-                >
-                  {batchRunning
-                    ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />กำลังสร้าง...</>
-                    : <><Sparkles className="mr-2 h-3.5 w-3.5" />Batch Generate รูป ({selected.size})</>}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </>
-            )}
           </div>
 
           {productsLoading ? (
@@ -373,90 +248,139 @@ export function MediaView() {
           ) : products.length === 0 ? (
             <p className="text-muted-foreground text-sm">ยังไม่มีข้อมูลสินค้า — ซิงค์สินค้าจาก ERP ก่อน</p>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-3">
               {products.map((p) => {
-                const result = results[p.sku];
+                const popResult = popResults[p.sku];
                 const isGenerating = generating === p.sku;
+                const isExpanded = expandedSku === p.sku;
                 const isVideoSubmitting = videoSubmitting === p.sku;
                 const hasVideoTask = !!videoTasks[p.sku];
 
                 return (
-                  <Card
-                    key={p.sku}
-                    className={`cursor-pointer transition-colors ${selected.has(p.sku) ? 'border-primary' : ''}`}
-                    onClick={() => toggleSelect(p.sku)}
-                  >
-                    <CardContent className="pt-3 space-y-2">
-                      {/* Product image or generated result */}
-                      <div className="aspect-square rounded-lg overflow-hidden bg-muted/50 relative">
-                        {result ? (
-                          <img
-                            src={resolveMediaUrl(result.imageUrl)}
-                            alt={result.productName}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : p.imageUrl ? (
-                          <img
-                            src={p.imageUrl}
-                            alt={p.name}
-                            className="w-full h-full object-cover opacity-70"
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center">
-                            <Image className="h-8 w-8 text-muted-foreground/50" />
-                          </div>
-                        )}
-                        {selected.has(p.sku) && (
-                          <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5">
-                            <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
-                          </div>
-                        )}
-                        {result?.source === 'gpt_image' && (
-                          <Badge className="absolute bottom-2 left-2 text-[10px] bg-violet-600 hover:bg-violet-600">
-                            AI Generated
-                          </Badge>
-                        )}
+                  <Card key={p.sku} className={`transition-colors ${isExpanded ? 'border-violet-300' : ''}`}>
+                    <CardContent className="pt-3 space-y-3">
+                      {/* Product row */}
+                      <div className="flex items-center gap-3">
+                        <div className="h-14 w-14 rounded-lg overflow-hidden bg-muted/50 shrink-0">
+                          {p.imageUrl ? (
+                            <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="flex h-full items-center justify-center">
+                              <Image className="h-6 w-6 text-muted-foreground/50" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{p.name}</p>
+                          <p className="text-xs text-muted-foreground">{p.category} · ฿{p.retailPrice}</p>
+                          {popResult && (
+                            <p className="text-xs text-violet-600 mt-0.5">
+                              ✓ สร้างแล้ว {popResult.variations.filter((v) => v.imageUrl).length}/4 variations
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          <Button
+                            size="sm"
+                            variant={popResult ? 'outline' : 'default'}
+                            className="h-8 text-xs"
+                            disabled={isGenerating || !!generating}
+                            onClick={() => void handleGeneratePopStickers(p.sku)}
+                          >
+                            {isGenerating ? (
+                              <><Loader2 className="h-3 w-3 animate-spin mr-1" />กำลังสร้าง...</>
+                            ) : (
+                              <><Sparkles className="h-3 w-3 mr-1" />{popResult ? 'Regenerate' : 'สร้าง POP'}</>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs"
+                            disabled={isVideoSubmitting || hasVideoTask}
+                            onClick={() => void handleVideoSubmit(p.sku)}
+                          >
+                            {isVideoSubmitting ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : hasVideoTask ? (
+                              <><CheckCircle2 className="h-3 w-3 text-green-500 mr-1" />Video</>
+                            ) : (
+                              <><Video className="h-3 w-3 mr-1" />Video</>
+                            )}
+                          </Button>
+                          {popResult && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 text-xs"
+                              onClick={() => setExpandedSku(isExpanded ? null : p.sku)}
+                            >
+                              {isExpanded ? '▲ ซ่อน' : '▼ ดู 4 แบบ'}
+                            </Button>
+                          )}
+                        </div>
                       </div>
 
-                      <div>
-                        <p className="font-medium text-sm truncate">{p.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.category} · ฿{p.retailPrice}
-                        </p>
-                      </div>
-
-                      {result && (
-                        <div className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground line-clamp-3">
-                          {result.benefits}
+                      {/* Generating progress */}
+                      {isGenerating && (
+                        <div className="rounded-md bg-violet-50 border border-violet-100 px-3 py-2.5 text-xs text-violet-700 space-y-1">
+                          <p className="font-medium">กำลังสร้าง POP Sticker AI...</p>
+                          <p>1. วิเคราะห์รูปสินค้า → 2. สร้าง copy ปลอดภัย → 3. สร้างภาพ 4 แบบ</p>
+                          <p className="text-violet-500">ใช้เวลาประมาณ 1–2 นาที</p>
                         </div>
                       )}
 
-                      <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 h-7 text-xs"
-                          disabled={isGenerating || batchRunning}
-                          onClick={() => void handleGenerateOne(p.sku)}
-                        >
-                          {isGenerating
-                            ? <Loader2 className="h-3 w-3 animate-spin" />
-                            : <><Sparkles className="mr-1 h-3 w-3" />{result ? 'Regenerate' : 'รูปสรรพคุณ'}</>}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 h-7 text-xs"
-                          disabled={isVideoSubmitting || hasVideoTask}
-                          onClick={() => void handleVideoSubmit(p.sku)}
-                        >
-                          {isVideoSubmitting
-                            ? <Loader2 className="h-3 w-3 animate-spin" />
-                            : hasVideoTask
-                            ? <><CheckCircle2 className="mr-1 h-3 w-3 text-green-500" />ส่งแล้ว</>
-                            : <><Video className="mr-1 h-3 w-3" />Video</>}
-                        </Button>
-                      </div>
+                      {/* 4-variation gallery */}
+                      {isExpanded && popResult && (
+                        <div className="space-y-3 pt-1">
+                          {/* Copy summary */}
+                          <div className="rounded-md bg-muted/40 px-3 py-2 text-xs space-y-1">
+                            <p className="font-semibold text-sm">{popResult.copy.headline}</p>
+                            <p className="text-muted-foreground">{popResult.copy.subheadline}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {popResult.copy.benefits.map((b) => (
+                                <Badge key={b} variant="secondary" className="text-[10px]">✓ {b}</Badge>
+                              ))}
+                              {popResult.copy.badges.map((b) => (
+                                <Badge key={b} variant="outline" className="text-[10px]">{b}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                          {/* Image grid */}
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            {popResult.variations.map((v) => (
+                              <div key={v.styleId} className="space-y-1">
+                                <div className="aspect-square rounded-lg overflow-hidden bg-muted/50 relative group">
+                                  {v.imageUrl ? (
+                                    <>
+                                      <img
+                                        src={resolveMediaUrl(v.imageUrl)}
+                                        alt={v.styleName}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <a
+                                          href={resolveMediaUrl(v.imageUrl)}
+                                          download={v.filename}
+                                          className="bg-white text-black rounded-full p-2"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <Download className="h-4 w-4" />
+                                        </a>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="flex h-full items-center justify-center text-xs text-muted-foreground px-2 text-center">
+                                      สร้างไม่สำเร็จ
+                                    </div>
+                                  )}
+                                </div>
+                                <p className="text-[10px] font-medium text-center truncate px-1">{v.styleName}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -698,14 +622,6 @@ export function MediaView() {
         </div>
       )}
 
-      {/* Off-screen poster renderer for html-to-image */}
-      {posterRender && posterRender.layout !== 'ai_gpt' && (
-        <div aria-hidden style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }}>
-          <div ref={posterRef}>
-            <BenefitPosterTemplate data={posterRender.data} layout={posterRender.layout} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

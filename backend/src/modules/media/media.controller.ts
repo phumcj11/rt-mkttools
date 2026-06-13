@@ -109,6 +109,17 @@ export class MediaController {
     return this.media.generateGptBenefitImage(sku);
   }
 
+  /**
+   * AI Product POP Sticker Generator:
+   * analyzes ERP image → generates safe copy → produces 4 GPT Image shelf sticker variations
+   */
+  @Post('products/:sku/pop-stickers')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  generatePopStickers(@Param('sku') sku: string) {
+    return this.media.generatePopStickers(sku);
+  }
+
   /** Save client-rendered benefit poster PNG */
   @Post('products/:sku/poster')
   @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')

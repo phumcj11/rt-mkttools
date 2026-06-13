@@ -38,6 +38,34 @@ export interface PromoCompositeResult {
   cutoutUsed: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// POP Sticker types
+// ---------------------------------------------------------------------------
+
+export interface PopStickerCopy {
+  headline: string;
+  subheadline: string;
+  benefits: string[];
+  badges: string[];
+}
+
+export interface PopStickerVariation {
+  styleId: string;
+  styleName: string;
+  imageUrl: string;
+  filename: string;
+  promptUsed: string;
+  model: string;
+}
+
+export interface PopStickerResult {
+  sku: string;
+  productName: string;
+  copy: PopStickerCopy;
+  variations: PopStickerVariation[];
+  generatedAt: string;
+}
+
 const PROMO_TYPE_LABELS: Record<string, string> = {
   spend_free_gift: 'Spend & Free Gift — ซื้อครบ X บาท รับของแถม',
   buy_x_get_y: 'Buy X Get Y — ซื้อ X ได้ Y ฟรี',
@@ -328,6 +356,218 @@ export class MediaService {
       '- Include "100 Baht Shop Thailand" branding at the bottom',
       '- Professional quality suitable for social media and in-store display',
       '- All benefit text must be in Thai language',
+    ].join('\n');
+  }
+
+  // ---------------------------------------------------------------------------
+  // POP Sticker Generator
+  // ---------------------------------------------------------------------------
+
+  private static readonly POP_SAFE_WORDS = [
+    'Supports', 'Helps maintain', 'Daily wellness', 'Natural goodness',
+    'Rich in natural antioxidants', 'Rich in', 'Good source of',
+  ];
+
+  private static readonly POP_BANNED_WORDS = [
+    'Cure', 'Treat', 'Prevent disease', 'Guaranteed result',
+    'Medicine', 'Doctor recommended', 'Clinically proven', 'Heals',
+  ];
+
+  /** 4 fixed shelf sticker styles */
+  private static readonly POP_STYLES = [
+    {
+      id: 'style_01',
+      name: 'Healthy Aging Premium',
+      mood: 'Clean Japanese pharmacy style, white background, gold and black color theme.',
+      badge: 'Best Seller',
+    },
+    {
+      id: 'style_02',
+      name: 'Natural Beauty From Inside',
+      mood: 'Luxury wellness and beauty supplement style, premium gold accents, modern clean layout.',
+      badge: 'Premium Quality',
+    },
+    {
+      id: 'style_03',
+      name: 'Tourist Favorite Retail POP',
+      mood: 'Bright retail promotional sticker for tourist stores, attractive, easy to notice from 5 meters away.',
+      badge: 'Popular in Thailand',
+    },
+    {
+      id: 'style_04',
+      name: 'Japanese Drugstore Best Seller',
+      mood: 'Watsons / Matsumoto Kiyoshi inspired shelf talker, clean white background, gold premium frame.',
+      badge: 'Tourist Favorite',
+    },
+  ];
+
+  /**
+   * Full AI POP Sticker workflow:
+   * 1. Analyze ERP product image → get product visual facts
+   * 2. GPT generates claim-safe retail copy (headline, 3 benefits, badges)
+   * 3. Generate 4 × 1:1 GPT Image variations using product image as reference
+   * 4. Save all 4 PNGs to uploads/media
+   */
+  async generatePopStickers(sku: string): Promise<PopStickerResult> {
+    const product = await this.productRepo.findOneBy({ sku });
+    if (!product) throw new BadRequestException(`ไม่พบสินค้า SKU "${sku}" ใน cache — ซิงค์ ERP ก่อน`);
+
+    this.logger.log(`POP Sticker generating for SKU: ${sku}`);
+
+    // Step 1: analyze product image for visual facts
+    let visualFacts = `Product: ${product.name}. Category: ${product.category}. Price: ฿${product.retailPrice}.`;
+    let productImageBuffer: Buffer | null = null;
+    let productImageMime = 'image/jpeg';
+
+    if (product.imageUrl) {
+      try {
+        const { buffer, contentType } = await this.proxyImage(product.imageUrl);
+        productImageBuffer = buffer;
+        productImageMime = contentType;
+        const dataUrl = `data:${contentType};base64,${buffer.toString('base64')}`;
+        const analysis = await this.openAi.analyzeImage(
+          dataUrl,
+          'Describe this product packaging in 3-4 sentences: main ingredient visuals, package color, shape, and any key text on the label. Be specific — e.g. "white bottle, black sesame seeds visible on label, gold cap". Used for retail POP sticker design.',
+        );
+        if (analysis) visualFacts = analysis;
+      } catch (err) {
+        this.logger.warn(`POP: product image fetch/analysis failed: ${String(err)}`);
+      }
+    }
+
+    // Step 2: generate safe retail copy
+    const copy = await this.generatePopCopy(product.name, product.category, product.retailPrice, visualFacts);
+
+    // Step 3 & 4: generate 4 images, save each
+    const timestamp = Date.now();
+    const variations: PopStickerVariation[] = [];
+
+    for (const style of MediaService.POP_STYLES) {
+      try {
+        const prompt = this.buildPopImagePrompt(product.name, copy, visualFacts, style);
+        let imageResult;
+
+        if (productImageBuffer) {
+          try {
+            imageResult = await this.openAi.editGptImage(prompt, productImageBuffer, productImageMime, { size: '1024x1024' });
+          } catch (editErr) {
+            this.logger.warn(`POP edit failed for ${style.id}, falling back to generate: ${String(editErr)}`);
+            imageResult = await this.openAi.generateGptImage(prompt, { size: '1024x1024' });
+          }
+        } else {
+          imageResult = await this.openAi.generateGptImage(prompt, { size: '1024x1024' });
+        }
+
+        const filename = `pop-${this.safeFilename(sku)}-${style.id}-${timestamp}.png`;
+        const localPath = path.join(this.uploadsDir, filename);
+        fs.writeFileSync(localPath, imageResult.buffer);
+
+        variations.push({
+          styleId: style.id,
+          styleName: style.name,
+          imageUrl: `/media/serve/${filename}`,
+          filename,
+          promptUsed: prompt,
+          model: imageResult.model,
+        });
+        this.logger.log(`POP saved: ${filename} (${style.name})`);
+      } catch (err) {
+        this.logger.error(`POP style ${style.id} failed: ${String(err)}`);
+        variations.push({
+          styleId: style.id,
+          styleName: style.name,
+          imageUrl: '',
+          filename: '',
+          promptUsed: '',
+          model: '',
+        });
+      }
+    }
+
+    return {
+      sku,
+      productName: product.name,
+      copy,
+      variations,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  private async generatePopCopy(
+    productName: string,
+    category: string,
+    price: string,
+    visualFacts: string,
+  ): Promise<PopStickerCopy> {
+    const safeWords = MediaService.POP_SAFE_WORDS.join(', ');
+    const bannedWords = MediaService.POP_BANNED_WORDS.join(', ');
+
+    const system = [
+      'You are a retail marketing copywriter for a Thai souvenir and health supplement store.',
+      'Write short, readable POP sticker copy for tourists and walk-in customers.',
+      'Rules:',
+      `- Use only these safe claim words: ${safeWords}`,
+      `- NEVER use: ${bannedWords}`,
+      '- Maximum 3 benefits, each ≤6 words',
+      '- Headline: ≤8 words, all caps or title case',
+      '- Subheadline: ≤8 words',
+      '- 2-3 badge labels (e.g. Best Seller, Popular in Thailand, 30 Softgel Capsules)',
+      'Respond with ONLY valid JSON, no markdown, no explanation.',
+    ].join('\n');
+
+    const user = [
+      `Product: ${productName}`,
+      `Category: ${category}`,
+      `Price: ฿${price}`,
+      `Visual facts: ${visualFacts}`,
+      '',
+      'Return JSON:',
+      '{"headline":"...","subheadline":"...","benefits":["...","...","..."],"badges":["...","..."]}',
+    ].join('\n');
+
+    try {
+      const res = await this.openAi.complete(system, user);
+      const json = JSON.parse(res.content.trim().replace(/^```json\n?/, '').replace(/\n?```$/, '')) as PopStickerCopy;
+      if (json.headline && Array.isArray(json.benefits)) {
+        json.benefits = json.benefits.slice(0, 3);
+        return json;
+      }
+    } catch (err) {
+      this.logger.warn(`POP copy generation failed, using fallback: ${String(err)}`);
+    }
+
+    return {
+      headline: productName.toUpperCase().slice(0, 40),
+      subheadline: 'Natural Goodness for Daily Wellness',
+      benefits: ['Supports Daily Wellness', 'Natural Ingredients', 'Easy to Use'],
+      badges: ['Best Seller', 'Popular in Thailand'],
+    };
+  }
+
+  private buildPopImagePrompt(
+    productName: string,
+    copy: PopStickerCopy,
+    visualFacts: string,
+    style: { id: string; name: string; mood: string; badge: string },
+  ): string {
+    const benefits = copy.benefits.slice(0, 3).map((b) => `• ${b}`).join(', ');
+    return [
+      `Create a premium retail shelf POP sticker (1:1 square format, print-ready, high resolution).`,
+      `Product: ${productName}`,
+      `Style: ${style.mood}`,
+      `Product visual reference: ${visualFacts}`,
+      `Headline: ${copy.headline}`,
+      `Subheadline: ${copy.subheadline}`,
+      `Benefits: ${benefits}`,
+      `Badge: ${style.badge}`,
+      `Design rules:`,
+      `- Product bottle/package must be large, centered, and clearly visible`,
+      `- Maximum 3 benefit text lines, short and readable from 3 meters`,
+      `- Bold headline at the top`,
+      `- Ingredient visuals (seeds, capsules, drops) as decorative accents`,
+      `- No medical claims, no disease treatment wording`,
+      `- Professional retail shelf sticker, suitable for tourist souvenir stores in Thailand`,
+      `- 1:1 ratio, high resolution, no watermark, print-ready`,
     ].join('\n');
   }
 
