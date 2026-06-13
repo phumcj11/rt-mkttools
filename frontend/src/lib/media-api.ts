@@ -143,6 +143,69 @@ export function listBrandAssets() {
   return apiRequest<BrandAsset[]>('/media/brand-assets');
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('อ่านไฟล์ไม่สำเร็จ'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageFromFile(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('โหลดรูปไม่สำเร็จ'));
+    };
+    img.src = url;
+  });
+}
+
+/** Resize/compress brand assets so JSON upload stays under reverse-proxy limits (~12MB). */
+export async function prepareBrandAssetDataUrl(file: File, maxEdge = 1200): Promise<string> {
+  const img = await loadImageFromFile(file);
+  let width = img.naturalWidth;
+  let height = img.naturalHeight;
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  width = Math.max(1, Math.round(width * scale));
+  height = Math.max(1, Math.round(height * scale));
+
+  const needsResize = scale < 1;
+  const needsCompress = file.size > 900 * 1024;
+  if (!needsResize && !needsCompress) {
+    return readFileAsDataUrl(file);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('ไม่สามารถประมวลผลรูปได้');
+
+  ctx.drawImage(img, 0, 0, width, height);
+
+  const keepAlpha = file.type === 'image/png' || file.type === 'image/webp';
+  let dataUrl = keepAlpha
+    ? canvas.toDataURL('image/png')
+    : canvas.toDataURL('image/jpeg', 0.88);
+
+  if (dataUrl.length > 6 * 1024 * 1024) {
+    dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+  }
+  if (dataUrl.length > 8 * 1024 * 1024) {
+    throw new Error('รูปใหญ่เกินไป — ลองใช้ไฟล์ที่เล็กลง (แนะนำต่ำกว่า 5MB)');
+  }
+
+  return dataUrl;
+}
+
 export function uploadBrandAsset(kind: 'logo' | 'mascot', dataUrl: string) {
   return apiRequest<BrandAsset>('/media/brand-assets/upload', {
     method: 'POST',

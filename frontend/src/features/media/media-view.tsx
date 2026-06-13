@@ -25,6 +25,7 @@ import {
   listBrandAssets,
   listMediaFiles,
   listMediaProducts,
+  prepareBrandAssetDataUrl,
   saveDriveSettings,
   saveN8nSettings,
   saveVideoSettings,
@@ -123,19 +124,30 @@ export function MediaView() {
   const handleBrandAssetUpload = async (kind: 'logo' | 'mascot', file: File | null) => {
     if (!file) return;
     setBrandUploading(kind);
+    const knownBefore = new Set(brandAssets.map((a) => a.filename));
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error ?? new Error('อ่านไฟล์ไม่สำเร็จ'));
-        reader.readAsDataURL(file);
-      });
-      const saved = await uploadBrandAsset(kind, dataUrl);
-      if (!saved?.filename || !saved.url) {
-        throw new Error('เซิร์ฟเวอร์ไม่ส่งข้อมูล asset กลับมาครบ');
+      const dataUrl = await prepareBrandAssetDataUrl(file);
+      let saved: BrandAsset | null = null;
+      try {
+        saved = await uploadBrandAsset(kind, dataUrl);
+      } catch {
+        // Server may still have saved the file — recover via list below.
       }
-      setBrandAssets((prev) => [saved, ...(Array.isArray(prev) ? prev : [])]);
-      setSelectedBrandAssets((prev) => new Set(prev).add(saved.filename));
+
+      const latest = await listBrandAssets().catch(() => null);
+      const assets = Array.isArray(latest) ? latest : brandAssets;
+      setBrandAssets(assets);
+
+      const uploaded =
+        saved?.filename && saved.url
+          ? saved
+          : assets.find((asset) => asset.kind === kind && !knownBefore.has(asset.filename));
+
+      if (!uploaded?.filename || !uploaded.url) {
+        throw new Error('อัปโหลดไม่สำเร็จ — ลองใช้รูป PNG/JPG ที่เล็กลง (แนะนำต่ำกว่า 5MB)');
+      }
+
+      setSelectedBrandAssets((prev) => new Set(prev).add(uploaded.filename));
       setIncludeBranded(true);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'อัปโหลด Brand Asset ไม่สำเร็จ');
