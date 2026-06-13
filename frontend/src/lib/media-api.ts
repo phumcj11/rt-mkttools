@@ -102,6 +102,7 @@ export interface PopStickerVariation {
   filename: string;
   promptUsed: string;
   model: string;
+  cutoutUsed: boolean;
 }
 
 export interface PopStickerResult {
@@ -110,6 +111,7 @@ export interface PopStickerResult {
   copy: PopStickerCopy;
   variations: PopStickerVariation[];
   generatedAt: string;
+  productImageSize?: { width: number; height: number };
 }
 
 /**

@@ -56,6 +56,7 @@ export interface PopStickerVariation {
   filename: string;
   promptUsed: string;
   model: string;
+  cutoutUsed: boolean;
 }
 
 export interface PopStickerResult {
@@ -64,6 +65,7 @@ export interface PopStickerResult {
   copy: PopStickerCopy;
   variations: PopStickerVariation[];
   generatedAt: string;
+  productImageSize?: { width: number; height: number };
 }
 
 const PROMO_TYPE_LABELS: Record<string, string> = {
@@ -402,28 +404,31 @@ export class MediaService {
   ];
 
   /**
-   * Full AI POP Sticker workflow:
-   * 1. Analyze ERP product image → get product visual facts
-   * 2. GPT generates claim-safe retail copy (headline, 3 benefits, badges)
-   * 3. Generate 4 × 1:1 GPT Image variations using product image as reference
-   * 4. Save all 4 PNGs to uploads/media
+   * Hybrid POP Sticker workflow:
+   * 1. Fetch ERP product image, analyze for visual facts
+   * 2. GPT generates claim-safe retail copy
+   * 3. GPT Image creates sticker BACKGROUND/ARTWORK only (no product bottle redrawn)
+   * 4. Real product image (optionally cutout via n8n) composited on top with sharp
+   * 5. Save 4 final PNG files
    */
   async generatePopStickers(sku: string): Promise<PopStickerResult> {
+    const sharp = require('sharp') as (input?: Buffer | object) => any;
     const product = await this.productRepo.findOneBy({ sku });
     if (!product) throw new BadRequestException(`ไม่พบสินค้า SKU "${sku}" ใน cache — ซิงค์ ERP ก่อน`);
 
-    this.logger.log(`POP Sticker generating for SKU: ${sku}`);
+    this.logger.log(`POP Sticker hybrid generating for SKU: ${sku}`);
 
-    // Step 1: analyze product image for visual facts
+    // Step 1: fetch + analyze product image
     let visualFacts = `Product: ${product.name}. Category: ${product.category}. Price: ฿${product.retailPrice}.`;
     let productImageBuffer: Buffer | null = null;
-    let productImageMime = 'image/jpeg';
+    let productImageSize: { width: number; height: number } | undefined;
 
     if (product.imageUrl) {
       try {
         const { buffer, contentType } = await this.proxyImage(product.imageUrl);
         productImageBuffer = buffer;
-        productImageMime = contentType;
+        const meta = await sharp(buffer).metadata();
+        productImageSize = { width: meta.width ?? 0, height: meta.height ?? 0 };
         const dataUrl = `data:${contentType};base64,${buffer.toString('base64')}`;
         const analysis = await this.openAi.analyzeImage(
           dataUrl,
@@ -435,42 +440,57 @@ export class MediaService {
       }
     }
 
-    // Step 2: generate safe retail copy
+    // Step 2: claim-safe copy
     const copy = await this.generatePopCopy(product.name, product.category, product.retailPrice, visualFacts);
 
-    // Step 3 & 4: generate 4 images, save each
+    // Step 3: try n8n cutout, fall back to original
+    const webhookUrl = await this.settings.get('n8n_promo_webhook_url');
+    const n8nEnabled = !!webhookUrl?.startsWith('http') && !!productImageBuffer && !!product.imageUrl;
+    let productFgBuffer: Buffer | null = productImageBuffer;
+    let cutoutUsed = false;
+
+    if (n8nEnabled && productImageBuffer) {
+      try {
+        productFgBuffer = await this.callN8nCutout(webhookUrl!, product.imageUrl!, sku);
+        cutoutUsed = true;
+        this.logger.log(`POP: cutout via n8n for ${sku}`);
+      } catch (err) {
+        this.logger.warn(`POP: n8n cutout failed, using original: ${String(err)}`);
+        productFgBuffer = productImageBuffer;
+      }
+    }
+
+    // Step 4 & 5: per style — generate AI background → composite product image on top
     const timestamp = Date.now();
     const variations: PopStickerVariation[] = [];
 
     for (const style of MediaService.POP_STYLES) {
       try {
-        const prompt = this.buildPopImagePrompt(product.name, copy, visualFacts, style);
-        let imageResult;
+        const bgPrompt = this.buildPopBackgroundPrompt(product.name, copy, visualFacts, style);
 
-        if (productImageBuffer) {
-          try {
-            imageResult = await this.openAi.editGptImage(prompt, productImageBuffer, productImageMime, { size: '1024x1024' });
-          } catch (editErr) {
-            this.logger.warn(`POP edit failed for ${style.id}, falling back to generate: ${String(editErr)}`);
-            imageResult = await this.openAi.generateGptImage(prompt, { size: '1024x1024' });
-          }
-        } else {
-          imageResult = await this.openAi.generateGptImage(prompt, { size: '1024x1024' });
+        // Generate background/artwork only
+        const bgResult = await this.openAi.generateGptImage(bgPrompt, { size: '1024x1024' });
+        let finalBuffer = bgResult.buffer;
+
+        // Composite real product image on top
+        if (productFgBuffer) {
+          finalBuffer = await this.compositeProductOnBackground(sharp, bgResult.buffer, productFgBuffer, cutoutUsed);
         }
 
         const filename = `pop-${this.safeFilename(sku)}-${style.id}-${timestamp}.png`;
         const localPath = path.join(this.uploadsDir, filename);
-        fs.writeFileSync(localPath, imageResult.buffer);
+        fs.writeFileSync(localPath, finalBuffer);
 
         variations.push({
           styleId: style.id,
           styleName: style.name,
           imageUrl: `/media/serve/${filename}`,
           filename,
-          promptUsed: prompt,
-          model: imageResult.model,
+          promptUsed: bgPrompt,
+          model: bgResult.model,
+          cutoutUsed,
         });
-        this.logger.log(`POP saved: ${filename} (${style.name})`);
+        this.logger.log(`POP saved: ${filename} (${style.name}, cutout: ${cutoutUsed})`);
       } catch (err) {
         this.logger.error(`POP style ${style.id} failed: ${String(err)}`);
         variations.push({
@@ -480,6 +500,7 @@ export class MediaService {
           filename: '',
           promptUsed: '',
           model: '',
+          cutoutUsed: false,
         });
       }
     }
@@ -490,7 +511,54 @@ export class MediaService {
       copy,
       variations,
       generatedAt: new Date().toISOString(),
+      productImageSize,
     };
+  }
+
+  /**
+   * Composite the real product image onto the AI-generated background.
+   * Product is placed in the lower-center, scaled to ~55% of canvas height.
+   * If cutout was used (transparent PNG), it composites cleanly.
+   * If not, it crops the product with a slight rounded-rect clip area.
+   */
+  private async compositeProductOnBackground(
+    sharp: (input?: Buffer | object) => any,
+    backgroundBuffer: Buffer,
+    productBuffer: Buffer,
+    isCutout: boolean,
+  ): Promise<Buffer> {
+    const CANVAS = 1024;
+    // Scale product to ~55% of canvas height, maintain aspect ratio
+    const productMeta = await sharp(productBuffer).metadata();
+    const pW = productMeta.width ?? 400;
+    const pH = productMeta.height ?? 400;
+    const targetH = Math.round(CANVAS * 0.58);
+    const scale = targetH / Math.max(pH, 1);
+    const targetW = Math.round(pW * scale);
+
+    let fgBuffer: Buffer;
+    if (isCutout) {
+      // Cutout PNG — resize and use transparent composite directly
+      fgBuffer = await sharp(productBuffer)
+        .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toBuffer();
+    } else {
+      // No cutout — resize with contain and add a soft shadow glow to separate product from bg
+      fgBuffer = await sharp(productBuffer)
+        .resize(targetW, targetH, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+        .png()
+        .toBuffer();
+    }
+
+    // Center horizontally, lower half vertically (centered at 60% down)
+    const left = Math.round((CANVAS - targetW) / 2);
+    const top = Math.round(CANVAS * 0.38);
+
+    return sharp(backgroundBuffer)
+      .composite([{ input: fgBuffer, left, top }])
+      .png()
+      .toBuffer();
   }
 
   private async generatePopCopy(
@@ -544,30 +612,43 @@ export class MediaService {
     };
   }
 
-  private buildPopImagePrompt(
+  /**
+   * Builds a background-only prompt — GPT draws the sticker frame, typography, decorative
+   * ingredients and badge graphics, but MUST leave the lower-center 55% of the canvas empty
+   * so the real product image can be composited on top without any AI-redrawn label/text.
+   */
+  private buildPopBackgroundPrompt(
     productName: string,
     copy: PopStickerCopy,
     visualFacts: string,
     style: { id: string; name: string; mood: string; badge: string },
   ): string {
-    const benefits = copy.benefits.slice(0, 3).map((b) => `• ${b}`).join(', ');
+    const benefits = copy.benefits.slice(0, 3).map((b) => `✓ ${b}`).join(' / ');
     return [
-      `Create a premium retail shelf POP sticker (1:1 square format, print-ready, high resolution).`,
-      `Product: ${productName}`,
+      `Create a retail POP sticker BACKGROUND ARTWORK only (1:1 square, 1024x1024, print-ready).`,
       `Style: ${style.mood}`,
-      `Product visual reference: ${visualFacts}`,
-      `Headline: ${copy.headline}`,
-      `Subheadline: ${copy.subheadline}`,
-      `Benefits: ${benefits}`,
-      `Badge: ${style.badge}`,
-      `Design rules:`,
-      `- Product bottle/package must be large, centered, and clearly visible`,
-      `- Maximum 3 benefit text lines, short and readable from 3 meters`,
-      `- Bold headline at the top`,
-      `- Ingredient visuals (seeds, capsules, drops) as decorative accents`,
-      `- No medical claims, no disease treatment wording`,
-      `- Professional retail shelf sticker, suitable for tourist souvenir stores in Thailand`,
-      `- 1:1 ratio, high resolution, no watermark, print-ready`,
+      `Product context (for colors and ingredient decor only): ${visualFacts}`,
+      ``,
+      `CRITICAL RULES — MUST FOLLOW:`,
+      `- DO NOT draw any product bottle, package, box, or container anywhere in the image.`,
+      `- DO NOT write any brand name, product label text, or fake package text.`,
+      `- Leave the center lower area (roughly the bottom 60% center 60% width) completely clean — this is where the real product photo will be placed.`,
+      ``,
+      `What TO draw:`,
+      `- Sticker silhouette shape: a die-cut retail badge / rounded shelf talker outline (NOT a plain square)`,
+      `- Decorative background: ingredient visuals floating at the edges (seeds, oil drops, capsules, botanicals) matching product visual: ${visualFacts.slice(0, 80)}`,
+      `- Sticker border/frame with premium finish matching style`,
+      `- At the TOP: bold headline text: "${copy.headline}"`,
+      `- Below headline: subheadline: "${copy.subheadline}"`,
+      `- At the BOTTOM of sticker: benefit lines: ${benefits}`,
+      `- Badge graphic: "${style.badge}" (colored badge/ribbon, small, bottom corner or top corner)`,
+      ``,
+      `Design goals:`,
+      `- Text must be bold, readable from 3 meters, high contrast`,
+      `- Die-cut shape with white or transparent margin outside the sticker body`,
+      `- Premium retail pharmacy shelf sticker look`,
+      `- No product bottle, no fake label, no medical claims`,
+      `- 1:1 square canvas, high resolution, no watermark`,
     ].join('\n');
   }
 

@@ -229,9 +229,13 @@ export function MediaView() {
                 <div>
                   <p className="text-sm font-semibold text-violet-900">AI Product POP Sticker Generator</p>
                   <p className="text-xs text-violet-700 mt-0.5">
-                    เลือกสินค้า → AI วิเคราะห์รูป + สร้าง copy ที่ปลอดภัย → สร้าง 4 แบบ shelf sticker สำหรับพิมพ์
+                    AI วิเคราะห์รูป → สร้าง copy ปลอดภัย → GPT สร้าง sticker artwork → ประกอบรูปสินค้าจริงทับ (ฉลากไม่เพี้ยน)
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">ใช้เวลาประมาณ 1–2 นาที/สินค้า · ~$0.12–0.40/สินค้า (GPT Image ×4)</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                    <span className="text-[11px] text-muted-foreground">ใช้เวลา ~1–2 นาที/สินค้า</span>
+                    <span className="text-[11px] text-muted-foreground">~$0.04–0.12/สินค้า (GPT Image ×4)</span>
+                    <span className="text-[11px] text-violet-600 font-medium">รูปสินค้า ERP composite ทับ — ฉลากและตัวอักษรไม่เพี้ยน</span>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -274,9 +278,19 @@ export function MediaView() {
                           <p className="font-medium text-sm truncate">{p.name}</p>
                           <p className="text-xs text-muted-foreground">{p.category} · ฿{p.retailPrice}</p>
                           {popResult && (
-                            <p className="text-xs text-violet-600 mt-0.5">
-                              ✓ สร้างแล้ว {popResult.variations.filter((v) => v.imageUrl).length}/4 variations
-                            </p>
+                            <div className="flex flex-wrap gap-1 mt-0.5 items-center">
+                              <span className="text-xs text-violet-600">
+                                ✓ {popResult.variations.filter((v) => v.imageUrl).length}/4 variations
+                              </span>
+                              {popResult.variations[0]?.cutoutUsed && (
+                                <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300">cutout ✓</Badge>
+                              )}
+                              {popResult.productImageSize && (popResult.productImageSize.width < 400 || popResult.productImageSize.height < 400) && (
+                                <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300">
+                                  รูป ERP ความละเอียดต่ำ ({popResult.productImageSize.width}×{popResult.productImageSize.height}px)
+                                </Badge>
+                              )}
+                            </div>
                           )}
                         </div>
                         <div className="flex gap-1.5 shrink-0">
@@ -325,7 +339,7 @@ export function MediaView() {
                       {isGenerating && (
                         <div className="rounded-md bg-violet-50 border border-violet-100 px-3 py-2.5 text-xs text-violet-700 space-y-1">
                           <p className="font-medium">กำลังสร้าง POP Sticker AI...</p>
-                          <p>1. วิเคราะห์รูปสินค้า → 2. สร้าง copy ปลอดภัย → 3. สร้างภาพ 4 แบบ</p>
+                          <p>1. วิเคราะห์รูปสินค้า ERP → 2. สร้าง copy ปลอดภัย → 3. AI วาด sticker artwork (ไม่มีรูปสินค้า) → 4. ประกอบรูปสินค้าจริงทับ ×4</p>
                           <p className="text-violet-500">ใช้เวลาประมาณ 1–2 นาที</p>
                         </div>
                       )}
