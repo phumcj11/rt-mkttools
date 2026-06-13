@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
+import { generateContent } from '@/lib/ai-api';
 import {
   generatePopStickers,
   getDriveSettings,
@@ -25,6 +27,7 @@ import {
   listBrandAssets,
   listMediaFiles,
   listMediaProducts,
+  pollVideoTask,
   prepareBrandAssetDataUrl,
   saveDriveSettings,
   saveN8nSettings,
@@ -41,6 +44,10 @@ import {
   type N8nSettings,
   type PopStickerResult,
   type VideoSettings,
+  type VideoSubmitOptions,
+  type VideoTask,
+  VIDEO_MODELS,
+  type VideoProviderId,
 } from '@/lib/media-api';
 import { PromoTab } from './promo-tab';
 
@@ -61,7 +68,12 @@ export function MediaView() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const mascotInputRef = useRef<HTMLInputElement>(null);
   const [videoSubmitting, setVideoSubmitting] = useState<string | null>(null);
-  const [videoTasks, setVideoTasks] = useState<Record<string, string>>({});
+  const [briefGenerating, setBriefGenerating] = useState<string | null>(null);
+  const [videoTasks, setVideoTasks] = useState<Record<string, VideoTask>>({});
+  const [videoProvider, setVideoProvider] = useState<VideoProviderId>('gemini');
+  const [videoModel, setVideoModel] = useState(VIDEO_MODELS.gemini[0]);
+  const [videoUseCutout, setVideoUseCutout] = useState(true);
+  const [videoBriefs, setVideoBriefs] = useState<Record<string, string>>({});
 
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -73,7 +85,9 @@ export function MediaView() {
   const [n8nSettings, setN8nSettings] = useState<N8nSettings | null>(null);
   const [driveFolderId, setDriveFolderId] = useState('');
   const [driveServiceAccount, setDriveServiceAccount] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
   const [klingKey, setKlingKey] = useState('');
+  const [grokKey, setGrokKey] = useState('');
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
@@ -111,6 +125,34 @@ export function MediaView() {
       getN8nSettings().then(setN8nSettings).catch(() => undefined);
     }
   }, [tab]);
+
+  useEffect(() => {
+    if (!videoSettings) return;
+    const provider = videoSettings.video_provider_default || 'gemini';
+    setVideoProvider(provider);
+    setVideoModel(videoSettings.video_model_default || VIDEO_MODELS[provider]?.[0] || VIDEO_MODELS.gemini[0]);
+  }, [videoSettings]);
+
+  useEffect(() => {
+    const activeTasks = Object.entries(videoTasks).filter(([, task]) => task.status === 'queued' || task.status === 'processing');
+    if (activeTasks.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      activeTasks.forEach(([sku, task]) => {
+        pollVideoTask(task)
+          .then((next) => setVideoTasks((prev) => ({ ...prev, [sku]: next })))
+          .catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : 'Poll video failed';
+            setVideoTasks((prev) => ({
+              ...prev,
+              [sku]: { ...task, status: 'failed', error: message },
+            }));
+          });
+      });
+    }, Math.max(5, activeTasks[0]?.[1].pollAfterSeconds ?? 12) * 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [videoTasks]);
 
   const handleGeneratePopStickers = async (sku: string) => {
     setGenerating(sku);
@@ -176,19 +218,60 @@ export function MediaView() {
   const handleVideoSubmit = async (sku: string) => {
     setVideoSubmitting(sku);
     try {
-      const res = await submitProductVideo(sku);
+      const options: VideoSubmitOptions = {
+        provider: videoProvider,
+        model: videoModel,
+        visualBrief: videoBriefs[sku]?.trim() || undefined,
+        mascotAssetFilenames: Array.from(selectedBrandAssets).filter((filename) => {
+          const asset = brandAssets.find((a) => a.filename === filename);
+          return asset?.kind === 'mascot';
+        }),
+        useCutoutProductImage: videoUseCutout,
+      };
+      const res = await submitProductVideo(sku, options);
       if ('error' in res && res.error) {
         alert((res as { error: true; message: string }).message);
         return;
       }
       if ('taskId' in res) {
-        setVideoTasks((prev) => ({ ...prev, [sku]: res.taskId }));
-        alert(`ส่งคำขอ Video สำเร็จ! Task ID: ${res.taskId}\nใช้เวลาประมาณ 2-5 นาที`);
+        setVideoTasks((prev) => ({ ...prev, [sku]: res }));
       }
-    } catch {
-      alert('ส่งคำขอ Video ล้มเหลว — ตรวจสอบ Kling API Key ในหน้าตั้งค่า');
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'ส่งคำขอ Video ล้มเหลว — ตรวจสอบ API Key ในหน้าตั้งค่า');
     } finally {
       setVideoSubmitting(null);
+    }
+  };
+
+  const handleDraftVideoBrief = async (product: ErpProduct) => {
+    setBriefGenerating(product.sku);
+    try {
+      const current = videoBriefs[product.sku]?.trim();
+      const mascotCount = Array.from(selectedBrandAssets).filter((filename) => {
+        const asset = brandAssets.find((a) => a.filename === filename);
+        return asset?.kind === 'mascot';
+      }).length;
+      const res = await generateContent({
+        type: 'tiktok_script',
+        productName: product.name,
+        price: Number(product.retailPrice) || undefined,
+        tone: 'friendly',
+        details: [
+          'สร้าง brief สำหรับ image-to-video 6 วินาที แนวตั้ง 9:16',
+          'ให้ mascot จากรูป reference เป็นคนพูด/ชี้สินค้า ถ้ามี mascot',
+          'ใช้รูปสินค้า ERP ที่ลบพื้นหลังแล้วเป็น product reference',
+          'ฉากในร้าน ChangSiam 100 Baht Shop Thailand',
+          'ห้ามกล่าวอ้างรักษาโรค ห้ามใส่ SKU/product code',
+          `Provider: ${videoProvider}, Model: ${videoModel}`,
+          `Mascot selected: ${mascotCount}`,
+          current ? `คำสั่งเดิมของผู้ใช้: ${current}` : '',
+        ].filter(Boolean).join('\n'),
+      }, 'th');
+      setVideoBriefs((prev) => ({ ...prev, [product.sku]: res.content }));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'AI ช่วยร่าง brief ไม่สำเร็จ');
+    } finally {
+      setBriefGenerating(null);
     }
   };
 
@@ -232,16 +315,22 @@ export function MediaView() {
           google_service_account_json: driveServiceAccount.trim() || undefined,
         });
       }
-      if (klingKey.trim()) {
-        await saveVideoSettings({ kling_api_key: klingKey.trim() });
-      }
+      await saveVideoSettings({
+        video_provider_default: videoProvider,
+        video_model_default: videoModel,
+        gemini_api_key: geminiKey.trim() || undefined,
+        kling_api_key: klingKey.trim() || undefined,
+        grok_api_key: grokKey.trim() || undefined,
+      });
       if (n8nWebhookUrl.trim()) {
         await saveN8nSettings({ n8n_promo_webhook_url: n8nWebhookUrl.trim() });
       }
       setSettingsMsg('บันทึกสำเร็จ');
       setDriveFolderId('');
       setDriveServiceAccount('');
+      setGeminiKey('');
       setKlingKey('');
+      setGrokKey('');
       setN8nWebhookUrl('');
       const [ds, vs, n8n] = await Promise.all([getDriveSettings(), getVideoSettings(), getN8nSettings()]);
       setDriveSettings(ds);
@@ -312,6 +401,45 @@ export function MediaView() {
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">{products.length} สินค้า</span>
           </div>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Video AI Provider</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label>Provider</Label>
+                <NativeSelect
+                  value={videoProvider}
+                  onChange={(e) => {
+                    const next = e.target.value as VideoProviderId;
+                    setVideoProvider(next);
+                    setVideoModel(VIDEO_MODELS[next][0]);
+                  }}
+                >
+                  <option value="gemini">Gemini / Veo</option>
+                  <option value="kling">Kling AI</option>
+                  <option value="grok">Grok (เตรียมไว้)</option>
+                </NativeSelect>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Model</Label>
+                <NativeSelect value={videoModel} onChange={(e) => setVideoModel(e.target.value)}>
+                  {(VIDEO_MODELS[videoProvider] ?? []).map((model) => (
+                    <option key={model} value={model}>{model}</option>
+                  ))}
+                </NativeSelect>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground md:pt-8">
+                <input
+                  type="checkbox"
+                  checked={videoUseCutout}
+                  onChange={(e) => setVideoUseCutout(e.target.checked)}
+                />
+                ใช้รูปสินค้าแบบลบพื้นหลังผ่าน n8n ถ้ามี
+              </label>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader className="pb-2">
@@ -433,7 +561,8 @@ export function MediaView() {
                 const isGenerating = generating === p.sku;
                 const isExpanded = expandedSku === p.sku;
                 const isVideoSubmitting = videoSubmitting === p.sku;
-                const hasVideoTask = !!videoTasks[p.sku];
+                const videoTask = videoTasks[p.sku];
+                const hasVideoTask = !!videoTask;
 
                 return (
                   <Card key={p.sku} className={`transition-colors ${isExpanded ? 'border-violet-300' : ''}`}>
@@ -486,13 +615,15 @@ export function MediaView() {
                             size="sm"
                             variant="outline"
                             className="h-8 text-xs"
-                            disabled={isVideoSubmitting || hasVideoTask}
+                            disabled={isVideoSubmitting || videoProvider === 'grok' || (videoTask?.status === 'queued' || videoTask?.status === 'processing')}
                             onClick={() => void handleVideoSubmit(p.sku)}
                           >
                             {isVideoSubmitting ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : hasVideoTask ? (
+                            ) : videoTask?.status === 'done' ? (
                               <><CheckCircle2 className="h-3 w-3 text-green-500 mr-1" />Video</>
+                            ) : videoTask?.status === 'queued' || videoTask?.status === 'processing' ? (
+                              <><Loader2 className="h-3 w-3 animate-spin mr-1" />Video</>
                             ) : (
                               <><Video className="h-3 w-3 mr-1" />Video</>
                             )}
@@ -509,6 +640,62 @@ export function MediaView() {
                           )}
                         </div>
                       </div>
+
+                      <div className="rounded-md border bg-muted/20 px-3 py-2 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium">Video brief แบบคุยกับ AI</p>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="outline" className="text-[10px]">
+                              {videoProvider} · {videoModel}
+                            </Badge>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[11px]"
+                              disabled={briefGenerating === p.sku}
+                              onClick={() => void handleDraftVideoBrief(p)}
+                            >
+                              {briefGenerating === p.sku ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                              AI ช่วยร่าง
+                            </Button>
+                          </div>
+                        </div>
+                        <textarea
+                          className="min-h-[70px] w-full rounded-md border bg-background px-3 py-2 text-xs"
+                          placeholder="ตัวอย่าง: ให้ mascot ถือสินค้า ชี้จุดเด่น พูดสั้นๆ ในร้าน ChangSiam 100 Baht Shop แบบโฆษณาแนวตั้ง 6 วินาที"
+                          value={videoBriefs[p.sku] ?? ''}
+                          onChange={(e) => setVideoBriefs((prev) => ({ ...prev, [p.sku]: e.target.value }))}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          ระบบจะใช้ mascot ที่เลือกไว้ + รูปสินค้าจาก ERP {videoUseCutout ? '+ พยายามลบพื้นหลังด้วย n8n' : ''} เป็น reference ให้ video provider
+                        </p>
+                      </div>
+
+                      {videoTask && (
+                        <div className={`rounded-md px-3 py-2 text-xs border ${
+                          videoTask.status === 'failed'
+                            ? 'bg-red-50 border-red-200 text-red-700'
+                            : videoTask.status === 'done'
+                              ? 'bg-green-50 border-green-200 text-green-700'
+                              : 'bg-blue-50 border-blue-200 text-blue-700'
+                        }`}>
+                          <p className="font-medium">
+                            Video {videoTask.status} · {videoTask.provider ?? videoProvider} · {videoTask.model ?? videoModel}
+                          </p>
+                          {videoTask.error && <p className="mt-1">{videoTask.error}</p>}
+                          {videoTask.videoUrl && (
+                            <a
+                              className="mt-1 inline-flex underline"
+                              href={resolveMediaUrl(videoTask.localPath ?? videoTask.videoUrl)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              เปิดวิดีโอที่สร้าง
+                            </a>
+                          )}
+                        </div>
+                      )}
 
                       {/* Generating progress */}
                       {isGenerating && (
@@ -725,12 +912,12 @@ export function MediaView() {
             </CardContent>
           </Card>
 
-          {/* Kling AI */}
+          {/* Video AI */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Film className="h-4 w-4 text-primary" />
-                Kling AI — Video Generation
+                Video AI — Multi Provider
                 {videoSettings?.video_configured && (
                   <Badge variant="default" className="ml-auto text-xs">ตั้งค่าแล้ว</Badge>
                 )}
@@ -741,16 +928,53 @@ export function MediaView() {
                 <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
                   <p className="font-medium text-green-600">ตั้งค่าแล้ว</p>
                   <p className="text-muted-foreground text-xs mt-0.5">
-                    Key: {videoSettings.kling_key_preview}
+                    Default: {videoSettings.video_provider_default} · {videoSettings.video_model_default}
+                  </p>
+                  <p className="text-muted-foreground text-xs mt-0.5">
+                    Gemini: {videoSettings.gemini_key_preview ?? '-'} · Kling: {videoSettings.kling_key_preview ?? '-'} · Grok: {videoSettings.grok_key_preview ?? '-'}
                   </p>
                 </div>
               ) : (
                 <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800">
-                  <p className="font-semibold">วิธีขอ API Key:</p>
-                  <p>สมัครที่ <span className="font-mono">platform.klingai.com</span> → API Keys → สร้างใหม่</p>
-                  <p className="mt-1">ค่าใช้จ่าย: ~฿0.14 ต่อ 5 วินาที (image-to-video)</p>
+                  <p className="font-semibold">ตั้งค่า Video Provider:</p>
+                  <p>รอบแรกใช้ Gemini / Veo เป็นหลัก และยังเก็บ Kling/Grok ไว้สำหรับเลือก provider ต่อไป</p>
                 </div>
               )}
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Default Provider</Label>
+                  <NativeSelect
+                    value={videoProvider}
+                    onChange={(e) => {
+                      const next = e.target.value as VideoProviderId;
+                      setVideoProvider(next);
+                      setVideoModel(VIDEO_MODELS[next][0]);
+                    }}
+                  >
+                    <option value="gemini">Gemini / Veo</option>
+                    <option value="kling">Kling AI</option>
+                    <option value="grok">Grok (เตรียมไว้)</option>
+                  </NativeSelect>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Default Model</Label>
+                  <NativeSelect value={videoModel} onChange={(e) => setVideoModel(e.target.value)}>
+                    {(VIDEO_MODELS[videoProvider] ?? []).map((model) => (
+                      <option key={model} value={model}>{model}</option>
+                    ))}
+                  </NativeSelect>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Gemini API Key</Label>
+                <Input
+                  type="password"
+                  placeholder="AIza..."
+                  value={geminiKey}
+                  onChange={(e) => setGeminiKey(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label>Kling AI API Key</Label>
                 <Input
@@ -758,6 +982,16 @@ export function MediaView() {
                   placeholder="kling-..."
                   value={klingKey}
                   onChange={(e) => setKlingKey(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Grok / xAI API Key (เตรียมไว้)</Label>
+                <Input
+                  type="password"
+                  placeholder="xai-..."
+                  value={grokKey}
+                  onChange={(e) => setGrokKey(e.target.value)}
                   autoComplete="new-password"
                 />
               </div>
@@ -810,7 +1044,7 @@ export function MediaView() {
             </p>
           )}
           <Button
-            disabled={settingsSaving || (!driveFolderId.trim() && !driveServiceAccount.trim() && !klingKey.trim() && !n8nWebhookUrl.trim())}
+            disabled={settingsSaving}
             onClick={() => void handleSaveSettings()}
           >
             {settingsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

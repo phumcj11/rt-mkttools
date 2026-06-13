@@ -21,6 +21,7 @@ import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { DriveService } from './drive.service';
 import { MediaService } from './media.service';
 import { VideoService } from './video.service';
+import { VideoProviderId } from './video.types';
 
 class BatchImageDto {
   @IsArray()
@@ -67,6 +68,31 @@ class VideoSubmitDto {
   @IsString()
   @IsNotEmpty()
   sku: string;
+
+  @IsOptional()
+  @IsString()
+  provider?: VideoProviderId;
+
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @IsOptional()
+  @IsString()
+  script?: string;
+
+  @IsOptional()
+  @IsString()
+  visualBrief?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mascotAssetFilenames?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  useCutoutProductImage?: boolean;
 }
 
 class GeneratePopStickersDto {
@@ -102,6 +128,18 @@ class PollVideoDto {
   @IsOptional()
   @IsString()
   taskType?: 'image2video' | 'text2video';
+
+  @IsOptional()
+  @IsString()
+  provider?: VideoProviderId;
+
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
 }
 
 @Controller('media')
@@ -251,37 +289,37 @@ export class MediaController {
   @Post('products/video')
   @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
   @HttpCode(HttpStatus.OK)
-  async submitVideo(@Body() dto: VideoSubmitDto, @CurrentUser() user: AuthUser) {
-    const configured = await this.video.isConfigured();
+  async submitVideo(@Body() dto: VideoSubmitDto, @CurrentUser() _user: AuthUser) {
+    const configured = await this.video.isConfigured(dto.provider);
     if (!configured) {
       return {
         error: true,
-        message: 'ยังไม่ได้ตั้งค่า Kling AI API Key — ไปที่ หน้าตั้งค่า → Video AI Configuration',
+        message: 'ยังไม่ได้ตั้งค่า API Key สำหรับ Video AI provider ที่เลือก — ไปที่ หน้าตั้งค่า → Video AI Configuration',
       };
     }
-    return this.video.submitProductVideo(dto.sku);
+    return this.video.submitProductVideo(dto.sku, dto);
   }
 
   /** Poll video task status */
   @Post('video/poll')
   @HttpCode(HttpStatus.OK)
   pollVideo(@Body() dto: PollVideoDto) {
-    return this.video.pollVideoTask(dto.taskId, dto.taskType);
+    return this.video.pollVideoTask(dto.taskId, dto);
   }
 
   /** Generate video + wait for completion (async, may take minutes) */
   @Post('products/:sku/video/generate')
   @Roles('admin', 'super_admin', 'marketing_manager')
   @HttpCode(HttpStatus.OK)
-  async generateVideo(@Param('sku') sku: string) {
-    const configured = await this.video.isConfigured();
+  async generateVideo(@Param('sku') sku: string, @Body() dto: Omit<VideoSubmitDto, 'sku'> = {}) {
+    const configured = await this.video.isConfigured(dto.provider);
     if (!configured) {
       return {
         error: true,
-        message: 'ยังไม่ได้ตั้งค่า Kling AI API Key — ไปที่ หน้าตั้งค่า → Video AI Configuration',
+        message: 'ยังไม่ได้ตั้งค่า API Key สำหรับ Video AI provider ที่เลือก — ไปที่ หน้าตั้งค่า → Video AI Configuration',
       };
     }
-    return this.video.generateAndWait(sku);
+    return this.video.generateAndWait(sku, dto);
   }
 
   /** Google Drive status */

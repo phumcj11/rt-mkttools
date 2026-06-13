@@ -25,6 +25,7 @@ export interface ProductMediaResult {
 
 /** Static uploads served via /api/media/serve/:filename */
 export function resolveMediaUrl(path: string): string {
+  if (path.startsWith('data:') || path.startsWith('blob:')) return path;
   if (path.startsWith('http')) return path;
   const api = (process.env.NEXT_PUBLIC_API_URL ?? '/api').replace(/\/$/, '');
   if (path.startsWith('/media/')) return `${api}${path}`;
@@ -41,10 +42,14 @@ export interface MediaFile {
 
 export interface VideoTask {
   taskId: string;
+  provider?: VideoProviderId;
+  model?: string;
   status: 'queued' | 'processing' | 'done' | 'failed';
   videoUrl?: string;
   localPath?: string;
   error?: string;
+  pollAfterSeconds?: number;
+  metadata?: Record<string, unknown>;
 }
 
 export interface DriveUploadResult {
@@ -66,7 +71,31 @@ export interface DriveSettings {
 
 export interface VideoSettings {
   video_configured: boolean;
+  video_provider_default: VideoProviderId;
+  video_model_default: string;
+  gemini_configured: boolean;
+  kling_configured: boolean;
+  grok_configured: boolean;
+  gemini_key_preview: string | null;
   kling_key_preview: string | null;
+  grok_key_preview: string | null;
+}
+
+export type VideoProviderId = 'gemini' | 'kling' | 'grok';
+
+export const VIDEO_MODELS: Record<VideoProviderId, string[]> = {
+  gemini: ['veo-3.0-generate-preview', 'veo-2.0-generate-001'],
+  kling: ['kling-v1', 'kling-v1-6'],
+  grok: ['grok-video'],
+};
+
+export interface VideoSubmitOptions {
+  provider?: VideoProviderId;
+  model?: string;
+  script?: string;
+  visualBrief?: string;
+  mascotAssetFilenames?: string[];
+  useCutoutProductImage?: boolean;
 }
 
 // Products
@@ -240,24 +269,30 @@ export function listMediaFiles() {
 }
 
 // Video generation
-export function submitProductVideo(sku: string) {
+export function submitProductVideo(sku: string, options: VideoSubmitOptions = {}) {
   return apiRequest<VideoTask | { error: true; message: string }>(
     '/media/products/video',
-    { method: 'POST', body: { sku } },
+    { method: 'POST', body: { sku, ...options } },
   );
 }
 
-export function pollVideoTask(taskId: string, taskType?: string) {
+export function pollVideoTask(task: Pick<VideoTask, 'taskId' | 'provider' | 'model' | 'metadata'> & { taskType?: string }) {
   return apiRequest<VideoTask>('/media/video/poll', {
     method: 'POST',
-    body: { taskId, taskType },
+    body: {
+      taskId: task.taskId,
+      provider: task.provider,
+      model: task.model,
+      metadata: task.metadata,
+      taskType: task.taskType,
+    },
   });
 }
 
-export function generateVideoAndWait(sku: string) {
+export function generateVideoAndWait(sku: string, options: VideoSubmitOptions = {}) {
   return apiRequest<VideoTask | { error: true; message: string }>(
     `/media/products/${sku}/video/generate`,
-    { method: 'POST' },
+    { method: 'POST', body: options },
   );
 }
 
@@ -333,7 +368,7 @@ export function getVideoSettings() {
   return apiRequest<VideoSettings>('/settings/system/video');
 }
 
-export function saveVideoSettings(body: { kling_api_key?: string }) {
+export function saveVideoSettings(body: { video_provider_default?: VideoProviderId; video_model_default?: string; gemini_api_key?: string; kling_api_key?: string; grok_api_key?: string }) {
   return apiRequest<{ ok: boolean }>('/settings/system/video', { method: 'PATCH', body });
 }
 

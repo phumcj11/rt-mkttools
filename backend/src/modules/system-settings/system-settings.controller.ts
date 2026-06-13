@@ -28,6 +28,28 @@ class UpdateAiSettingsDto {
   openai_temperature?: string;
 }
 
+class UpdateVideoSettingsDto {
+  @IsOptional()
+  @IsString()
+  video_provider_default?: string;
+
+  @IsOptional()
+  @IsString()
+  video_model_default?: string;
+
+  @IsOptional()
+  @IsString()
+  gemini_api_key?: string;
+
+  @IsOptional()
+  @IsString()
+  kling_api_key?: string;
+
+  @IsOptional()
+  @IsString()
+  grok_api_key?: string;
+}
+
 @Controller('settings/system')
 export class SystemSettingsController {
   constructor(private readonly svc: SystemSettingsService) {}
@@ -118,22 +140,43 @@ export class SystemSettingsController {
     return { ok: true };
   }
 
-  // ────── Video (Kling AI) ──────
+  // ────── Video AI ──────
 
   @Get('video')
   async getVideoSettings() {
-    const key = (await this.svc.get('kling_api_key')) ?? '';
+    const geminiKey = (await this.svc.get('gemini_api_key')) ?? '';
+    const klingKey = (await this.svc.get('kling_api_key')) ?? '';
+    const grokKey = (await this.svc.get('grok_api_key')) ?? '';
+    const provider = (await this.svc.get('video_provider_default')) ?? 'gemini';
+    const model = (await this.svc.get('video_model_default')) ?? 'veo-3.0-generate-preview';
     return {
-      video_configured: key.length > 5,
-      kling_key_preview: key.length > 5 ? `...${key.slice(-4)}` : null,
+      video_configured: [geminiKey, klingKey, grokKey].some((key) => key.length > 5),
+      video_provider_default: provider,
+      video_model_default: model,
+      gemini_configured: geminiKey.length > 5,
+      kling_configured: klingKey.length > 5,
+      grok_configured: grokKey.length > 5,
+      gemini_key_preview: geminiKey.length > 5 ? `...${geminiKey.slice(-4)}` : null,
+      kling_key_preview: klingKey.length > 5 ? `...${klingKey.slice(-4)}` : null,
+      grok_key_preview: grokKey.length > 5 ? `...${grokKey.slice(-4)}` : null,
     };
   }
 
   @Patch('video')
   @HttpCode(HttpStatus.OK)
-  async updateVideoSettings(@Body() body: { kling_api_key?: string }) {
-    if (body.kling_api_key !== undefined) {
-      await this.svc.set('kling_api_key', body.kling_api_key);
+  async updateVideoSettings(@Body() body: UpdateVideoSettingsDto) {
+    const allowed = [
+      'video_provider_default',
+      'video_model_default',
+      'gemini_api_key',
+      'kling_api_key',
+      'grok_api_key',
+    ] as const;
+    for (const key of allowed) {
+      const val = body[key];
+      if (val !== undefined) {
+        await this.svc.set(key, val.trim());
+      }
     }
     return { ok: true };
   }
