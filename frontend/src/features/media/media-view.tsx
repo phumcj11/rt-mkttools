@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type CSSProperties } from 'react';
 import {
   CheckSquare,
   CheckCircle2,
@@ -67,6 +67,14 @@ import {
 import { PromoTab } from './promo-tab';
 
 type Tab = 'products' | 'promotion' | 'files' | 'settings';
+
+const transparentPreviewBg: CSSProperties = {
+  backgroundColor: '#ffffff',
+  backgroundImage:
+    'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)',
+  backgroundSize: '12px 12px',
+  backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0',
+};
 
 export function MediaView() {
   const [tab, setTab] = useState<Tab>('products');
@@ -1025,13 +1033,13 @@ export function MediaView() {
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                           {popResult.variations.map((v) => (
                             <div key={v.styleId} className="space-y-1">
-                              <div className="aspect-square rounded-lg overflow-hidden bg-muted/50 relative group">
+                              <div className="aspect-square rounded-lg overflow-hidden relative group" style={transparentPreviewBg}>
                                 {v.imageUrl ? (
                                   <>
                                     <img
                                       src={resolveMediaUrl(v.imageUrl)}
                                       alt={v.styleName}
-                                      className="h-full w-full object-cover"
+                                      className="h-full w-full object-contain"
                                     />
                                     {v.branded && (
                                       <Badge className="absolute left-2 top-2 bg-violet-600 text-[10px] hover:bg-violet-600">
@@ -1160,7 +1168,7 @@ export function MediaView() {
                 const url = resolveMediaUrl(file.url);
                 return (
                   <Card key={file.filename} className={`overflow-hidden transition-colors ${selected ? 'border-primary ring-1 ring-primary/30' : ''}`}>
-                    <div className="relative aspect-square bg-muted/40">
+                    <div className="relative aspect-square" style={transparentPreviewBg}>
                       <button
                         type="button"
                         className="absolute left-2 top-2 z-10 rounded-md bg-background/90 px-2 py-1 text-xs shadow-sm"
@@ -1170,7 +1178,7 @@ export function MediaView() {
                         เลือก
                       </button>
                       {isImage ? (
-                        <img src={url} alt={file.filename} className="h-full w-full object-contain bg-white" />
+                        <img src={url} alt={file.filename} className="h-full w-full object-contain" />
                       ) : isVideo ? (
                         <video src={url} className="h-full w-full bg-black object-contain" controls preload="metadata" />
                       ) : (

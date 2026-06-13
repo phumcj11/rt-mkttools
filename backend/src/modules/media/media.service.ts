@@ -7,6 +7,7 @@ import { ErpProductCache } from '../../database/entities/erp-product-cache.entit
 import { OpenAiService } from '../ai/openai.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { PromoCompositeService } from './promo-composite.service';
+import { getApiBaseUrl } from '../../common/utils/app-urls';
 
 export interface ProductMediaResult {
   sku: string;
@@ -542,9 +543,14 @@ export class MediaService {
           ? await this.openAi.editGptImage(prompt, productImageBuffer, productImageMime, { size: '1024x1024' })
           : await this.openAi.generateGptImage(prompt, { size: '1024x1024' });
 
+        const prepared = await this.prepareTransparentPopSticker(
+          sharp,
+          imageResult.buffer,
+          `${sku}-${style.id}`,
+        );
         const filename = `pop-${this.safeFilename(sku)}-${style.id}-${timestamp}.png`;
         const localPath = path.join(this.uploadsDir, filename);
-        fs.writeFileSync(localPath, imageResult.buffer);
+        fs.writeFileSync(localPath, prepared.buffer);
 
         variations.push({
           styleId: style.id,
@@ -553,7 +559,7 @@ export class MediaService {
           filename,
           promptUsed: prompt,
           model: imageResult.model,
-          cutoutUsed: false,
+          cutoutUsed: prepared.cutoutUsed,
         });
         this.logger.log(`POP saved: ${filename} (${style.name}, model: ${imageResult.model})`);
       } catch (err) {
@@ -583,9 +589,14 @@ export class MediaService {
             ? await this.openAi.editGptImage(prompt, brandRef, 'image/png', { size: '1024x1024' })
             : await this.openAi.generateGptImage(prompt, { size: '1024x1024' });
 
+          const prepared = await this.prepareTransparentPopSticker(
+            sharp,
+            imageResult.buffer,
+            `${sku}-${style.id}`,
+          );
           const filename = `pop-${this.safeFilename(sku)}-${style.id}-${timestamp}.png`;
           const localPath = path.join(this.uploadsDir, filename);
-          fs.writeFileSync(localPath, imageResult.buffer);
+          fs.writeFileSync(localPath, prepared.buffer);
 
           variations.push({
             styleId: style.id,
@@ -594,7 +605,7 @@ export class MediaService {
             filename,
             promptUsed: prompt,
             model: imageResult.model,
-            cutoutUsed: false,
+            cutoutUsed: prepared.cutoutUsed,
             branded: true,
           });
           this.logger.log(`Branded POP saved: ${filename} (${style.name}, model: ${imageResult.model})`);
@@ -759,9 +770,10 @@ export class MediaService {
       '',
       'Output requirements:',
       '- Die-cut POP sticker / retail shelf talker shape, not a plain square poster.',
+      '- Transparent background outside the sticker silhouette. No full-canvas white or colored square fill.',
       '- Product bottle/package large in center, naturally integrated with design.',
       '- Easy to read from 2-3 meters.',
-      '- High resolution, print-ready, 1:1 ratio, no watermark.',
+      '- High resolution, print-ready PNG with alpha, no watermark.',
       '- Supplement-safe wording only; no cure/treat/prevent disease/medicine claims.',
     ];
 
@@ -1027,6 +1039,103 @@ export class MediaService {
       this.logger.error(`Promo composite failed: ${msg}`);
       throw new BadRequestException(msg || 'สร้างโปสเตอร์ไม่สำเร็จ');
     }
+  }
+
+  private async prepareTransparentPopSticker(
+    sharp: (input?: Buffer | object) => any,
+    input: Buffer,
+    label: string,
+  ): Promise<{ buffer: Buffer; cutoutUsed: boolean }> {
+    const webhookUrl = await this.settings.get('n8n_promo_webhook_url');
+    if (webhookUrl?.startsWith('http')) {
+      try {
+        const cutout = await this.cutoutBufferViaN8n(webhookUrl, input, label);
+        const trimmed = await sharp(cutout).png().trim({ threshold: 8 }).toBuffer();
+        return { buffer: trimmed, cutoutUsed: true };
+      } catch (err) {
+        this.logger.warn(`POP transparent cutout failed for ${label}: ${String(err)}`);
+      }
+    }
+
+    const fallback = await this.floodFillBackgroundTransparent(sharp, input);
+    return { buffer: fallback, cutoutUsed: false };
+  }
+
+  private async cutoutBufferViaN8n(webhookUrl: string, input: Buffer, label: string): Promise<Buffer> {
+    const tempName = `tmp-pop-cutout-${Date.now()}-${this.safeFilename(label)}.png`;
+    const tempPath = path.join(this.uploadsDir, tempName);
+    fs.writeFileSync(tempPath, input);
+    try {
+      const publicUrl = `${getApiBaseUrl()}/media/serve/${tempName}`;
+      return await this.callN8nCutout(webhookUrl, publicUrl, label);
+    } finally {
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {
+        // ignore temp cleanup errors
+      }
+    }
+  }
+
+  private async floodFillBackgroundTransparent(
+    sharp: (input?: Buffer | object) => any,
+    input: Buffer,
+    tolerance = 24,
+  ): Promise<Buffer> {
+    const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const width = info.width;
+    const height = info.height;
+    const visited = new Uint8Array(width * height);
+    const queue: number[] = [];
+
+    const pixelIndex = (x: number, y: number) => (y * width + x) * 4;
+    const cellIndex = (x: number, y: number) => y * width + x;
+    const readRgb = (x: number, y: number) => {
+      const i = pixelIndex(x, y);
+      return [data[i], data[i + 1], data[i + 2]] as const;
+    };
+    const [seedR, seedG, seedB] = readRgb(0, 0);
+    const matchesBackground = (r: number, g: number, b: number) =>
+      Math.abs(r - seedR) <= tolerance
+      && Math.abs(g - seedG) <= tolerance
+      && Math.abs(b - seedB) <= tolerance;
+
+    const enqueue = (x: number, y: number) => {
+      const cell = cellIndex(x, y);
+      if (visited[cell]) return;
+      const [r, g, b] = readRgb(x, y);
+      if (!matchesBackground(r, g, b)) return;
+      visited[cell] = 1;
+      queue.push(cell);
+    };
+
+    for (let x = 0; x < width; x++) {
+      enqueue(x, 0);
+      enqueue(x, height - 1);
+    }
+    for (let y = 0; y < height; y++) {
+      enqueue(0, y);
+      enqueue(width - 1, y);
+    }
+
+    while (queue.length > 0) {
+      const cell = queue.pop()!;
+      const x = cell % width;
+      const y = Math.floor(cell / width);
+      data[pixelIndex(x, y) + 3] = 0;
+      if (x > 0) enqueue(x - 1, y);
+      if (x < width - 1) enqueue(x + 1, y);
+      if (y > 0) enqueue(x, y - 1);
+      if (y < height - 1) enqueue(x, y + 1);
+    }
+
+    return (sharp as (input: Buffer, options?: { raw: { width: number; height: number; channels: number } }) => ReturnType<typeof sharp>)(
+      data,
+      { raw: { width, height, channels: 4 } },
+    )
+      .png()
+      .trim({ threshold: 8 })
+      .toBuffer();
   }
 
   private async callN8nCutout(webhookUrl: string, imageUrl: string, sku: string): Promise<Buffer> {
