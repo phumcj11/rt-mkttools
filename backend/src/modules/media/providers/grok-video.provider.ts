@@ -211,11 +211,13 @@ export class GrokVideoProvider implements VideoProvider {
     return [
       assets.visualBrief,
       '',
-      'Animate this 9:16 vertical explainer starter frame into one unified clip.',
+      'Use the supplied starter frame as the exact visual reference and animate it into one unified clip.',
+      'Do not redesign the layout. Do not create a new poster, price promotion image, or store-ad scene.',
       'Fill the entire vertical frame edge-to-edge. No letterboxing, no side panels, no collage.',
       hasMascot
-        ? 'Keep the mascot character appearance exactly. Mascot holds or presents the product while explaining.'
+        ? 'Keep the mascot smaller/secondary and preserve its appearance. The product packaging remains the main hero.'
         : 'Keep product packaging and label exactly recognizable on a clean minimal background.',
+      'Use only the die-cut product packaging from the starter frame. Do not use or recreate price cards, red promo frames, discount badges, Thai sale banners, or shelf posters.',
       'Camera: slow subtle push-in or soft parallax. Professional e-commerce explainer style.',
       '',
       `Product: ${assets.product.name}`,
@@ -234,9 +236,9 @@ export class GrokVideoProvider implements VideoProvider {
       '',
       `Use reference images ${labels}.`,
       hasMascot
-        ? 'The mascot from the mascot reference presents the product from the product reference to camera.'
+        ? 'The mascot from the mascot reference presents the die-cut product packaging from the product reference. Product remains larger and more important than the mascot.'
         : 'Product remains the hero.',
-      'Full-frame vertical 9:16 product explainer. No collage, no letterboxing.',
+      'Full-frame vertical 9:16 product explainer. No collage, no letterboxing, no price card, no promotion poster.',
       `Product: ${assets.product.name}`,
       `Key benefits: ${assets.benefits.join(' / ')}`,
       'Clean minimal background. Do not add SKU codes, watermarks, or medical claims.',
@@ -264,6 +266,7 @@ export class GrokVideoProvider implements VideoProvider {
     return [
       'AUDIO:',
       `English voiceover narration for international shoppers, clear and professional: "${script}"`,
+      'Pacing: relaxed 15-second read, about 28-36 spoken words. Do not rush.',
       'Include synchronized spoken English voiceover with subtle soft background music.',
       'Not silent — English audio must be present throughout the clip.',
       'Explain what the product is and how it helps the customer.',

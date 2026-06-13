@@ -63,7 +63,7 @@ export class VideoService {
     const model = options.model || await this.resolveModel(providerId);
     if (!(await provider.isConfigured())) throw new Error(`${this.providerLabel(providerId)} API Key ยังไม่ได้ตั้งค่า`);
 
-    const assets = await this.prepareAssets(product, options);
+    const assets = await this.prepareAssets(product, options, { strictCutout: true });
     const generationConfig = {
       model,
       duration: options.duration ?? DEFAULT_VIDEO_DURATION,
@@ -260,7 +260,11 @@ export class VideoService {
     return provider === 'gemini' ? 'Gemini' : provider === 'kling' ? 'Kling' : 'Grok';
   }
 
-  private async prepareAssets(product: ErpProductCache, options: VideoSubmitOptions): Promise<PreparedVideoAssets> {
+  private async prepareAssets(
+    product: ErpProductCache,
+    options: VideoSubmitOptions,
+    prepareOptions: { strictCutout?: boolean } = {},
+  ): Promise<PreparedVideoAssets> {
     const locale = options.locale ?? 'en';
     const useCutout = options.useCutoutProductImage !== false;
     const referenceImages: VideoReferenceImage[] = [];
@@ -288,6 +292,9 @@ export class VideoService {
     }
 
     if (!cutoutUsed && product.imageUrl) {
+      if (useCutout && prepareOptions.strictCutout) {
+        throw new Error('Die-cut product image unavailable — check n8n cutout webhook before generating video.');
+      }
       const original = await this.fetchImage(product.imageUrl, 'product original');
       if (original) referenceImages.push(original);
     }
@@ -397,7 +404,7 @@ export class VideoService {
     locale: 'en' | 'th',
     hasMascot = false,
   ): Promise<string> {
-    const fallbackEn = `This is ${product.name}. ${benefits.slice(0, 2).join('. ')}. A practical choice for everyday use.`;
+    const fallbackEn = `Meet ${product.name}. It helps brighten and care for your skin, with simple daily and overnight use for a fresh, radiant routine.`;
     const fallbackTh = `${product.name} ช่วย${benefits.slice(0, 2).join(' และ ')} เหมาะสำหรับใช้ในชีวิตประจำวัน`;
 
     try {
@@ -419,7 +426,9 @@ export class VideoService {
             hasMascot
               ? 'The brand mascot character presents the product to camera in a friendly way.'
               : 'Product-focused presentation.',
-            'Start with what the product is, then explain 2-3 key benefits naturally.',
+            'Keep it short enough for relaxed speech in 15 seconds: 28-36 words total.',
+            'Use 2 short sentences only. No scene directions, no brackets, no speaker labels.',
+            'Start with what the product is, then explain 1-2 key benefits naturally.',
             'Use only the provided benefits — do not invent medical or exaggerated claims.',
             'No SKU or product codes. Friendly, clear, professional tone.',
             `Product: ${product.name}`,
@@ -427,28 +436,43 @@ export class VideoService {
             `Key benefits: ${benefits.join(' / ')}`,
           ].join('\n'),
       );
-      return res.content || (locale === 'th' ? fallbackTh : fallbackEn);
+      const script = res.content || (locale === 'th' ? fallbackTh : fallbackEn);
+      return locale === 'en' ? this.compactEnglishVoiceover(script, fallbackEn) : script;
     } catch {
       return locale === 'th' ? fallbackTh : fallbackEn;
     }
+  }
+
+  private compactEnglishVoiceover(script: string, fallback: string): string {
+    const cleaned = script
+      .replace(/\[[^\]]+\]/g, ' ')
+      .replace(/(?:Mascot|Narrator|Voiceover)\s*:\s*/gi, '')
+      .replace(/["“”]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return fallback;
+    if (words.length <= 38) return cleaned;
+    return `${words.slice(0, 36).join(' ').replace(/[,.!?;:]+$/, '')}.`;
   }
 
   private defaultVisualBrief(locale: 'en' | 'th', hasMascot = false): string {
     if (locale === 'th') {
       return [
         'สร้างวิดีโออธิบายสินค้าแนวตั้ง 15 วินาที พร้อมเสียง voiceover',
-        'ฮีโร่: รูปสินค้า die-cut บนพื้นหลังเรียบสะอาด',
+        'ฮีโร่: เฉพาะตัวแพ็กเกจสินค้าแบบ die-cut บนพื้นหลังเรียบสะอาด',
         'กล้อง: เคลื่อนไหวช้าๆ สินค้าอยู่กลางเฟรม ฉลากชัดเจน',
         'จุดประสงค์: ให้ลูกค้าเข้าใจว่าสินค้าช่วยอะไร',
+        'ห้ามใช้ป้ายราคา กรอบโปรโมชัน แบนเนอร์ลดราคา หรือภาพร้านค้า',
         '9:16 แนวตั้ง สไตล์ explainer e-commerce',
       ].join('\n');
     }
     return [
       'Create a 15-second vertical product explainer video with native English audio.',
-      'Hero: isolated product die-cut on a clean minimal white/soft gradient background.',
+      'Hero: only the real product packaging die-cut on a clean minimal white/soft gradient background.',
       'Camera: slow subtle motion — gentle push-in or soft parallax. Product stays centered; packaging label stays readable.',
       'Purpose: help international customers understand what this product is and what it helps with.',
-      'No busy store background, no collage. Product-focused e-commerce explainer.',
+      'No price cards, red promotion frames, discount badges, Thai retail banners, store background, or collage.',
       hasMascot ? 'Brand mascot presents the product to camera.' : 'Product-only hero shot.',
       '9:16 vertical, polished and professional.',
     ].join('\n');
@@ -475,11 +499,12 @@ export class VideoService {
       '',
       'Visual rules:',
       cutoutUsed
-        ? '- Use the die-cut product as the hero. Keep packaging text and shape exactly recognizable.'
+        ? '- Use only the die-cut product packaging as the hero. Keep packaging text and shape exactly recognizable.'
         : '- Keep the product packaging exactly recognizable.',
       hasMascot
-        ? '- Preserve the mascot character exactly. Mascot presents the die-cut product to camera.'
+        ? '- Preserve the mascot character exactly, but keep it secondary to the product packaging.'
         : '- Product-only shot. No store clutter.',
+      '- Remove/ignore price cards, sale signs, red promo frames, discount badges, shelf posters, and store clutter.',
       '- No SKU codes, watermarks, or medical claims.',
       '- Output: polished product explainer short video.',
     ].join('\n');
@@ -494,8 +519,8 @@ export class VideoService {
     const layers: sharp.OverlayOptions[] = [];
 
     if (mascot) {
-      const mascotWidth = Math.round(width * 0.78);
-      const mascotHeight = Math.round(height * 0.38);
+      const mascotWidth = Math.round(width * 0.58);
+      const mascotHeight = Math.round(height * 0.28);
       const mascotBuf = await sharp(mascot.buffer)
         .resize(mascotWidth, mascotHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
         .png()
@@ -507,8 +532,8 @@ export class VideoService {
       });
     }
 
-    const productWidth = Math.round(width * (mascot ? 0.52 : 0.74));
-    const productHeight = Math.round(height * (mascot ? 0.32 : 0.58));
+    const productWidth = Math.round(width * (mascot ? 0.76 : 0.74));
+    const productHeight = Math.round(height * (mascot ? 0.46 : 0.58));
     const productBuf = await sharp(product.buffer)
       .resize(productWidth, productHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
       .png()
