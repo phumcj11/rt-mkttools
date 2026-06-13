@@ -229,12 +229,12 @@ export function MediaView() {
                 <div>
                   <p className="text-sm font-semibold text-violet-900">AI Product POP Sticker Generator</p>
                   <p className="text-xs text-violet-700 mt-0.5">
-                    AI วิเคราะห์รูป → สร้าง copy ปลอดภัย → GPT สร้าง sticker artwork → ประกอบรูปสินค้าจริงทับ (ฉลากไม่เพี้ยน)
+                    AI วิเคราะห์รูปสินค้า → สร้าง copy ปลอดภัย → GPT Image ใช้รูปสินค้าเป็น reference เพื่อสร้าง POP sticker ทั้งชิ้น
                   </p>
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
                     <span className="text-[11px] text-muted-foreground">ใช้เวลา ~1–2 นาที/สินค้า</span>
                     <span className="text-[11px] text-muted-foreground">~$0.04–0.12/สินค้า (GPT Image ×4)</span>
-                    <span className="text-[11px] text-violet-600 font-medium">รูปสินค้า ERP composite ทับ — ฉลากและตัวอักษรไม่เพี้ยน</span>
+                    <span className="text-[11px] text-violet-600 font-medium">แนวเดียวกับ ChatGPT: สร้าง die-cut retail sticker จากรูปสินค้า reference</span>
                   </div>
                 </div>
               </div>
@@ -339,7 +339,7 @@ export function MediaView() {
                       {isGenerating && (
                         <div className="rounded-md bg-violet-50 border border-violet-100 px-3 py-2.5 text-xs text-violet-700 space-y-1">
                           <p className="font-medium">กำลังสร้าง POP Sticker AI...</p>
-                          <p>1. วิเคราะห์รูปสินค้า ERP → 2. สร้าง copy ปลอดภัย → 3. AI วาด sticker artwork (ไม่มีรูปสินค้า) → 4. ประกอบรูปสินค้าจริงทับ ×4</p>
+                          <p>1. วิเคราะห์รูปสินค้า ERP → 2. สร้าง copy ปลอดภัย → 3. GPT Image สร้าง die-cut POP sticker จากรูป reference ×4</p>
                           <p className="text-violet-500">ใช้เวลาประมาณ 1–2 นาที</p>
                         </div>
                       )}
