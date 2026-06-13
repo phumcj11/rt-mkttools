@@ -281,8 +281,11 @@ export class MediaService {
           filename,
           url: `/media/serve/${filename}`,
           createdAt: stat.birthtime.toISOString(),
+          size: stat.size,
         };
       })
+      .filter((file) => !file.filename.endsWith('.mp4') || file.size > 1024)
+      .map(({ size: _size, ...file }) => file)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 

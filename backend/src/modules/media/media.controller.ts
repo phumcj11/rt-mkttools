@@ -282,8 +282,14 @@ export class MediaController {
     const safe = path.basename(filename);
     const filePath = path.join(process.cwd(), 'uploads', 'media', safe);
     if (!fs.existsSync(filePath)) throw new NotFoundException('File not found');
+    const stat = fs.statSync(filePath);
+    if (safe.endsWith('.mp4') && stat.size < 1024) {
+      throw new BadRequestException('Video file is not ready or invalid. Please regenerate the video.');
+    }
     const mime = safe.endsWith('.mp4') ? 'video/mp4' : 'image/png';
     res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Length', String(stat.size));
+    res.setHeader('Accept-Ranges', 'bytes');
     res.sendFile(filePath);
   }
 

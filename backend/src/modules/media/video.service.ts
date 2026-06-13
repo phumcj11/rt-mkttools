@@ -131,26 +131,27 @@ export class VideoService {
       fs.writeFileSync(dest, Buffer.from(base64, 'base64'));
       return;
     }
-    const https = await import('https');
-    const http = await import('http');
-    const fileStream = fs.createWriteStream(dest);
-    return new Promise((resolve, reject) => {
-      const client = url.startsWith('https') ? https : http;
-      const headers: Record<string, string> = {};
-      const apiKey = this.extractApiKeyFromUrl(url);
-      if (apiKey) headers['x-goog-api-key'] = apiKey;
-      (client as typeof https).get(url, { headers }, (res) => {
-        if ((res.statusCode ?? 500) >= 400) {
-          fileStream.close();
-          fs.rmSync(dest, { force: true });
-          reject(new Error(`download returned HTTP ${res.statusCode}`));
-          return;
-        }
-        res.pipe(fileStream);
-        fileStream.on('finish', () => { fileStream.close(); resolve(); });
-        fileStream.on('error', reject);
-      }).on('error', reject);
+
+    const headers: Record<string, string> = {};
+    const apiKey = this.extractApiKeyFromUrl(url);
+    if (apiKey) headers['x-goog-api-key'] = apiKey;
+
+    const res = await fetch(url, {
+      headers,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(120_000),
     });
+    const contentType = res.headers.get('content-type') ?? '';
+    const buffer = Buffer.from(await res.arrayBuffer());
+
+    if (!res.ok) {
+      throw new Error(`download returned HTTP ${res.status}: ${buffer.toString('utf8', 0, 300)}`);
+    }
+    if (buffer.length < 1024 || contentType.includes('application/json') || buffer[0] === 0x7b) {
+      throw new Error(`download did not return a valid video (${contentType || 'unknown'}, ${buffer.length} bytes): ${buffer.toString('utf8', 0, 300)}`);
+    }
+
+    fs.writeFileSync(dest, buffer);
   }
 
   private async saveCompletedVideo(videoUrl: string, sku: string, metadata?: Record<string, unknown>): Promise<string> {
