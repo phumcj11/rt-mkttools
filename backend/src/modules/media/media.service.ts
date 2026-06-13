@@ -467,6 +467,7 @@ export class MediaService {
       path.join(process.cwd(), 'dist', 'promo-templates', filename),
       path.join(process.cwd(), 'dist', 'assets', 'promo-templates', filename),
       path.join(__dirname, '..', '..', 'promo-templates', filename),
+      path.join(__dirname, '..', '..', 'assets', 'promo-templates', filename),
       path.join(process.cwd(), '..', 'frontend', 'public', 'templates', filename),
     ];
     for (const p of candidates) {

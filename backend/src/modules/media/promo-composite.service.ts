@@ -46,6 +46,12 @@ const TEMPLATE_FILE_MAP: Record<string, string> = {
   clearance_sale: 'promo-clearance-sale.png',
 };
 
+const KANIT_FONT_FILES: Record<number, string> = {
+  700: 'kanit-thai-700-normal.woff2',
+  800: 'kanit-thai-800-normal.woff2',
+  900: 'kanit-thai-900-normal.woff2',
+};
+
 /** A single sharp composite layer */
 interface CompLayer {
   input: Buffer | string;
@@ -57,16 +63,16 @@ interface CompLayer {
 export class PromoCompositeService {
   private readonly logger = new Logger(PromoCompositeService.name);
   private readonly layouts: PromoLayouts;
+  private readonly fontCache = new Map<number, string>();
 
   constructor() {
-    const layoutsPath = path.join(__dirname, 'promo-layouts.json');
-    this.layouts = JSON.parse(fs.readFileSync(layoutsPath, 'utf8')) as PromoLayouts;
+    this.layouts = this.loadLayouts();
   }
 
   /**
    * Composite a promotion poster.
    * @param promoType  e.g. "spend_free_gift"
-   * @param data       form data (text values and image buffers keyed by slot name)
+   * @param data       form data (text values keyed by slot name)
    * @param imageBuffers  map of slot name → Buffer (cutout PNG or original)
    */
   async composite(
@@ -81,11 +87,9 @@ export class PromoCompositeService {
     const layers: CompLayer[] = [];
 
     for (const [slotName, slot] of Object.entries(layout.slots)) {
-      // 1. Mask layer — opaque rect covering the placeholder area
       const maskSvg = this.buildMaskSvg(slot.w, slot.h, slot.maskColor);
       layers.push({ input: Buffer.from(maskSvg), left: slot.x, top: slot.y });
 
-      // 2. Content layer — image or text
       if (imageBuffers[slotName]) {
         const contentBuffer = await this.resizeImage(
           imageBuffers[slotName],
@@ -116,8 +120,23 @@ export class PromoCompositeService {
   }
 
   // ---------------------------------------------------------------------------
-  // Helpers
+  // Asset loading
   // ---------------------------------------------------------------------------
+
+  private loadLayouts(): PromoLayouts {
+    const candidates = [
+      path.join(__dirname, 'promo-layouts.json'),
+      path.join(process.cwd(), 'dist', 'modules', 'media', 'promo-layouts.json'),
+      path.join(process.cwd(), 'src', 'modules', 'media', 'promo-layouts.json'),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        this.logger.log(`Using promo layouts: ${p}`);
+        return JSON.parse(fs.readFileSync(p, 'utf8')) as PromoLayouts;
+      }
+    }
+    throw new Error('ไม่พบ promo-layouts.json — รัน npm run build ใน backend');
+  }
 
   private loadTemplate(promoType: string): Buffer {
     const filename = TEMPLATE_FILE_MAP[promoType];
@@ -125,17 +144,54 @@ export class PromoCompositeService {
 
     const candidates = [
       path.join(process.cwd(), 'assets', 'promo-templates', filename),
+      path.join(process.cwd(), 'dist', 'promo-templates', filename),
       path.join(process.cwd(), 'dist', 'assets', 'promo-templates', filename),
+      path.join(__dirname, '..', '..', 'promo-templates', filename),
       path.join(__dirname, '..', '..', 'assets', 'promo-templates', filename),
       path.join(process.cwd(), '..', 'frontend', 'public', 'templates', filename),
     ];
     for (const p of candidates) {
-      if (fs.existsSync(p)) return fs.readFileSync(p);
+      if (fs.existsSync(p)) {
+        this.logger.debug(`Using promo template: ${p}`);
+        return fs.readFileSync(p);
+      }
     }
     throw new Error(
       `ไม่พบไฟล์ Template PNG สำหรับ ${promoType} — ตรวจสอบ backend/assets/promo-templates/`,
     );
   }
+
+  private getFontFaceCss(fontWeight: number): string {
+    const weight = fontWeight >= 900 ? 900 : fontWeight >= 800 ? 800 : 700;
+    let b64 = this.fontCache.get(weight);
+    if (!b64) {
+      const filename = KANIT_FONT_FILES[weight];
+      const fontPath = this.resolveAssetPath('fonts', filename);
+      if (!fontPath) {
+        this.logger.warn(`Kanit font not found for weight ${weight}, using sans-serif`);
+        return '';
+      }
+      b64 = fs.readFileSync(fontPath).toString('base64');
+      this.fontCache.set(weight, b64);
+    }
+    return `@font-face{font-family:'Kanit';font-weight:${weight};src:url(data:font/woff2;base64,${b64}) format('woff2');}`;
+  }
+
+  private resolveAssetPath(...parts: string[]): string | null {
+    const candidates = [
+      path.join(process.cwd(), 'assets', ...parts),
+      path.join(process.cwd(), 'dist', ...parts),
+      path.join(__dirname, '..', '..', ...parts),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p;
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // SVG builders
+  // ---------------------------------------------------------------------------
 
   private buildMaskSvg(w: number, h: number, color: string): Buffer {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
@@ -158,12 +214,12 @@ export class PromoCompositeService {
     const color = cfg.color;
     const lineHeight = cfg.lineHeight ?? 1.3;
     const prefix = cfg.prefix ?? '';
+    const fontFace = this.getFontFaceCss(fontWeight);
+    const fontFamily = fontFace ? "'Kanit', sans-serif" : 'sans-serif';
 
-    // Estimate lines (rough wrap at ~12 chars per 100px)
-    const charsPerLine = Math.floor((innerW / fontSize) * 1.8);
+    const charsPerLine = Math.max(4, Math.floor((innerW / fontSize) * 1.6));
     const lines = this.wrapText(prefix + text, charsPerLine);
 
-    // Vertical alignment
     const totalTextH = lines.length * fontSize * lineHeight;
     let startY: number;
     if (cfg.valign === 'bottom') {
@@ -174,7 +230,6 @@ export class PromoCompositeService {
       startY = padding + (innerH - totalTextH) / 2 + fontSize * 0.8;
     }
 
-    // Text anchor
     let anchor = 'middle';
     let x = padding + innerW / 2;
     if (cfg.align === 'left') { anchor = 'start'; x = padding + 4; }
@@ -188,6 +243,7 @@ export class PromoCompositeService {
       .join('');
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+  ${fontFace ? `<defs><style>${fontFace}</style></defs>` : ''}
   <text
     font-size="${fontSize}"
     font-weight="${fontWeight}"
@@ -196,7 +252,7 @@ export class PromoCompositeService {
     dominant-baseline="auto"
     x="${x}"
     y="${startY}"
-    font-family="sans-serif"
+    font-family="${fontFamily}"
   >${tspans}</text>
 </svg>`;
     return Buffer.from(svg);
@@ -218,7 +274,6 @@ export class PromoCompositeService {
 
     if (padding === 0) return resized;
 
-    // Embed the resized image with padding into a slotW × slotH transparent canvas
     return sharp({
       create: {
         width: slotW,
@@ -232,20 +287,32 @@ export class PromoCompositeService {
       .toBuffer();
   }
 
+  /** Wrap by character count — works for Thai (no spaces) and Latin */
   private wrapText(text: string, charsPerLine: number): string[] {
     if (!text) return [''];
-    const words = text.split(/\s+/);
-    const lines: string[] = [];
-    let current = '';
-    for (const word of words) {
-      if ((current + ' ' + word).trim().length > charsPerLine && current) {
-        lines.push(current);
-        current = word;
-      } else {
-        current = current ? current + ' ' + word : word;
+    if (text.length <= charsPerLine) return [text];
+
+    const hasSpaces = /\s/.test(text);
+    if (hasSpaces) {
+      const words = text.split(/\s+/);
+      const lines: string[] = [];
+      let current = '';
+      for (const word of words) {
+        if ((current + ' ' + word).trim().length > charsPerLine && current) {
+          lines.push(current);
+          current = word;
+        } else {
+          current = current ? current + ' ' + word : word;
+        }
       }
+      if (current) lines.push(current);
+      return lines;
     }
-    if (current) lines.push(current);
+
+    const lines: string[] = [];
+    for (let i = 0; i < text.length; i += charsPerLine) {
+      lines.push(text.slice(i, i + charsPerLine));
+    }
     return lines;
   }
 

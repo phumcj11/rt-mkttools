@@ -13,6 +13,7 @@
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "test": "jest",
     "seed": "ts-node -r tsconfig-paths/register src/database/seeds/seed.ts",
+    "test:promo-composite": "node dist/scripts/test-promo-composite.js",
     "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts"
   },
   "dependencies": {

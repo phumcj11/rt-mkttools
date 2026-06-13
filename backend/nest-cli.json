@@ -9,6 +9,10 @@
         "include": "../assets/**/*",
         "outDir": "dist",
         "watchAssets": true
+      },
+      {
+        "include": "modules/media/promo-layouts.json",
+        "watchAssets": true
       }
     ]
   }

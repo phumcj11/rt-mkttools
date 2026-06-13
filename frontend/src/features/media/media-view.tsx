@@ -267,9 +267,10 @@ export function MediaView() {
       setDriveServiceAccount('');
       setKlingKey('');
       setN8nWebhookUrl('');
-      const [ds, vs] = await Promise.all([getDriveSettings(), getVideoSettings()]);
+      const [ds, vs, n8n] = await Promise.all([getDriveSettings(), getVideoSettings(), getN8nSettings()]);
       setDriveSettings(ds);
       setVideoSettings(vs);
+      setN8nSettings(n8n);
     } catch {
       setSettingsMsg('บันทึกไม่สำเร็จ');
     } finally {
