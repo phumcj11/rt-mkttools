@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -24,6 +25,43 @@ export class ProductsController {
   @Get()
   findAll(@CurrentUser() user: AuthUser) {
     return this.productsService.findAll(user.tenantId);
+  }
+
+  @Get('catalog')
+  catalog(
+    @Query('q') q?: string,
+    @Query('category') category?: string,
+    @Query('brand') brand?: string,
+    @Query('abc') abc?: string,
+    @Query('filter') filter?: 'all' | 'new' | 'changed' | 'missing_image' | 'ready' | 'low_gp' | 'promo' | 'inactive',
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.productsService.catalog({
+      q,
+      category,
+      brand,
+      abc,
+      filter,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('catalog/status')
+  catalogStatus() {
+    return this.productsService.catalogStatus();
+  }
+
+  @Post('catalog/sync')
+  @Roles('super_admin', 'admin')
+  catalogSync() {
+    return this.productsService.syncCatalog();
+  }
+
+  @Get('catalog/:sku')
+  catalogDetail(@Param('sku') sku: string) {
+    return this.productsService.catalogDetail(sku);
   }
 
   @Get(':id')

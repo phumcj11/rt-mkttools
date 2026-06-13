@@ -1,6 +1,7 @@
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -42,6 +43,7 @@ import { UsersModule } from './modules/users/users.module';
       validationSchema,
       envFilePath: ['../.env', '.env'],
     }),
+    ScheduleModule.forRoot(),
     I18nModule,
     DatabaseModule,
     AuditModule,

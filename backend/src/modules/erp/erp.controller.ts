@@ -192,10 +192,22 @@ export class ErpController {
     return this.sync.syncProducts();
   }
 
+  @Post('sync/product-marketing')
+  @Roles('super_admin', 'admin')
+  syncProductMarketing() {
+    return this.sync.syncProductMarketing();
+  }
+
   @Post('sync/sales')
   @Roles('super_admin', 'admin')
   syncSales(@Query('days', new DefaultValuePipe(90), ParseIntPipe) days: number) {
     return this.sync.syncSalesSummary(days);
+  }
+
+  @Post('sync/promotions')
+  @Roles('super_admin', 'admin')
+  syncPromotions(@Query('limit', new DefaultValuePipe(1000), ParseIntPipe) limit: number) {
+    return this.sync.syncPromotionSnapshots(limit);
   }
 
   @Get('products/:sku/detail')

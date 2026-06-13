@@ -7,6 +7,12 @@ export interface ErpProduct {
   category: string;
   brand: string;
   retailPrice: string;
+  costSales?: number;
+  marginGpPct?: number;
+  salesGpPct?: number;
+  effectiveGpPct?: number;
+  activePromotionCount?: number;
+  marketingReadiness?: string;
   imageUrl: string;
 }
 
@@ -100,7 +106,10 @@ export interface VideoSubmitOptions {
 
 // Products
 export function listMediaProducts(limit = 50, offset = 0) {
-  return apiRequest<ErpProduct[]>(`/media/products?limit=${limit}&offset=${offset}`);
+  const page = Math.floor(offset / limit) + 1;
+  return apiRequest<{ items: Array<Omit<ErpProduct, 'retailPrice'> & { retailPrice: number }> }>(
+    `/products/catalog?filter=ready&page=${page}&limit=${limit}`,
+  ).then((res) => res.items.map((item) => ({ ...item, retailPrice: String(item.retailPrice) })));
 }
 
 // Image generation

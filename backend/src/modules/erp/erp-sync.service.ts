@@ -1,7 +1,14 @@
+import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ErpProductCache, ErpSalesDaily, ErpSalesSummary } from '../../database/entities';
+import {
+  ErpProductCache,
+  ErpSalesDaily,
+  ErpSalesSummary,
+  ProductPromotionSnapshot,
+  ProductSyncRun,
+} from '../../database/entities';
 import { ErpService } from './erp.service';
 
 export interface ErpDailyPoint {
@@ -28,6 +35,10 @@ export class ErpSyncService {
     private readonly productCacheRepo: Repository<ErpProductCache>,
     @InjectRepository(ErpSalesSummary)
     private readonly salesSummaryRepo: Repository<ErpSalesSummary>,
+    @InjectRepository(ProductPromotionSnapshot)
+    private readonly promotionSnapshotRepo: Repository<ProductPromotionSnapshot>,
+    @InjectRepository(ProductSyncRun)
+    private readonly syncRunRepo: Repository<ProductSyncRun>,
     private readonly erp: ErpService,
   ) {}
 
@@ -114,30 +125,88 @@ export class ErpSyncService {
   // ---------- Product + Sales Cache Sync ----------
 
   /** ดึง product master จาก ERP แล้ว upsert ลง erp_product_cache */
-  async syncProducts(): Promise<{ synced: number }> {
-    this.logger.log('Starting ERP product cache sync…');
-    // ดึงทีละ page จนครบ (ใช้ limit สูงเพื่อลด round-trip)
-    const rows = await this.erp.productsList({ limit: 5000 }, true);
-    if (rows.length === 0) {
-      this.logger.warn('syncProducts: ERP returned 0 products');
-      return { synced: 0 };
+  async syncProducts(source = 'manual'): Promise<{
+    synced: number;
+    newCount: number;
+    changedCount: number;
+    inactiveCount: number;
+  }> {
+    const run = await this.syncRunRepo.save(this.syncRunRepo.create({
+      status: 'running',
+      source,
+      startedAt: new Date(),
+    }));
+
+    try {
+      this.logger.log('Starting ERP product cache sync...');
+      const rows = await this.fetchAllProducts();
+      if (rows.length === 0) {
+        this.logger.warn('syncProducts: ERP returned 0 products');
+        await this.finishRun(run, { status: 'success', totalCount: 0 });
+        return { synced: 0, newCount: 0, changedCount: 0, inactiveCount: 0 };
+      }
+
+      const now = new Date();
+      const incomingSkus = new Set(rows.map((p) => this.normalSku(p.sku)).filter(Boolean));
+      const existing = await this.productCacheRepo.find();
+      const existingBySku = new Map(existing.map((p) => [this.normalSku(p.sku), p]));
+
+      let newCount = 0;
+      let changedCount = 0;
+      const entities = rows.map((p) => {
+        const sku = this.normalSku(p.sku);
+        const old = existingBySku.get(sku);
+        const changeHash = this.productHash(p);
+        const isNew = !old;
+        const changed = !!old && old.changeHash !== changeHash;
+        if (isNew) newCount += 1;
+        if (changed) changedCount += 1;
+
+        return this.productCacheRepo.create({
+          sku,
+          productId: p.id,
+          name: p.name,
+          category: p.category,
+          brand: p.brand,
+          retailPrice: p.retailPrice.toFixed(2),
+          costSales: p.costSales.toFixed(2),
+          imageUrl: p.imageUrl,
+          abcCompany: p.abcCompany,
+          firstSeenAt: old?.firstSeenAt ?? now,
+          lastSeenAt: now,
+          lastChangedAt: isNew || changed ? now : old?.lastChangedAt ?? now,
+          isActive: true,
+          changeHash,
+        });
+      });
+
+      await this.productCacheRepo.upsert(entities, ['sku']);
+      const missing = existing.filter((p) => !incomingSkus.has(this.normalSku(p.sku)) && p.isActive);
+      if (missing.length > 0) {
+        await this.productCacheRepo
+          .createQueryBuilder()
+          .update(ErpProductCache)
+          .set({ isActive: false, lastSeenAt: now })
+          .where('sku IN (:...skus)', { skus: missing.map((p) => p.sku) })
+          .execute();
+      }
+
+      await this.finishRun(run, {
+        status: 'success',
+        totalCount: entities.length,
+        newCount,
+        changedCount,
+        inactiveCount: missing.length,
+      });
+      this.logger.log(`syncProducts: upserted ${entities.length} products (${newCount} new, ${changedCount} changed, ${missing.length} inactive)`);
+      return { synced: entities.length, newCount, changedCount, inactiveCount: missing.length };
+    } catch (err) {
+      await this.finishRun(run, {
+        status: 'failed',
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
     }
-    const entities = rows.map((p) =>
-      this.productCacheRepo.create({
-        sku: p.sku,
-        productId: p.id,
-        name: p.name,
-        category: p.category,
-        brand: p.brand,
-        retailPrice: p.retailPrice.toFixed(2),
-        costSales: p.costSales.toFixed(2),
-        imageUrl: p.imageUrl,
-        abcCompany: p.abcCompany,
-      }),
-    );
-    await this.productCacheRepo.upsert(entities, ['sku']);
-    this.logger.log(`syncProducts: upserted ${entities.length} products`);
-    return { synced: entities.length };
   }
 
   /** ดึง sales/by_sku_branch (ย้อนหลัง N วัน) aggregate แล้ว upsert ลง erp_sales_summary */
@@ -200,28 +269,92 @@ export class ErpSyncService {
     return { synced: entities.length, from: fromStr, to: toStr };
   }
 
+  async syncPromotionSnapshots(limit = 1000): Promise<{ synced: number; failed: number }> {
+    const products = await this.productCacheRepo.find({
+      where: { isActive: true },
+      order: { lastChangedAt: 'DESC', syncedAt: 'DESC' },
+      take: Math.max(1, Math.min(limit, 5000)),
+    });
+    let synced = 0;
+    let failed = 0;
+
+    for (const product of products) {
+      try {
+        const detail = await this.erp.productDetail(product.sku, this);
+        const promotions = detail.promotions ?? [];
+        const promoPrices = promotions.map((p) => p.promoPrice).filter((v) => v > 0);
+        const gpValues = promotions
+          .map((p) => p.remainingGpPct)
+          .filter((v): v is number => typeof v === 'number');
+
+        await this.promotionSnapshotRepo.save(this.promotionSnapshotRepo.create({
+          sku: product.sku,
+          productId: product.productId,
+          activePromotionCount: promotions.length,
+          promotionNames: promotions.map((p) => p.name).filter(Boolean).join(' | ') || null,
+          promotionTypes: promotions.map((p) => p.type || p.typeName).filter(Boolean).join(' | ') || null,
+          lowestPromoPrice: promoPrices.length > 0 ? Math.min(...promoPrices).toFixed(2) : null,
+          bestRemainingGpPct: gpValues.length > 0 ? Math.max(...gpValues).toFixed(2) : null,
+          promotions,
+        }));
+        synced += 1;
+      } catch (err) {
+        failed += 1;
+        this.logger.warn(`syncPromotionSnapshots: ${product.sku} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return { synced, failed };
+  }
+
+  async syncProductMarketing(source = 'manual'): Promise<{
+    products: Awaited<ReturnType<ErpSyncService['syncProducts']>>;
+    sales: Awaited<ReturnType<ErpSyncService['syncSalesSummary']>>;
+    promotions: Awaited<ReturnType<ErpSyncService['syncPromotionSnapshots']>>;
+  }> {
+    const products = await this.syncProducts(source);
+    const sales = await this.syncSalesSummary(90);
+    const promotions = await this.syncPromotionSnapshots(1000);
+    const latestRun = await this.syncRunRepo.findOne({ order: { id: 'DESC' }, where: {} });
+    if (latestRun) {
+      latestRun.salesCount = sales.synced;
+      latestRun.promotionCount = promotions.synced;
+      await this.syncRunRepo.save(latestRun);
+    }
+    return { products, sales, promotions };
+  }
+
   /** คืนสถานะ cache ปัจจุบัน */
   async getCacheStatus(): Promise<{
     products: { count: number; syncedAt: Date | null };
     sales: { count: number; syncedAt: Date | null };
+    promotions: { count: number; syncedAt: Date | null };
+    latestRun: ProductSyncRun | null;
   }> {
-    const [productCount, salesCount] = await Promise.all([
+    const [productCount, salesCount, promotionCount] = await Promise.all([
       this.productCacheRepo.count(),
       this.salesSummaryRepo.count(),
+      this.promotionSnapshotRepo.count(),
     ]);
 
-    const [lastProduct, lastSales] = await Promise.all([
+    const [lastProduct, lastSales, lastPromotion, latestRun] = await Promise.all([
       productCount > 0
         ? this.productCacheRepo.findOne({ order: { syncedAt: 'DESC' }, where: {} })
         : Promise.resolve(null),
       salesCount > 0
         ? this.salesSummaryRepo.findOne({ order: { syncedAt: 'DESC' }, where: {} })
         : Promise.resolve(null),
+      promotionCount > 0
+        ? this.promotionSnapshotRepo.findOne({ order: { syncedAt: 'DESC' }, where: {} })
+        : Promise.resolve(null),
+      this.syncRunRepo.findOne({ order: { id: 'DESC' }, where: {} }),
     ]);
 
     return {
       products: { count: productCount, syncedAt: lastProduct?.syncedAt ?? null },
       sales: { count: salesCount, syncedAt: lastSales?.syncedAt ?? null },
+      promotions: { count: promotionCount, syncedAt: lastPromotion?.syncedAt ?? null },
+      latestRun,
     };
   }
 
@@ -264,5 +397,46 @@ export class ErpSyncService {
   /** อ่าน sales summary ตาม SKU เดียว */
   async getCachedSales(sku: string): Promise<ErpSalesSummary | null> {
     return this.salesSummaryRepo.findOne({ where: { sku } });
+  }
+
+  private async fetchAllProducts() {
+    const limit = 1000;
+    const all: Awaited<ReturnType<ErpService['productsList']>> = [];
+    for (let page = 1; page <= 100; page += 1) {
+      const rows = await this.erp.productsList({ page, limit }, true);
+      all.push(...rows);
+      if (rows.length < limit) break;
+    }
+    return all;
+  }
+
+  private normalSku(sku: string) {
+    return String(sku ?? '').replace(/\s+/g, '').toUpperCase();
+  }
+
+  private productHash(product: Awaited<ReturnType<ErpService['productsList']>>[number]) {
+    return createHash('sha256')
+      .update(JSON.stringify({
+        sku: this.normalSku(product.sku),
+        productId: product.id,
+        name: product.name,
+        category: product.category,
+        brand: product.brand,
+        retailPrice: product.retailPrice,
+        costSales: product.costSales,
+        imageUrl: product.imageUrl,
+        abcCompany: product.abcCompany,
+      }))
+      .digest('hex');
+  }
+
+  private async finishRun(
+    run: ProductSyncRun,
+    patch: Partial<Pick<ProductSyncRun,
+      'status' | 'totalCount' | 'newCount' | 'changedCount' | 'inactiveCount' | 'promotionCount' | 'salesCount' | 'error'
+    >>,
+  ) {
+    Object.assign(run, patch, { finishedAt: new Date() });
+    await this.syncRunRepo.save(run);
   }
 }

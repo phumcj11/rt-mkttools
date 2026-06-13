@@ -28,3 +28,5 @@ export * from './inbox-message.entity';
 export * from './system-setting.entity';
 export * from './erp-product-cache.entity';
 export * from './erp-sales-summary.entity';
+export * from './product-promotion-snapshot.entity';
+export * from './product-sync-run.entity';
