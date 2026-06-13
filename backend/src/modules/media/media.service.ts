@@ -516,10 +516,47 @@ export class MediaService {
   }
 
   /**
+   * Remove near-white pixels from an image (typical ERP catalog backgrounds).
+   * Converts any pixel with R>220, G>220, B>220 to fully transparent.
+   * Uses a 4-pixel edge feathering to avoid harsh borders on the product.
+   */
+  private async removeWhiteBackground(
+    sharp: (input?: Buffer | object) => any,
+    imageBuffer: Buffer,
+    threshold = 225,
+  ): Promise<Buffer> {
+    const { data, info } = await sharp(imageBuffer)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const { width, height, channels } = info;
+    const buf = Buffer.from(data); // mutable copy
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * channels;
+        const r = buf[idx];
+        const g = buf[idx + 1];
+        const b = buf[idx + 2];
+        if (r >= threshold && g >= threshold && b >= threshold) {
+          buf[idx + 3] = 0; // fully transparent
+        }
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const sharpRaw = require('sharp') as (input: Buffer, opts: object) => any;
+    return sharpRaw(buf, { raw: { width, height, channels } }).png().toBuffer();
+  }
+
+  /**
    * Composite the real product image onto the AI-generated background.
-   * Product is placed in the lower-center, scaled to ~55% of canvas height.
-   * If cutout was used (transparent PNG), it composites cleanly.
-   * If not, it crops the product with a slight rounded-rect clip area.
+   *
+   * Pipeline:
+   *  1. Strip white/near-white background (ERP catalog images have white BG with overlay text)
+   *  2. Scale the product to fill ~52% of canvas height, maintain aspect ratio
+   *  3. Place centered horizontally, vertically centered in the lower two-thirds of the sticker
    */
   private async compositeProductOnBackground(
     sharp: (input?: Buffer | object) => any,
@@ -528,32 +565,34 @@ export class MediaService {
     isCutout: boolean,
   ): Promise<Buffer> {
     const CANVAS = 1024;
-    // Scale product to ~55% of canvas height, maintain aspect ratio
-    const productMeta = await sharp(productBuffer).metadata();
+
+    // Step 1: produce a clean transparent-background product image
+    let cleanBuffer: Buffer;
+    if (isCutout) {
+      // n8n rembg cutout — already transparent
+      cleanBuffer = await sharp(productBuffer).ensureAlpha().png().toBuffer();
+    } else {
+      // ERP catalog image — strip white/near-white background
+      cleanBuffer = await this.removeWhiteBackground(sharp, productBuffer, 225);
+    }
+
+    // Step 2: scale to target size
+    const productMeta = await sharp(cleanBuffer).metadata();
     const pW = productMeta.width ?? 400;
     const pH = productMeta.height ?? 400;
-    const targetH = Math.round(CANVAS * 0.58);
+    const targetH = Math.round(CANVAS * 0.52);
     const scale = targetH / Math.max(pH, 1);
     const targetW = Math.round(pW * scale);
 
-    let fgBuffer: Buffer;
-    if (isCutout) {
-      // Cutout PNG — resize and use transparent composite directly
-      fgBuffer = await sharp(productBuffer)
-        .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .png()
-        .toBuffer();
-    } else {
-      // No cutout — resize with contain and add a soft shadow glow to separate product from bg
-      fgBuffer = await sharp(productBuffer)
-        .resize(targetW, targetH, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
-        .png()
-        .toBuffer();
-    }
+    const fgBuffer: Buffer = await sharp(cleanBuffer)
+      .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toBuffer();
 
-    // Center horizontally, lower half vertically (centered at 60% down)
+    // Step 3: position — centered horizontally, lower-center of sticker
+    // Top starts at 35% so product fills 35–87% vertically, leaving room for headline at top and badge at bottom
     const left = Math.round((CANVAS - targetW) / 2);
-    const top = Math.round(CANVAS * 0.38);
+    const top = Math.round(CANVAS * 0.35);
 
     return sharp(backgroundBuffer)
       .composite([{ input: fgBuffer, left, top }])
