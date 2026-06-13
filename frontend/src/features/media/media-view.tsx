@@ -333,10 +333,12 @@ export function MediaView() {
         price: Number(product.retailPrice) || undefined,
         tone: 'friendly',
         details: [
-          'Product explainer video brief in English for international customers.',
-          '15-second vertical 9:16 clip with English voiceover explaining product benefits.',
-          'Use die-cut product hero. Brand mascot presents the product if mascot assets are selected.',
-          'Explain what the product is and what it helps with.',
+          'Mascot-led retail commercial brief in English for tourists and international customers.',
+          '15-second vertical 9:16 clip with native English voiceover.',
+          'The red elephant mascot is the main hero, inside a bright 100 Baht Shop Thailand store.',
+          'Mascot physically holds the extracted product packaging in one hand and presents it to camera.',
+          'Include shelves in the background, medium full-body shot, slow cinematic push-in, natural gestures.',
+          'Do not use white studio, e-commerce catalog scene, poster layout, or floating product renders.',
           `Mascot selected: ${selectedMascotFilenames().length > 0 ? 'yes' : 'no'}`,
           `Provider: ${videoProvider}, Model: ${videoModel}`,
           current ? `Existing brief: ${current}` : '',
@@ -569,7 +571,7 @@ export function MediaView() {
             <div className="flex items-center gap-2">
               <Video className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <span className="text-[11px] font-medium text-violet-700 whitespace-nowrap px-1.5 py-0.5 rounded bg-violet-100">
-                Explainer EN
+                Mascot EN
               </span>
               <NativeSelect
                 value={videoProvider}
@@ -611,16 +613,16 @@ export function MediaView() {
                   onChange={(e) => setVideoUseCutout(e.target.checked)}
                   className="rounded"
                 />
-                Cutout
+                Extract product
               </label>
             </div>
 
             <div className="hidden lg:flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <span className="rounded bg-muted px-1.5 py-0.5">1 Die-cut</span>
+              <span className="rounded bg-muted px-1.5 py-0.5">1 Extract product</span>
               <span>→</span>
-              <span className="rounded bg-muted px-1.5 py-0.5">2 AI Benefits</span>
+              <span className="rounded bg-muted px-1.5 py-0.5">2 Mascot store scene</span>
               <span>→</span>
-              <span className="rounded bg-muted px-1.5 py-0.5">3 Script EN</span>
+              <span className="rounded bg-muted px-1.5 py-0.5">3 Native EN script</span>
               <span>→</span>
               <span className="rounded bg-muted px-1.5 py-0.5">4 Video</span>
             </div>
@@ -651,7 +653,7 @@ export function MediaView() {
                 {brandUploading === 'mascot' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                 Mascot
               </Button>
-              <span className="text-[10px] text-muted-foreground hidden sm:inline">เลือก Mascot = ใช้ใน Video</span>
+              <span className="text-[10px] text-muted-foreground hidden sm:inline">เลือก Mascot = ตัวหลักใน Video</span>
 
               {/* Asset thumbnails */}
               {brandAssets.filter((a) => a?.filename && a?.url).map((asset) => {
@@ -890,7 +892,7 @@ export function MediaView() {
                         </div>
                         <textarea
                           className="min-h-[72px] w-full rounded-md border bg-background px-3 py-2 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-                          placeholder="Optional visual brief — AI auto-generates die-cut, English benefits & script"
+                          placeholder="Optional visual brief — mascot-led store commercial, product held by mascot"
                           value={videoBriefs[p.sku] ?? ''}
                           onChange={(e) => setVideoBriefs((prev) => ({ ...prev, [p.sku]: e.target.value }))}
                         />
@@ -920,7 +922,7 @@ export function MediaView() {
                                   alt="cutout"
                                   className="h-16 w-16 object-contain rounded border bg-white"
                                 />
-                                <span className="text-muted-foreground">Die-cut product</span>
+                                <span className="text-muted-foreground">Extracted product for mascot to hold</span>
                               </div>
                             )}
                             <div>

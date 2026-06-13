@@ -211,14 +211,18 @@ export class GrokVideoProvider implements VideoProvider {
     return [
       assets.visualBrief,
       '',
-      'Use the supplied starter frame as the exact visual reference and animate it into one unified clip.',
-      'Do not redesign the layout. Do not create a new poster, price promotion image, or store-ad scene.',
+      'Animate the supplied starter frame into one unified mascot-led retail commercial.',
+      'Use the mascot reference as the exact character reference: same face, colors, clothing, friendly personality, and proportions.',
       'Fill the entire vertical frame edge-to-edge. No letterboxing, no side panels, no collage.',
       hasMascot
-        ? 'Keep the mascot smaller/secondary and preserve its appearance. The product packaging remains the main hero.'
-        : 'Keep product packaging and label exactly recognizable on a clean minimal background.',
-      'Use only the die-cut product packaging from the starter frame. Do not use or recreate price cards, red promo frames, discount badges, Thai sale banners, or shelf posters.',
-      'Camera: slow subtle push-in or soft parallax. Professional e-commerce explainer style.',
+        ? 'Mascot is the primary focus and appears in a medium full-body shot, looking directly at camera while talking.'
+        : 'Create a friendly mascot-style retail presenter in a medium full-body shot.',
+      'The mascot physically holds the supplied product packaging in one hand and presents it naturally to the camera.',
+      'Product is secondary but must remain clearly visible throughout. Do not create floating product renders.',
+      'Scene: inside a real 100 Baht Shop Thailand store with bright shelves in the background and realistic depth of field.',
+      'Camera: slow cinematic push-in. Animation: natural hand gestures, occasional pointing to the product, smiling, audience interaction.',
+      'Do not create e-commerce catalog scenes, white studio backgrounds, posters, graphic layouts, price cards, red promo frames, discount badges, or Thai sale banners.',
+      'Style: Disney-quality mascot animation, professional retail commercial, friendly, trustworthy, tourist-friendly.',
       '',
       `Product: ${assets.product.name}`,
       `Category: ${assets.product.category}`,
@@ -236,12 +240,15 @@ export class GrokVideoProvider implements VideoProvider {
       '',
       `Use reference images ${labels}.`,
       hasMascot
-        ? 'The mascot from the mascot reference presents the die-cut product packaging from the product reference. Product remains larger and more important than the mascot.'
-        : 'Product remains the hero.',
-      'Full-frame vertical 9:16 product explainer. No collage, no letterboxing, no price card, no promotion poster.',
+        ? 'The red elephant mascot is the main hero. Preserve the mascot exactly and make it physically hold the supplied product packaging in one hand.'
+        : 'Create a friendly retail mascot presenter holding the supplied product packaging.',
+      'Scene is inside a real 100 Baht Shop Thailand store with shelves and realistic depth of field.',
+      'Medium full-body shot, slow cinematic push-in, mascot looks directly at camera while talking.',
+      'Natural hand gestures, occasional pointing to product, friendly smile. Product remains visible throughout.',
+      'Full-frame vertical 9:16 retail commercial. No collage, no letterboxing, no white studio, no catalog scene, no floating product, no price card, no promotion poster.',
       `Product: ${assets.product.name}`,
       `Key benefits: ${assets.benefits.join(' / ')}`,
-      'Clean minimal background. Do not add SKU codes, watermarks, or medical claims.',
+      'Do not add SKU codes, watermarks, medical claims, discount badges, Thai sale banners, or graphic layouts.',
       '',
       this.audioBlock(assets.script, assets.locale),
     ].join('\n');
@@ -250,7 +257,7 @@ export class GrokVideoProvider implements VideoProvider {
   private buildTextToVideoPrompt(assets: PreparedVideoAssets): string {
     return [
       assets.prompt,
-      'Full-frame vertical 9:16 product explainer video.',
+      'Full-frame vertical 9:16 mascot-led retail commercial video.',
       this.audioBlock(assets.script, assets.locale),
     ].join('\n\n');
   }
@@ -265,11 +272,11 @@ export class GrokVideoProvider implements VideoProvider {
     }
     return [
       'AUDIO:',
-      `English voiceover narration for international shoppers, clear and professional: "${script}"`,
-      'Pacing: relaxed 15-second read, about 28-36 spoken words. Do not rush.',
+      `Native English speaker voiceover for international shoppers, clear and professional: "${script}"`,
+      'Pacing: natural 15-second commercial read, about 40-55 spoken words. Do not rush.',
       'Include synchronized spoken English voiceover with subtle soft background music.',
       'Not silent — English audio must be present throughout the clip.',
-      'Explain what the product is and how it helps the customer.',
+      'Mascot appears to speak this line directly to the audience.',
     ].join('\n');
   }
 

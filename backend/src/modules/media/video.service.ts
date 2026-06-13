@@ -410,14 +410,14 @@ export class VideoService {
     locale: 'en' | 'th',
     hasMascot = false,
   ): Promise<string> {
-    const fallbackEn = `Meet ${product.name}. It helps brighten and care for your skin, with simple daily and overnight use for a fresh, radiant routine.`;
+    const fallbackEn = `Looking for an easy everyday choice? This ${product.name} helps with ${benefits[0]?.toLowerCase() ?? 'daily needs'} and is convenient for regular use. Available now at 100 Baht Shop Thailand.`;
     const fallbackTh = `${product.name} ช่วย${benefits.slice(0, 2).join(' และ ')} เหมาะสำหรับใช้ในชีวิตประจำวัน`;
 
     try {
       const res = await this.openAi.complete(
         locale === 'th'
           ? 'คุณเป็นนักเขียนสคริปต์วิดีโออธิบายสินค้า ตอบภาษาไทย กระชับ ไม่กล่าวอ้างเกินจริง'
-          : 'You write product explainer voiceover scripts in clear English for international retail shoppers.',
+          : 'You write native English retail commercial voiceover scripts for international shoppers.',
         locale === 'th'
           ? [
             'เขียน voiceover ภาษาไทย 15 วินาที อธิบายว่าสินค้าช่วยอะไร',
@@ -427,14 +427,15 @@ export class VideoService {
             `จุดเด่น: ${benefits.join(' / ')}`,
           ].join('\n')
           : [
-            'Write an English voiceover script for a 15-second vertical product explainer video.',
-            'Audience: foreign customers who want to understand what this product does and how it helps.',
+            'Write an English voiceover script for a 15-second mascot-led retail commercial.',
+            'Audience: tourists and international shoppers inside 100 Baht Shop Thailand.',
             hasMascot
-              ? 'The brand mascot character presents the product to camera in a friendly way.'
-              : 'Product-focused presentation.',
-            'Keep it short enough for relaxed speech in 15 seconds: 28-36 words total.',
-            'Use 2 short sentences only. No scene directions, no brackets, no speaker labels.',
-            'Start with what the product is, then explain 1-2 key benefits naturally.',
+              ? 'The red elephant mascot speaks directly to camera while holding the product.'
+              : 'Use a friendly retail presenter tone.',
+            'Match this structure: "Looking for ...? This [product] helps/supports ... Easy to ... Available now at 100 Baht Shop Thailand."',
+            'Keep it short enough for a natural 15-second read: 40-55 words total.',
+            'Use 3 short sentences only. No scene directions, no brackets, no speaker labels.',
+            'Start with a shopper question, then explain 1-2 key benefits naturally, then close with availability.',
             'Use only the provided benefits — do not invent medical or exaggerated claims.',
             'No SKU or product codes. Friendly, clear, professional tone.',
             `Product: ${product.name}`,
@@ -458,29 +459,35 @@ export class VideoService {
       .trim();
     const words = cleaned.split(/\s+/).filter(Boolean);
     if (words.length === 0) return fallback;
-    if (words.length <= 38) return cleaned;
-    return `${words.slice(0, 36).join(' ').replace(/[,.!?;:]+$/, '')}.`;
+    if (words.length <= 58) return cleaned;
+    return `${words.slice(0, 55).join(' ').replace(/[,.!?;:]+$/, '')}.`;
   }
 
   private defaultVisualBrief(locale: 'en' | 'th', hasMascot = false): string {
     if (locale === 'th') {
       return [
-        'สร้างวิดีโออธิบายสินค้าแนวตั้ง 15 วินาที พร้อมเสียง voiceover',
-        'ฮีโร่: เฉพาะตัวแพ็กเกจสินค้าแบบ die-cut บนพื้นหลังเรียบสะอาด',
-        'กล้อง: เคลื่อนไหวช้าๆ สินค้าอยู่กลางเฟรม ฉลากชัดเจน',
-        'จุดประสงค์: ให้ลูกค้าเข้าใจว่าสินค้าช่วยอะไร',
-        'ห้ามใช้ป้ายราคา กรอบโปรโมชัน แบนเนอร์ลดราคา หรือภาพร้านค้า',
-        '9:16 แนวตั้ง สไตล์ explainer e-commerce',
+        'สร้างวิดีโอมาสคอตนำเสนอสินค้าแนวตั้ง 15 วินาที พร้อมเสียง voiceover',
+        'มาสคอตช้างแดง 100 Baht Shop Thailand เป็นตัวหลักของคลิป',
+        'มาสคอตถือสินค้าไว้ในมือและนำเสนอเข้ากล้องอย่างเป็นธรรมชาติ',
+        'ฉากอยู่ในร้าน 100 Baht Shop Thailand จริง มีชั้นสินค้าอยู่ด้านหลังแบบ depth of field',
+        'กล้อง medium full-body shot เคลื่อน push-in ช้าๆ',
+        'ห้ามทำฉากสตูดิโอขาว แคตตาล็อกสินค้า โปสเตอร์ หรือสินค้า floating',
+        '9:16 แนวตั้ง สไตล์ retail commercial เป็นมิตรกับนักท่องเที่ยว',
       ].join('\n');
     }
     return [
-      'Create a 15-second vertical product explainer video with native English audio.',
-      'Hero: only the real product packaging die-cut on a clean minimal white/soft gradient background.',
-      'Camera: slow subtle motion — gentle push-in or soft parallax. Product stays centered; packaging label stays readable.',
-      'Purpose: help international customers understand what this product is and what it helps with.',
-      'No price cards, red promotion frames, discount badges, Thai retail banners, store background, or collage.',
-      hasMascot ? 'Brand mascot presents the product to camera.' : 'Product-only hero shot.',
-      '9:16 vertical, polished and professional.',
+      'Create a 15-second vertical mascot product presentation video.',
+      'MAIN CHARACTER: The red elephant mascot from 100 Baht Shop Thailand is the main hero of the video.',
+      hasMascot
+        ? 'Use the supplied mascot image as the exact character reference. Keep the mascot appearance, face, colors, clothing, and personality consistent.'
+        : 'Create a friendly red elephant mascot presenter for 100 Baht Shop Thailand.',
+      'PRODUCT: Use the supplied extracted product packaging as the product reference. The mascot must physically hold the product in one hand and present it naturally to the camera.',
+      'SCENE: Inside a real 100 Baht Shop Thailand store. Bright, welcoming retail environment. Store shelves visible in the background with realistic depth of field.',
+      'CAMERA: Medium full-body shot of the mascot. Slow cinematic push-in. The mascot looks directly at the camera while talking.',
+      'ANIMATION: Natural hand gestures. Mascot occasionally points to the product, smiles, and interacts with the audience. Product remains clearly visible throughout.',
+      'IMPORTANT: Mascot is the primary focus. Product is secondary but always visible. Do not create floating product renders, e-commerce catalog scenes, white studio backgrounds, posters, or graphic layouts.',
+      'STYLE: Disney-quality mascot animation. Retail commercial. Friendly, trustworthy, tourist-friendly.',
+      'FORMAT: 9:16 vertical, 15 seconds.',
     ].join('\n');
   }
 
@@ -505,14 +512,16 @@ export class VideoService {
       '',
       'Visual rules:',
       cutoutUsed
-        ? '- Use only the die-cut product packaging as the hero. Keep packaging text and shape exactly recognizable.'
+        ? '- Use the extracted product packaging as the item the mascot physically holds. Keep packaging text and shape recognizable.'
         : '- Keep the product packaging exactly recognizable.',
       hasMascot
-        ? '- Preserve the mascot character exactly, but keep it secondary to the product packaging.'
-        : '- Product-only shot. No store clutter.',
-      '- Remove/ignore price cards, sale signs, red promo frames, discount badges, shelf posters, and store clutter.',
+        ? '- Preserve the mascot character exactly. Mascot is the main hero and looks directly at camera.'
+        : '- Create a friendly retail presenter scene.',
+      '- Scene must feel like a real 100 Baht Shop Thailand store with shelves and depth of field.',
+      '- Product must not float by itself; it should appear held or presented by the mascot.',
+      '- No white studio, no e-commerce catalog layout, no poster design, no price cards, no sale banners.',
       '- No SKU codes, watermarks, or medical claims.',
-      '- Output: polished product explainer short video.',
+      '- Output: polished mascot-led retail commercial short video.',
     ].join('\n');
   }
 
@@ -525,39 +534,62 @@ export class VideoService {
     const layers: sharp.OverlayOptions[] = [];
 
     if (mascot) {
-      const mascotWidth = Math.round(width * 0.58);
-      const mascotHeight = Math.round(height * 0.28);
+      const mascotWidth = Math.round(width * 0.78);
+      const mascotHeight = Math.round(height * 0.62);
       const mascotBuf = await sharp(mascot.buffer)
         .resize(mascotWidth, mascotHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
         .png()
         .toBuffer();
       layers.push({
         input: mascotBuf,
-        top: Math.round(height * 0.05),
+        top: Math.round(height * 0.12),
         left: Math.round((width - mascotWidth) / 2),
       });
     }
 
-    const productWidth = Math.round(width * (mascot ? 0.76 : 0.74));
-    const productHeight = Math.round(height * (mascot ? 0.46 : 0.58));
+    const productWidth = Math.round(width * (mascot ? 0.28 : 0.74));
+    const productHeight = Math.round(height * (mascot ? 0.24 : 0.58));
     const productBuf = await sharp(product.buffer)
       .resize(productWidth, productHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
       .png()
       .toBuffer();
     layers.push({
       input: productBuf,
-      top: Math.round(height * (mascot ? 0.48 : 0.2)),
-      left: Math.round((width - productWidth) / 2),
+      top: Math.round(height * (mascot ? 0.42 : 0.2)),
+      left: Math.round(width * (mascot ? 0.58 : (1 - (productWidth / width)) / 2)),
     });
 
-    const buffer = await sharp({
-      create: {
-        width,
-        height,
-        channels: 4,
-        background: { r: 248, g: 249, b: 252, alpha: 1 },
-      },
-    })
+    const background = mascot
+      ? Buffer.from(`
+        <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#fff7ed"/>
+              <stop offset="55%" stop-color="#ffffff"/>
+              <stop offset="100%" stop-color="#fee2e2"/>
+            </linearGradient>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#bg)"/>
+          <rect x="42" y="88" width="636" height="170" rx="24" fill="#fef3c7" opacity="0.65"/>
+          <rect x="64" y="128" width="160" height="76" rx="12" fill="#ffffff" opacity="0.85"/>
+          <rect x="252" y="128" width="160" height="76" rx="12" fill="#ffffff" opacity="0.85"/>
+          <rect x="440" y="128" width="160" height="76" rx="12" fill="#ffffff" opacity="0.85"/>
+          <rect x="0" y="1040" width="720" height="240" fill="#f3f4f6"/>
+        </svg>`)
+      : undefined;
+
+    const canvas = background
+      ? sharp(background)
+      : sharp({
+        create: {
+          width,
+          height,
+          channels: 4,
+          background: { r: 248, g: 249, b: 252, alpha: 1 },
+        },
+      });
+
+    const buffer = await canvas
       .composite(layers)
       .png()
       .toBuffer();
