@@ -207,15 +207,15 @@ export class GrokVideoProvider implements VideoProvider {
   }
 
   private buildImageToVideoPrompt(assets: PreparedVideoAssets): string {
-    const isEnglish = assets.locale !== 'th';
+    const hasMascot = assets.referenceImages.some((img) => img.label.includes('mascot'));
     return [
       assets.visualBrief,
       '',
-      isEnglish
-        ? 'Animate this 9:16 vertical product explainer starter frame into one unified clip.'
-        : 'Animate this 9:16 vertical product explainer starter frame into one unified clip.',
+      'Animate this 9:16 vertical explainer starter frame into one unified clip.',
       'Fill the entire vertical frame edge-to-edge. No letterboxing, no side panels, no collage.',
-      'Keep product packaging and label exactly recognizable on a clean minimal background.',
+      hasMascot
+        ? 'Keep the mascot character appearance exactly. Mascot holds or presents the product while explaining.'
+        : 'Keep product packaging and label exactly recognizable on a clean minimal background.',
       'Camera: slow subtle push-in or soft parallax. Professional e-commerce explainer style.',
       '',
       `Product: ${assets.product.name}`,
@@ -228,10 +228,14 @@ export class GrokVideoProvider implements VideoProvider {
 
   private buildReferencePrompt(assets: PreparedVideoAssets, refs: VideoReferenceImage[]): string {
     const labels = refs.map((_, idx) => `<IMAGE_${idx + 1}>`).join(', ');
+    const hasMascot = refs.some((r) => r.label.includes('mascot'));
     return [
       assets.visualBrief,
       '',
-      `Use reference images ${labels}. Product remains the hero.`,
+      `Use reference images ${labels}.`,
+      hasMascot
+        ? 'The mascot from the mascot reference presents the product from the product reference to camera.'
+        : 'Product remains the hero.',
       'Full-frame vertical 9:16 product explainer. No collage, no letterboxing.',
       `Product: ${assets.product.name}`,
       `Key benefits: ${assets.benefits.join(' / ')}`,

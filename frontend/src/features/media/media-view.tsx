@@ -261,6 +261,12 @@ export function MediaView() {
     });
   };
 
+  const selectedMascotFilenames = () =>
+    Array.from(selectedBrandAssets).filter((filename) => {
+      const asset = brandAssets.find((a) => a.filename === filename);
+      return asset?.kind === 'mascot';
+    });
+
   const buildVideoOptions = (sku: string): VideoSubmitOptions => ({
     provider: videoProvider,
     model: videoModel,
@@ -270,6 +276,7 @@ export function MediaView() {
     locale: 'en',
     visualBrief: videoBriefs[sku]?.trim() || undefined,
     useCutoutProductImage: videoUseCutout,
+    mascotAssetFilenames: selectedMascotFilenames(),
   });
 
   const handleVideoPlan = async (sku: string) => {
@@ -328,8 +335,9 @@ export function MediaView() {
         details: [
           'Product explainer video brief in English for international customers.',
           '15-second vertical 9:16 clip with English voiceover explaining product benefits.',
-          'Focus on die-cut product hero on clean background — no mascot, no store scene.',
+          'Use die-cut product hero. Brand mascot presents the product if mascot assets are selected.',
           'Explain what the product is and what it helps with.',
+          `Mascot selected: ${selectedMascotFilenames().length > 0 ? 'yes' : 'no'}`,
           `Provider: ${videoProvider}, Model: ${videoModel}`,
           current ? `Existing brief: ${current}` : '',
         ].filter(Boolean).join('\n'),
@@ -643,6 +651,7 @@ export function MediaView() {
                 {brandUploading === 'mascot' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                 Mascot
               </Button>
+              <span className="text-[10px] text-muted-foreground hidden sm:inline">เลือก Mascot = ใช้ใน Video</span>
 
               {/* Asset thumbnails */}
               {brandAssets.filter((a) => a?.filename && a?.url).map((asset) => {
@@ -887,7 +896,9 @@ export function MediaView() {
                         />
                         {videoPlan && (
                           <div className="rounded-md border bg-background px-3 py-2 text-[11px] space-y-2">
-                            <p className="font-medium text-violet-700">แผน AI ({videoPlan.locale.toUpperCase()})</p>
+                            <p className="font-medium text-violet-700">
+                              แผน AI ({videoPlan.locale.toUpperCase()}{videoPlan.hasMascot ? ' · Mascot' : ''})
+                            </p>
                             <div className="flex flex-wrap gap-1">
                               {videoPlan.steps.map((step) => (
                                 <span

@@ -128,6 +128,7 @@ export interface VideoPlanResult {
   visualBrief: string;
   prompt: string;
   locale: 'en' | 'th';
+  hasMascot?: boolean;
   steps: VideoPlanStep[];
 }
 

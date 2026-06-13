@@ -81,6 +81,7 @@ export class VideoService {
         visualBrief: assets.visualBrief,
         cutoutUsed: assets.cutoutUsed,
         locale: assets.locale,
+        hasMascot: assets.referenceImages.some((img) => img.label.includes('mascot')),
       },
     };
   }
@@ -117,6 +118,7 @@ export class VideoService {
       visualBrief: assets.visualBrief,
       prompt: assets.prompt,
       locale: assets.locale,
+      hasMascot: assets.referenceImages.some((img) => img.label.includes('mascot')),
       steps,
     };
   }
@@ -290,25 +292,29 @@ export class VideoService {
       if (original) referenceImages.push(original);
     }
 
-    // Optional mascot — not part of default explainer concept
+    // Mascot from brand assets (when selected in toolbar)
     for (const filename of options.mascotAssetFilenames ?? []) {
       const asset = await this.loadBrandAsset(filename);
-      if (asset) referenceImages.push(asset);
+      if (asset) referenceImages.unshift(asset);
     }
 
+    const hasMascot = referenceImages.some((img) => img.label.includes('mascot'));
     const analysisUrl = primaryImageUrl ?? product.imageUrl ?? undefined;
 
     // Step 2 — AI product benefits
     const benefits = await this.generateVideoBenefits(product, analysisUrl, locale);
 
     // Step 3 — Voiceover script
-    const script = (options.script || await this.generateScript(product, benefits, locale)).trim();
+    const script = (options.script || await this.generateScript(product, benefits, locale, hasMascot)).trim();
 
     // Step 4 — Visual brief + final prompt
-    const visualBrief = (options.visualBrief || this.defaultVisualBrief(locale)).trim();
+    const visualBrief = (options.visualBrief || this.defaultVisualBrief(locale, hasMascot)).trim();
     const productHero = referenceImages.find((img) => img.label.includes('product cutout'))
       ?? referenceImages.find((img) => img.label.includes('product'));
-    const verticalFrame = productHero ? await this.buildProductHeroFrame(productHero) : undefined;
+    const mascotHero = referenceImages.find((img) => img.label.includes('mascot'));
+    const verticalFrame = productHero
+      ? await this.buildExplainerFrame(productHero, mascotHero)
+      : undefined;
     const contactSheet = await this.buildContactSheet(referenceImages);
     const prompt = this.buildVideoPrompt(product, script, benefits, visualBrief, referenceImages, cutoutUsed, locale);
 
@@ -389,6 +395,7 @@ export class VideoService {
     product: ErpProductCache,
     benefits: string[],
     locale: 'en' | 'th',
+    hasMascot = false,
   ): Promise<string> {
     const fallbackEn = `This is ${product.name}. ${benefits.slice(0, 2).join('. ')}. A practical choice for everyday use.`;
     const fallbackTh = `${product.name} ช่วย${benefits.slice(0, 2).join(' และ ')} เหมาะสำหรับใช้ในชีวิตประจำวัน`;
@@ -409,6 +416,9 @@ export class VideoService {
           : [
             'Write an English voiceover script for a 15-second vertical product explainer video.',
             'Audience: foreign customers who want to understand what this product does and how it helps.',
+            hasMascot
+              ? 'The brand mascot character presents the product to camera in a friendly way.'
+              : 'Product-focused presentation.',
             'Start with what the product is, then explain 2-3 key benefits naturally.',
             'Use only the provided benefits — do not invent medical or exaggerated claims.',
             'No SKU or product codes. Friendly, clear, professional tone.',
@@ -423,7 +433,7 @@ export class VideoService {
     }
   }
 
-  private defaultVisualBrief(locale: 'en' | 'th'): string {
+  private defaultVisualBrief(locale: 'en' | 'th', hasMascot = false): string {
     if (locale === 'th') {
       return [
         'สร้างวิดีโออธิบายสินค้าแนวตั้ง 15 วินาที พร้อมเสียง voiceover',
@@ -438,7 +448,8 @@ export class VideoService {
       'Hero: isolated product die-cut on a clean minimal white/soft gradient background.',
       'Camera: slow subtle motion — gentle push-in or soft parallax. Product stays centered; packaging label stays readable.',
       'Purpose: help international customers understand what this product is and what it helps with.',
-      'No busy store background, no mascot, no collage. Product-focused e-commerce explainer.',
+      'No busy store background, no collage. Product-focused e-commerce explainer.',
+      hasMascot ? 'Brand mascot presents the product to camera.' : 'Product-only hero shot.',
       '9:16 vertical, polished and professional.',
     ].join('\n');
   }
@@ -467,22 +478,46 @@ export class VideoService {
         ? '- Use the die-cut product as the hero. Keep packaging text and shape exactly recognizable.'
         : '- Keep the product packaging exactly recognizable.',
       hasMascot
-        ? '- Optional mascot may appear but product remains the focus.'
-        : '- Product-only shot. No mascot or store clutter.',
+        ? '- Preserve the mascot character exactly. Mascot presents the die-cut product to camera.'
+        : '- Product-only shot. No store clutter.',
       '- No SKU codes, watermarks, or medical claims.',
       '- Output: polished product explainer short video.',
     ].join('\n');
   }
 
-  private async buildProductHeroFrame(product: VideoReferenceImage): Promise<VideoReferenceImage> {
+  private async buildExplainerFrame(
+    product: VideoReferenceImage,
+    mascot?: VideoReferenceImage,
+  ): Promise<VideoReferenceImage> {
     const width = 720;
     const height = 1280;
-    const productWidth = Math.round(width * 0.74);
-    const productHeight = Math.round(height * 0.58);
+    const layers: sharp.OverlayOptions[] = [];
+
+    if (mascot) {
+      const mascotWidth = Math.round(width * 0.78);
+      const mascotHeight = Math.round(height * 0.38);
+      const mascotBuf = await sharp(mascot.buffer)
+        .resize(mascotWidth, mascotHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+        .png()
+        .toBuffer();
+      layers.push({
+        input: mascotBuf,
+        top: Math.round(height * 0.05),
+        left: Math.round((width - mascotWidth) / 2),
+      });
+    }
+
+    const productWidth = Math.round(width * (mascot ? 0.52 : 0.74));
+    const productHeight = Math.round(height * (mascot ? 0.32 : 0.58));
     const productBuf = await sharp(product.buffer)
       .resize(productWidth, productHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
       .png()
       .toBuffer();
+    layers.push({
+      input: productBuf,
+      top: Math.round(height * (mascot ? 0.48 : 0.2)),
+      left: Math.round((width - productWidth) / 2),
+    });
 
     const buffer = await sharp({
       create: {
@@ -492,16 +527,12 @@ export class VideoService {
         background: { r: 248, g: 249, b: 252, alpha: 1 },
       },
     })
-      .composite([{
-        input: productBuf,
-        top: Math.round(height * 0.2),
-        left: Math.round((width - productWidth) / 2),
-      }])
+      .composite(layers)
       .png()
       .toBuffer();
 
     return {
-      label: 'vertical 9:16 product hero frame',
+      label: mascot ? 'vertical 9:16 mascot product frame' : 'vertical 9:16 product hero frame',
       buffer,
       mimeType: 'image/png',
     };
