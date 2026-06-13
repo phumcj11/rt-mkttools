@@ -88,6 +88,15 @@ export function MediaView() {
     ]).finally(() => setProductsLoading(false));
   }, []);
 
+  // Pre-select all brand assets on load so the Branded checkbox works after refresh.
+  useEffect(() => {
+    if (brandAssets.length === 0) return;
+    setSelectedBrandAssets((prev) => {
+      if (prev.size > 0) return prev;
+      return new Set(brandAssets.filter((a) => a?.filename).map((a) => a.filename));
+    });
+  }, [brandAssets]);
+
   useEffect(() => {
     if (tab === 'files') {
       setFilesLoading(true);
@@ -354,8 +363,16 @@ export function MediaView() {
                   <input
                     type="checkbox"
                     checked={includeBranded}
-                    onChange={(e) => setIncludeBranded(e.target.checked)}
-                    disabled={selectedBrandAssets.size === 0}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      if (checked && selectedBrandAssets.size === 0 && brandAssets.length > 0) {
+                        setSelectedBrandAssets(
+                          new Set(brandAssets.filter((a) => a?.filename).map((a) => a.filename)),
+                        );
+                      }
+                      setIncludeBranded(checked);
+                    }}
+                    disabled={brandAssets.length === 0}
                   />
                   สร้าง Branded เพิ่ม 2 แบบ
                 </label>
@@ -371,7 +388,11 @@ export function MediaView() {
                   อัปโหลดโลโก้ร้านหรือมาสคอตก่อน ถ้าต้องการสร้าง Branded POP เพิ่มจาก 4 แบบหลัก
                 </p>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    คลิกการ์ดเพื่อเลือก logo/mascot ที่จะใช้ — ติ๊ก &quot;สร้าง Branded เพิ่ม 2 แบบ&quot; แล้วกด Generate จะได้ 4 แบบหลัก + Branded 2 แบบ
+                  </p>
+                  <div className="flex flex-wrap gap-2">
                   {brandAssets.filter((asset) => asset?.filename && asset?.url).map((asset) => {
                     const selected = selectedBrandAssets.has(asset.filename);
                     return (
@@ -393,6 +414,7 @@ export function MediaView() {
                       </button>
                     );
                   })}
+                  </div>
                 </div>
               )}
             </CardContent>
