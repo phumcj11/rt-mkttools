@@ -57,6 +57,7 @@ export interface PopStickerVariation {
   promptUsed: string;
   model: string;
   cutoutUsed: boolean;
+  branded?: boolean;
 }
 
 export interface PopStickerResult {
@@ -66,6 +67,19 @@ export interface PopStickerResult {
   variations: PopStickerVariation[];
   generatedAt: string;
   productImageSize?: { width: number; height: number };
+}
+
+export interface BrandAsset {
+  filename: string;
+  kind: 'logo' | 'mascot';
+  url: string;
+  createdAt: string;
+}
+
+export interface PopStickerOptions {
+  includeBranded?: boolean;
+  brandAssetFilenames?: string[];
+  brandedCount?: number;
 }
 
 const PROMO_TYPE_LABELS: Record<string, string> = {
@@ -133,6 +147,7 @@ const PROMO_TEMPLATE_LAYOUTS: Record<string, string> = {
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
   private readonly uploadsDir: string;
+  private readonly brandAssetsDir: string;
 
   constructor(
     @InjectRepository(ErpProductCache)
@@ -142,7 +157,9 @@ export class MediaService {
     private readonly composite: PromoCompositeService,
   ) {
     this.uploadsDir = path.join(process.cwd(), 'uploads', 'media');
+    this.brandAssetsDir = path.join(this.uploadsDir, 'brand-assets');
     fs.mkdirSync(this.uploadsDir, { recursive: true });
+    fs.mkdirSync(this.brandAssetsDir, { recursive: true });
   }
 
   async listProducts(limit = 50, offset = 0) {
@@ -257,7 +274,7 @@ export class MediaService {
     if (!fs.existsSync(this.uploadsDir)) return [];
     return fs
       .readdirSync(this.uploadsDir)
-      .filter((f) => f.endsWith('.png') || f.endsWith('.mp4'))
+      .filter((f) => f !== 'brand-assets' && (f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.mp4')))
       .map((filename) => {
         const stat = fs.statSync(path.join(this.uploadsDir, filename));
         return {
@@ -267,6 +284,46 @@ export class MediaService {
         };
       })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  listBrandAssets(): BrandAsset[] {
+    if (!fs.existsSync(this.brandAssetsDir)) return [];
+    return fs
+      .readdirSync(this.brandAssetsDir)
+      .filter((f) => /\.(png|jpg|jpeg|webp)$/i.test(f))
+      .map((filename) => {
+        const stat = fs.statSync(path.join(this.brandAssetsDir, filename));
+        const kind: 'logo' | 'mascot' = filename.includes('mascot') ? 'mascot' : 'logo';
+        return {
+          filename,
+          kind,
+          url: `/media/brand-assets/${filename}`,
+          createdAt: stat.birthtime.toISOString(),
+        };
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  saveBrandAsset(kind: 'logo' | 'mascot', dataUrl: string): BrandAsset {
+    const match = dataUrl.match(/^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/i);
+    if (!match) throw new BadRequestException('Brand asset ต้องเป็น data URL ของรูปภาพ png/jpg/webp');
+    const mime = match[1].toLowerCase();
+    const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+    const filename = `brand-${kind}-${Date.now()}.${ext}`;
+    fs.writeFileSync(path.join(this.brandAssetsDir, filename), Buffer.from(match[2], 'base64'));
+    return {
+      filename,
+      kind,
+      url: `/media/brand-assets/${filename}`,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  getBrandAssetPath(filename: string): string {
+    const safe = path.basename(filename);
+    const filePath = path.join(this.brandAssetsDir, safe);
+    if (!fs.existsSync(filePath)) throw new BadRequestException('Brand asset not found');
+    return filePath;
   }
 
   async getDriveFolderId(): Promise<string | null> {
@@ -410,7 +467,7 @@ export class MediaService {
    * 3. GPT Image uses ERP photo as reference and creates the full die-cut sticker
    * 4. Save 4 final PNG files
    */
-  async generatePopStickers(sku: string): Promise<PopStickerResult> {
+  async generatePopStickers(sku: string, options: PopStickerOptions = {}): Promise<PopStickerResult> {
     const sharp = require('sharp') as (input?: Buffer | object) => any;
     const product = await this.productRepo.findOneBy({ sku });
     if (!product) throw new BadRequestException(`ไม่พบสินค้า SKU "${sku}" ใน cache — ซิงค์ ERP ก่อน`);
@@ -454,6 +511,8 @@ export class MediaService {
     // Step 3 & 4: per style — GPT Image generates full sticker from reference image
     const timestamp = Date.now();
     const variations: PopStickerVariation[] = [];
+    const selectedBrandAssets = this.loadSelectedBrandAssets(options.brandAssetFilenames ?? []);
+    const includeBranded = !!options.includeBranded && selectedBrandAssets.length > 0;
 
     for (const style of MediaService.POP_STYLES) {
       try {
@@ -490,6 +549,50 @@ export class MediaService {
       }
     }
 
+    if (includeBranded) {
+      const brandedStyles = this.buildBrandedPopStyles(Math.max(1, Math.min(options.brandedCount ?? 2, 4)));
+      const brandRef = productImageBuffer
+        ? await this.buildBrandReferenceSheet(sharp, productImageBuffer, selectedBrandAssets)
+        : null;
+
+      for (const style of brandedStyles) {
+        try {
+          const prompt = this.buildBrandedPopStickerPrompt(cleanProductName, copy, visualFacts, style, selectedBrandAssets);
+          const imageResult = brandRef
+            ? await this.openAi.editGptImage(prompt, brandRef, 'image/png', { size: '1024x1024' })
+            : await this.openAi.generateGptImage(prompt, { size: '1024x1024' });
+
+          const filename = `pop-${this.safeFilename(sku)}-${style.id}-${timestamp}.png`;
+          const localPath = path.join(this.uploadsDir, filename);
+          fs.writeFileSync(localPath, imageResult.buffer);
+
+          variations.push({
+            styleId: style.id,
+            styleName: style.name,
+            imageUrl: `/media/serve/${filename}`,
+            filename,
+            promptUsed: prompt,
+            model: imageResult.model,
+            cutoutUsed: false,
+            branded: true,
+          });
+          this.logger.log(`Branded POP saved: ${filename} (${style.name}, model: ${imageResult.model})`);
+        } catch (err) {
+          this.logger.error(`Branded POP style ${style.id} failed: ${String(err)}`);
+          variations.push({
+            styleId: style.id,
+            styleName: style.name,
+            imageUrl: '',
+            filename: '',
+            promptUsed: '',
+            model: '',
+            cutoutUsed: false,
+            branded: true,
+          });
+        }
+      }
+    }
+
     return {
       sku,
       productName: product.name,
@@ -498,6 +601,51 @@ export class MediaService {
       generatedAt: new Date().toISOString(),
       productImageSize,
     };
+  }
+
+  private loadSelectedBrandAssets(filenames: string[]): BrandAsset[] {
+    const existing = this.listBrandAssets();
+    const selected = new Set(filenames.map((f) => path.basename(f)));
+    return existing.filter((asset) => selected.has(asset.filename));
+  }
+
+  private async buildBrandReferenceSheet(
+    sharp: (input?: Buffer | object) => any,
+    productImage: Buffer,
+    brandAssets: BrandAsset[],
+  ): Promise<Buffer> {
+    const canvasW = 1024;
+    const canvasH = 1024;
+    const layers: { input: Buffer; left: number; top: number }[] = [];
+
+    const product = await sharp(productImage)
+      .resize(520, 520, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+      .png()
+      .toBuffer();
+    layers.push({ input: product, left: 40, top: 250 });
+
+    for (const [idx, asset] of brandAssets.slice(0, 6).entries()) {
+      const assetBuffer = fs.readFileSync(this.getBrandAssetPath(asset.filename));
+      const img = await sharp(assetBuffer)
+        .resize(180, 180, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+        .png()
+        .toBuffer();
+      const col = idx % 2;
+      const row = Math.floor(idx / 2);
+      layers.push({ input: img, left: 620 + col * 190, top: 150 + row * 210 });
+    }
+
+    return sharp({
+      create: {
+        width: canvasW,
+        height: canvasH,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 },
+      },
+    })
+      .composite(layers)
+      .png()
+      .toBuffer();
   }
 
   private async generatePopCopy(
@@ -728,6 +876,72 @@ export class MediaService {
       'Die-cut sticker style',
       '1:1 ratio',
       ...commonRules,
+    ].join('\n');
+  }
+
+  private buildBrandedPopStyles(count: number) {
+    return [
+      {
+        id: 'brand_style_01',
+        name: '100 Baht Shop Branded POP',
+        concept: 'premium product-led retail sticker with small store logo and clean brand strip',
+      },
+      {
+        id: 'brand_style_02',
+        name: 'Mascot Tourist Favorite',
+        concept: 'friendly tourist shelf sticker with mascot character in a corner',
+      },
+      {
+        id: 'brand_style_03',
+        name: 'Brand Shelf Stopper',
+        concept: 'bold shelf-stopper style with logo badge and mascot side pose',
+      },
+      {
+        id: 'brand_style_04',
+        name: 'Mascot Best Seller Badge',
+        concept: 'Japanese drugstore best seller style with mascot and store logo integrated as small badges',
+      },
+    ].slice(0, count);
+  }
+
+  private buildBrandedPopStickerPrompt(
+    productName: string,
+    copy: PopStickerCopy,
+    visualFacts: string,
+    style: { id: string; name: string; concept: string },
+    brandAssets: BrandAsset[],
+  ): string {
+    const benefits = copy.benefits.slice(0, 3).join(' • ');
+    const logos = brandAssets.filter((a) => a.kind === 'logo').length;
+    const mascots = brandAssets.filter((a) => a.kind === 'mascot').length;
+    return [
+      'Create a premium branded retail POP sticker for store display.',
+      '',
+      `Style concept: ${style.concept}`,
+      `Product: ${productName}`,
+      `Product visual facts: ${visualFacts}`,
+      `Main headline: ${copy.headline}`,
+      `Subheadline: ${copy.subheadline}`,
+      `Benefits: ${benefits}`,
+      `Badges: ${copy.badges.slice(0, 3).join(', ')}`,
+      '',
+      'Brand reference instructions:',
+      `- The reference sheet contains the product plus ${logos} store logo(s) and ${mascots} mascot image(s).`,
+      '- Use the product as the main subject.',
+      '- Add store logo as a small brand element: top corner, bottom strip, or small seal.',
+      '- Add one selected mascot as a small friendly character on the side or bottom corner.',
+      '- Logo and mascot must support the sticker, not dominate or cover the product.',
+      '- Keep product-led retail design first; branding is secondary.',
+      '',
+      'Design requirements:',
+      '- Die-cut POP sticker / shelf talker shape, not a plain square poster.',
+      '- White, gold, black, and clean retail pharmacy style.',
+      '- Clear English benefit copy readable from 2-3 meters.',
+      '- Premium tourist-store retail style suitable for 100 Baht Shop Thailand.',
+      '- Do not display SKU, product code, catalog-card text, ERP label, price, UI text, or surrounding reference-image captions.',
+      '- Do not show codes like PM00005, PM00010, or any similar product code anywhere.',
+      '- No medical claims: do not use cure, treat, prevent disease, medicine, doctor recommended.',
+      '- 1:1 ratio, high resolution, print-ready, no watermark.',
     ].join('\n');
   }
 

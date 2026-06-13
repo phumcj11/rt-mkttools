@@ -22,6 +22,7 @@ import {
   getDriveSettings,
   getN8nSettings,
   getVideoSettings,
+  listBrandAssets,
   listMediaFiles,
   listMediaProducts,
   saveDriveSettings,
@@ -29,8 +30,10 @@ import {
   saveVideoSettings,
   submitProductVideo,
   syncToDrive,
+  uploadBrandAsset,
   uploadFileToDrive,
   resolveMediaUrl,
+  type BrandAsset,
   type DriveSettings,
   type ErpProduct,
   type MediaFile,
@@ -50,6 +53,10 @@ export function MediaView() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [popResults, setPopResults] = useState<Record<string, PopStickerResult>>({});
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
+  const [brandAssets, setBrandAssets] = useState<BrandAsset[]>([]);
+  const [selectedBrandAssets, setSelectedBrandAssets] = useState<Set<string>>(new Set());
+  const [includeBranded, setIncludeBranded] = useState(false);
+  const [brandUploading, setBrandUploading] = useState<'logo' | 'mascot' | null>(null);
   const [videoSubmitting, setVideoSubmitting] = useState<string | null>(null);
   const [videoTasks, setVideoTasks] = useState<Record<string, string>>({});
 
@@ -70,10 +77,10 @@ export function MediaView() {
 
   useEffect(() => {
     setProductsLoading(true);
-    listMediaProducts(100)
-      .then(setProducts)
-      .catch(() => undefined)
-      .finally(() => setProductsLoading(false));
+    Promise.all([
+      listMediaProducts(100).then(setProducts).catch(() => undefined),
+      listBrandAssets().then(setBrandAssets).catch(() => undefined),
+    ]).finally(() => setProductsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -95,7 +102,11 @@ export function MediaView() {
     setGenerating(sku);
     setExpandedSku(sku);
     try {
-      const res = await generatePopStickers(sku);
+      const res = await generatePopStickers(sku, {
+        includeBranded,
+        brandAssetFilenames: Array.from(selectedBrandAssets),
+        brandedCount: 2,
+      });
       setPopResults((prev) => ({ ...prev, [sku]: res }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'สร้าง POP Sticker ไม่สำเร็จ';
@@ -103,6 +114,35 @@ export function MediaView() {
     } finally {
       setGenerating(null);
     }
+  };
+
+  const handleBrandAssetUpload = async (kind: 'logo' | 'mascot', file: File | null) => {
+    if (!file) return;
+    setBrandUploading(kind);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error ?? new Error('อ่านไฟล์ไม่สำเร็จ'));
+        reader.readAsDataURL(file);
+      });
+      const saved = await uploadBrandAsset(kind, dataUrl);
+      setBrandAssets((prev) => [saved, ...prev]);
+      setSelectedBrandAssets((prev) => new Set(prev).add(saved.filename));
+      setIncludeBranded(true);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'อัปโหลด Brand Asset ไม่สำเร็จ');
+    } finally {
+      setBrandUploading(null);
+    }
+  };
+
+  const toggleBrandAsset = (filename: string) => {
+    setSelectedBrandAssets((prev) => {
+      const next = new Set(prev);
+      next.has(filename) ? next.delete(filename) : next.add(filename);
+      return next;
+    });
   };
 
   const handleVideoSubmit = async (sku: string) => {
@@ -245,6 +285,88 @@ export function MediaView() {
             <span className="text-sm text-muted-foreground">{products.length} สินค้า</span>
           </div>
 
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Brand Assets สำหรับ Branded POP</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => void handleBrandAssetUpload('logo', e.target.files?.[0] ?? null)}
+                  />
+                  <Button size="sm" variant="outline" type="button" disabled={brandUploading === 'logo'} asChild>
+                    <span>
+                      {brandUploading === 'logo' ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                      อัปโหลด Logo
+                    </span>
+                  </Button>
+                </label>
+                <label className="inline-flex">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => void handleBrandAssetUpload('mascot', e.target.files?.[0] ?? null)}
+                  />
+                  <Button size="sm" variant="outline" type="button" disabled={brandUploading === 'mascot'} asChild>
+                    <span>
+                      {brandUploading === 'mascot' ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                      อัปโหลด Mascot
+                    </span>
+                  </Button>
+                </label>
+                <label className="ml-1 flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={includeBranded}
+                    onChange={(e) => setIncludeBranded(e.target.checked)}
+                    disabled={selectedBrandAssets.size === 0}
+                  />
+                  สร้าง Branded เพิ่ม 2 แบบ
+                </label>
+                {selectedBrandAssets.size > 0 && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    เลือก {selectedBrandAssets.size} assets
+                  </Badge>
+                )}
+              </div>
+
+              {brandAssets.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  อัปโหลดโลโก้ร้านหรือมาสคอตก่อน ถ้าต้องการสร้าง Branded POP เพิ่มจาก 4 แบบหลัก
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {brandAssets.map((asset) => {
+                    const selected = selectedBrandAssets.has(asset.filename);
+                    return (
+                      <button
+                        key={asset.filename}
+                        type="button"
+                        onClick={() => toggleBrandAsset(asset.filename)}
+                        className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors ${
+                          selected ? 'border-violet-400 bg-violet-50' : 'border-border hover:bg-muted/50'
+                        }`}
+                      >
+                        <img
+                          src={resolveMediaUrl(asset.url)}
+                          alt={asset.kind}
+                          className="h-8 w-8 rounded bg-white object-contain"
+                        />
+                        <span className="text-[11px] capitalize">{asset.kind}</span>
+                        {selected && <CheckCircle2 className="h-3.5 w-3.5 text-violet-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {productsLoading ? (
             <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
               <Loader2 className="h-5 w-5 animate-spin" /> โหลดสินค้า ERP...
@@ -280,7 +402,7 @@ export function MediaView() {
                           {popResult && (
                             <div className="flex flex-wrap gap-1 mt-0.5 items-center">
                               <span className="text-xs text-violet-600">
-                                ✓ {popResult.variations.filter((v) => v.imageUrl).length}/4 variations
+                                ✓ {popResult.variations.filter((v) => v.imageUrl).length}/{popResult.variations.length} variations
                               </span>
                               {popResult.variations[0]?.cutoutUsed && (
                                 <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300">cutout ✓</Badge>
@@ -339,7 +461,10 @@ export function MediaView() {
                       {isGenerating && (
                         <div className="rounded-md bg-violet-50 border border-violet-100 px-3 py-2.5 text-xs text-violet-700 space-y-1">
                           <p className="font-medium">กำลังสร้าง POP Sticker AI...</p>
-                          <p>1. วิเคราะห์รูปสินค้า ERP → 2. สร้าง copy ปลอดภัย → 3. GPT Image สร้าง die-cut POP sticker จากรูป reference ×4</p>
+                          <p>
+                            1. วิเคราะห์รูปสินค้า ERP → 2. สร้าง copy ปลอดภัย → 3. GPT Image สร้าง die-cut POP sticker
+                            {includeBranded && selectedBrandAssets.size > 0 ? ' 4 แบบหลัก + Branded เพิ่ม' : ' ×4'}
+                          </p>
                           <p className="text-violet-500">ใช้เวลาประมาณ 1–2 นาที</p>
                         </div>
                       )}
@@ -372,6 +497,11 @@ export function MediaView() {
                                         alt={v.styleName}
                                         className="w-full h-full object-cover"
                                       />
+                                      {v.branded && (
+                                        <Badge className="absolute left-2 top-2 bg-violet-600 text-[10px] hover:bg-violet-600">
+                                          Branded
+                                        </Badge>
+                                      )}
                                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                         <a
                                           href={resolveMediaUrl(v.imageUrl)}

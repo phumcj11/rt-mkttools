@@ -103,6 +103,7 @@ export interface PopStickerVariation {
   promptUsed: string;
   model: string;
   cutoutUsed: boolean;
+  branded?: boolean;
 }
 
 export interface PopStickerResult {
@@ -114,12 +115,39 @@ export interface PopStickerResult {
   productImageSize?: { width: number; height: number };
 }
 
+export interface BrandAsset {
+  filename: string;
+  kind: 'logo' | 'mascot';
+  url: string;
+  createdAt: string;
+}
+
+export interface PopStickerOptions {
+  includeBranded?: boolean;
+  brandAssetFilenames?: string[];
+  brandedCount?: number;
+}
+
 /**
  * AI Product POP Sticker Generator:
  * analyzes ERP image → generates safe copy → 4 GPT Image shelf sticker variations
  */
-export function generatePopStickers(sku: string) {
-  return apiRequest<PopStickerResult>(`/media/products/${sku}/pop-stickers`, { method: 'POST' });
+export function generatePopStickers(sku: string, options?: PopStickerOptions) {
+  return apiRequest<PopStickerResult>(`/media/products/${sku}/pop-stickers`, {
+    method: 'POST',
+    body: options ?? {},
+  });
+}
+
+export function listBrandAssets() {
+  return apiRequest<BrandAsset[]>('/media/brand-assets');
+}
+
+export function uploadBrandAsset(kind: 'logo' | 'mascot', dataUrl: string) {
+  return apiRequest<BrandAsset>('/media/brand-assets/upload', {
+    method: 'POST',
+    body: { kind, dataUrl },
+  });
 }
 
 export function uploadBenefitPoster(sku: string, dataUrl: string) {

@@ -13,7 +13,7 @@ import {
 import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
-import { IsArray, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -69,6 +69,31 @@ class VideoSubmitDto {
   sku: string;
 }
 
+class GeneratePopStickersDto {
+  @IsOptional()
+  @IsBoolean()
+  includeBranded?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  brandAssetFilenames?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  brandedCount?: number;
+}
+
+class UploadBrandAssetDto {
+  @IsString()
+  @IsIn(['logo', 'mascot'])
+  kind: 'logo' | 'mascot';
+
+  @IsString()
+  @IsNotEmpty()
+  dataUrl: string;
+}
+
 class PollVideoDto {
   @IsString()
   @IsNotEmpty()
@@ -116,8 +141,34 @@ export class MediaController {
   @Post('products/:sku/pop-stickers')
   @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
   @HttpCode(HttpStatus.OK)
-  generatePopStickers(@Param('sku') sku: string) {
-    return this.media.generatePopStickers(sku);
+  generatePopStickers(@Param('sku') sku: string, @Body() dto: GeneratePopStickersDto = {}) {
+    return this.media.generatePopStickers(sku, dto);
+  }
+
+  /** List uploaded logo/mascot assets for branded POP stickers */
+  @Get('brand-assets')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  listBrandAssets() {
+    return this.media.listBrandAssets();
+  }
+
+  /** Upload reusable logo/mascot asset as data URL */
+  @Post('brand-assets/upload')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  uploadBrandAsset(@Body() dto: UploadBrandAssetDto) {
+    return this.media.saveBrandAsset(dto.kind, dto.dataUrl);
+  }
+
+  /** Serve uploaded brand asset (public — img tags cannot send JWT) */
+  @Public()
+  @Get('brand-assets/:filename')
+  serveBrandAsset(@Param('filename') filename: string, @Res() res: Response) {
+    const filePath = this.media.getBrandAssetPath(filename);
+    const safe = path.basename(filename);
+    const mime = safe.endsWith('.webp') ? 'image/webp' : safe.endsWith('.jpg') || safe.endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
+    res.setHeader('Content-Type', mime);
+    res.sendFile(filePath);
   }
 
   /** Save client-rendered benefit poster PNG */
