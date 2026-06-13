@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -306,7 +307,11 @@ export class MediaController {
         message: 'ยังไม่ได้ตั้งค่า API Key สำหรับ Video AI provider ที่เลือก — ไปที่ หน้าตั้งค่า → Video AI Configuration',
       };
     }
-    return this.video.submitProductVideo(dto.sku, dto);
+    try {
+      return await this.video.submitProductVideo(dto.sku, dto);
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : 'ส่งคำขอ Video ล้มเหลว');
+    }
   }
 
   /** Poll video task status */
@@ -328,7 +333,11 @@ export class MediaController {
         message: 'ยังไม่ได้ตั้งค่า API Key สำหรับ Video AI provider ที่เลือก — ไปที่ หน้าตั้งค่า → Video AI Configuration',
       };
     }
-    return this.video.generateAndWait(sku, dto);
+    try {
+      return await this.video.generateAndWait(sku, dto);
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : 'สร้าง Video ล้มเหลว');
+    }
   }
 
   /** Google Drive status */

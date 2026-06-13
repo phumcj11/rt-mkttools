@@ -19,6 +19,14 @@ interface GeminiOperationResponse {
         bytesBase64Encoded?: string;
       };
     }>;
+    generateVideoResponse?: {
+      generatedSamples?: Array<{
+        video?: {
+          uri?: string;
+          bytesBase64Encoded?: string;
+        };
+      }>;
+    };
   };
 }
 
@@ -44,6 +52,7 @@ export class GeminiVideoProvider implements VideoProvider {
     if (!apiKey) throw new Error('Gemini API Key ยังไม่ได้ตั้งค่า');
 
     const model = options.model || this.defaultModel;
+    const apiBase = this.apiBaseForModel(model);
     const image = assets.contactSheet ?? assets.referenceImages[0];
     const instances: Record<string, unknown>[] = [{ prompt: assets.prompt }];
     if (image) {
@@ -53,7 +62,7 @@ export class GeminiVideoProvider implements VideoProvider {
       };
     }
 
-    const response = await fetch(`${this.apiBase}/models/${model}:predictLongRunning?key=${encodeURIComponent(apiKey)}`, {
+    const response = await fetch(`${apiBase}/models/${model}:predictLongRunning?key=${encodeURIComponent(apiKey)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -68,7 +77,8 @@ export class GeminiVideoProvider implements VideoProvider {
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini Video API error ${response.status}: ${(await response.text()).slice(0, 400)}`);
+      const body = (await response.text()).slice(0, 400);
+      throw new Error(`Gemini Video API error ${response.status}: ${body}`);
     }
 
     const data = (await response.json()) as GeminiOperationResponse;
@@ -83,7 +93,7 @@ export class GeminiVideoProvider implements VideoProvider {
       status: data.done ? 'done' : 'queued',
       videoUrl: this.extractVideoUrl(data),
       pollAfterSeconds: 15,
-      metadata: { operationName: data.name, cutoutUsed: assets.cutoutUsed },
+      metadata: { operationName: data.name, cutoutUsed: assets.cutoutUsed, apiBase },
     };
   }
 
@@ -92,7 +102,8 @@ export class GeminiVideoProvider implements VideoProvider {
     if (!apiKey) throw new Error('Gemini API Key ยังไม่ได้ตั้งค่า');
 
     const operationName = (options.metadata?.operationName as string | undefined) ?? taskId;
-    const response = await fetch(`${this.apiBase}/${operationName}?key=${encodeURIComponent(apiKey)}`, {
+    const apiBase = (options.metadata?.apiBase as string | undefined) ?? this.apiBaseForModel(options.model || this.defaultModel);
+    const response = await fetch(`${apiBase}/${operationName}?key=${encodeURIComponent(apiKey)}`, {
       signal: AbortSignal.timeout(60_000),
     });
 
@@ -134,9 +145,17 @@ export class GeminiVideoProvider implements VideoProvider {
   }
 
   private extractVideoUrl(data: GeminiOperationResponse): string | undefined {
-    const video = data.response?.generatedVideos?.[0]?.video;
+    const video =
+      data.response?.generatedVideos?.[0]?.video ??
+      data.response?.generateVideoResponse?.generatedSamples?.[0]?.video;
     if (video?.uri) return video.uri;
     if (video?.bytesBase64Encoded) return `data:video/mp4;base64,${video.bytesBase64Encoded}`;
     return undefined;
+  }
+
+  private apiBaseForModel(model: string): string {
+    return model.endsWith('-preview')
+      ? 'https://generativelanguage.googleapis.com/v1alpha'
+      : this.apiBase;
   }
 }
