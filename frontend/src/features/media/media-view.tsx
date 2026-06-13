@@ -1,19 +1,24 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   CheckSquare,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   CloudUpload,
   Download,
   Eye,
   Film,
   Image,
   Loader2,
+  Pencil,
   RefreshCw,
   Sparkles,
   Trash2,
+  Upload,
   Video,
+  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -79,6 +84,15 @@ export function MediaView() {
   const [videoModel, setVideoModel] = useState(VIDEO_MODELS.gemini[0]);
   const [videoUseCutout, setVideoUseCutout] = useState(true);
   const [videoBriefs, setVideoBriefs] = useState<Record<string, string>>({});
+  const [openBriefSkus, setOpenBriefSkus] = useState<Set<string>>(new Set());
+
+  const toggleBriefPanel = useCallback((sku: string) => {
+    setOpenBriefSkus((prev) => {
+      const next = new Set(prev);
+      next.has(sku) ? next.delete(sku) : next.add(sku);
+      return next;
+    });
+  }, []);
 
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -452,422 +466,376 @@ export function MediaView() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Product Media Automation</h1>
-        <p className="text-muted-foreground">
-          สร้างรูปสรรพคุณสินค้าและ Clip Video อัตโนมัติ แล้วอัปโหลดขึ้น Google Drive
-        </p>
-      </div>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold tracking-tight">Product Media AI</h1>
 
-      {/* Tabs */}
-      <div className="flex gap-1 rounded-lg border bg-muted/30 p-1 w-fit">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              tab === id ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
+        {/* Tabs */}
+        <div className="flex gap-1 rounded-lg border bg-muted/30 p-1">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:text-sm sm:px-3 ${
+                tab === id ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline sm:inline">{label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* POP Sticker AI Tab */}
       {tab === 'products' && (
-        <div className="space-y-4">
-          {/* Header info */}
-          <Card className="border-violet-200 bg-violet-50/50">
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-start gap-3">
-                <Sparkles className="h-5 w-5 text-violet-600 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-violet-900">AI Product POP Sticker Generator</p>
-                  <p className="text-xs text-violet-700 mt-0.5">
-                    AI วิเคราะห์รูปสินค้า → สร้าง copy ปลอดภัย → GPT Image ใช้รูปสินค้าเป็น reference เพื่อสร้าง POP sticker ทั้งชิ้น
-                  </p>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                    <span className="text-[11px] text-muted-foreground">ใช้เวลา ~1–2 นาที/สินค้า</span>
-                    <span className="text-[11px] text-muted-foreground">~$0.04–0.12/สินค้า (GPT Image ×4)</span>
-                    <span className="text-[11px] text-violet-600 font-medium">แนวเดียวกับ ChatGPT: สร้าง die-cut retail sticker จากรูปสินค้า reference</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="space-y-3">
 
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">{products.length} สินค้า</span>
-          </div>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Video AI Provider</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label>Provider</Label>
-                <NativeSelect
-                  value={videoProvider}
-                  onChange={(e) => {
-                    const next = e.target.value as VideoProviderId;
-                    setVideoProvider(next);
-                    setVideoModel(VIDEO_MODELS[next][0]);
-                  }}
-                >
-                  <option value="gemini">Gemini / Veo</option>
-                  <option value="kling">Kling AI</option>
-                  <option value="grok">Grok (เตรียมไว้)</option>
-                </NativeSelect>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Model</Label>
-                <NativeSelect value={videoModel} onChange={(e) => setVideoModel(e.target.value)}>
-                  {(VIDEO_MODELS[videoProvider] ?? []).map((model) => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </NativeSelect>
-              </div>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground md:pt-8">
+          {/* ─── Compact toolbar ─── */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border bg-muted/30 px-4 py-3">
+            {/* Video provider */}
+            <div className="flex items-center gap-2">
+              <Video className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <NativeSelect
+                value={videoProvider}
+                className="h-8 text-xs w-[120px]"
+                onChange={(e) => {
+                  const next = e.target.value as VideoProviderId;
+                  setVideoProvider(next);
+                  setVideoModel(VIDEO_MODELS[next][0]);
+                }}
+              >
+                <option value="gemini">Gemini / Veo</option>
+                <option value="kling">Kling AI</option>
+                <option value="grok">Grok</option>
+              </NativeSelect>
+              <NativeSelect
+                value={videoModel}
+                className="h-8 text-xs w-[160px]"
+                onChange={(e) => setVideoModel(e.target.value)}
+              >
+                {(VIDEO_MODELS[videoProvider] ?? []).map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </NativeSelect>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
                 <input
                   type="checkbox"
                   checked={videoUseCutout}
                   onChange={(e) => setVideoUseCutout(e.target.checked)}
+                  className="rounded"
                 />
-                ใช้รูปสินค้าแบบลบพื้นหลังผ่าน n8n ถ้ามี
+                Cutout
               </label>
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Brand Assets สำหรับ Branded POP</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="h-5 w-px bg-border hidden sm:block" />
+
+            {/* Brand assets */}
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => { void handleBrandAssetUpload('logo', e.target.files?.[0] ?? null); e.target.value = ''; }}
+              />
+              <input
+                ref={mascotInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => { void handleBrandAssetUpload('mascot', e.target.files?.[0] ?? null); e.target.value = ''; }}
+              />
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" disabled={brandUploading === 'logo'} onClick={() => logoInputRef.current?.click()}>
+                {brandUploading === 'logo' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                Logo
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" disabled={brandUploading === 'mascot'} onClick={() => mascotInputRef.current?.click()}>
+                {brandUploading === 'mascot' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                Mascot
+              </Button>
+
+              {/* Asset thumbnails */}
+              {brandAssets.filter((a) => a?.filename && a?.url).map((asset) => {
+                const selected = selectedBrandAssets.has(asset.filename);
+                return (
+                  <button
+                    key={asset.filename}
+                    type="button"
+                    title={`${selected ? 'ยกเลิก' : 'เลือก'} ${asset.kind}`}
+                    onClick={() => toggleBrandAsset(asset.filename)}
+                    className={`relative h-8 w-8 rounded-full border-2 overflow-hidden transition-all ${selected ? 'border-violet-500 ring-2 ring-violet-200' : 'border-border opacity-50 hover:opacity-80'}`}
+                  >
+                    <img src={resolveMediaUrl(asset.url)} alt={asset.kind} className="h-full w-full object-cover bg-white" />
+                    {selected && (
+                      <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center">
+                        <CheckCircle2 className="h-3 w-3 text-violet-700" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
                 <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
+                  type="checkbox"
+                  checked={includeBranded}
+                  disabled={brandAssets.length === 0}
                   onChange={(e) => {
-                    void handleBrandAssetUpload('logo', e.target.files?.[0] ?? null);
-                    e.target.value = '';
+                    const checked = e.target.checked;
+                    if (checked && selectedBrandAssets.size === 0 && brandAssets.length > 0) {
+                      setSelectedBrandAssets(new Set(brandAssets.filter((a) => a?.filename).map((a) => a.filename)));
+                    }
+                    setIncludeBranded(checked);
                   }}
+                  className="rounded"
                 />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  type="button"
-                  disabled={brandUploading === 'logo'}
-                  onClick={() => logoInputRef.current?.click()}
-                >
-                  {brandUploading === 'logo' ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                  อัปโหลด Logo
-                </Button>
-                <input
-                  ref={mascotInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    void handleBrandAssetUpload('mascot', e.target.files?.[0] ?? null);
-                    e.target.value = '';
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  type="button"
-                  disabled={brandUploading === 'mascot'}
-                  onClick={() => mascotInputRef.current?.click()}
-                >
-                  {brandUploading === 'mascot' ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                  อัปโหลด Mascot
-                </Button>
-                <label className="ml-1 flex items-center gap-2 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={includeBranded}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      if (checked && selectedBrandAssets.size === 0 && brandAssets.length > 0) {
-                        setSelectedBrandAssets(
-                          new Set(brandAssets.filter((a) => a?.filename).map((a) => a.filename)),
-                        );
-                      }
-                      setIncludeBranded(checked);
-                    }}
-                    disabled={brandAssets.length === 0}
-                  />
-                  สร้าง Branded เพิ่ม 2 แบบ
-                </label>
-                {selectedBrandAssets.size > 0 && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    เลือก {selectedBrandAssets.size} assets
-                  </Badge>
-                )}
-              </div>
+                Branded +2
+              </label>
+            </div>
 
-              {brandAssets.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  อัปโหลดโลโก้ร้านหรือมาสคอตก่อน ถ้าต้องการสร้าง Branded POP เพิ่มจาก 4 แบบหลัก
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-muted-foreground">
-                    คลิกการ์ดเพื่อเลือก logo/mascot ที่จะใช้ — ติ๊ก &quot;สร้าง Branded เพิ่ม 2 แบบ&quot; แล้วกด Generate จะได้ 4 แบบหลัก + Branded 2 แบบ
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                  {brandAssets.filter((asset) => asset?.filename && asset?.url).map((asset) => {
-                    const selected = selectedBrandAssets.has(asset.filename);
-                    return (
-                      <button
-                        key={asset.filename}
-                        type="button"
-                        onClick={() => toggleBrandAsset(asset.filename)}
-                        className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors ${
-                          selected ? 'border-violet-400 bg-violet-50' : 'border-border hover:bg-muted/50'
-                        }`}
-                      >
-                        <img
-                          src={resolveMediaUrl(asset.url)}
-                          alt={asset.kind}
-                          className="h-8 w-8 rounded bg-white object-contain"
-                        />
-                        <span className="text-[11px] capitalize">{asset.kind}</span>
-                        {selected && <CheckCircle2 className="h-3.5 w-3.5 text-violet-600" />}
-                      </button>
-                    );
-                  })}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            <span className="ml-auto text-xs text-muted-foreground">{products.length} สินค้า</span>
+          </div>
 
+          {/* ─── Product list ─── */}
           {productsLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground py-16">
               <Loader2 className="h-5 w-5 animate-spin" /> โหลดสินค้า ERP...
             </div>
           ) : products.length === 0 ? (
-            <p className="text-muted-foreground text-sm">ยังไม่มีข้อมูลสินค้า — ซิงค์สินค้าจาก ERP ก่อน</p>
+            <div className="flex items-center justify-center py-16">
+              <p className="text-sm text-muted-foreground">ยังไม่มีข้อมูลสินค้า — ซิงค์สินค้าจาก ERP ก่อน</p>
+            </div>
           ) : (
-            <div className="space-y-3">
+            <div className="rounded-xl border divide-y overflow-hidden">
               {products.map((p) => {
                 const popResult = popResults[p.sku];
                 const isGenerating = generating === p.sku;
                 const isExpanded = expandedSku === p.sku;
                 const isVideoSubmitting = videoSubmitting === p.sku;
                 const videoTask = videoTasks[p.sku];
-                const hasVideoTask = !!videoTask;
+                const briefOpen = openBriefSkus.has(p.sku);
+                const hasBrief = !!videoBriefs[p.sku]?.trim();
 
                 return (
-                  <Card key={p.sku} className={`transition-colors ${isExpanded ? 'border-violet-300' : ''}`}>
-                    <CardContent className="pt-3 space-y-3">
-                      {/* Product row */}
-                      <div className="flex items-center gap-3">
-                        <div className="h-14 w-14 rounded-lg overflow-hidden bg-muted/50 shrink-0">
-                          {p.imageUrl ? (
-                            <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="flex h-full items-center justify-center">
-                              <Image className="h-6 w-6 text-muted-foreground/50" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{p.name}</p>
-                          <p className="text-xs text-muted-foreground">{p.category} · ฿{p.retailPrice}</p>
+                  <div key={p.sku} className={`bg-background transition-colors ${isExpanded ? 'bg-violet-50/30' : ''}`}>
+                    {/* ── Main row ── */}
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      {/* Thumbnail */}
+                      <div className="h-12 w-12 rounded-lg overflow-hidden bg-muted/50 shrink-0">
+                        {p.imageUrl ? (
+                          <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center">
+                            <Image className="h-5 w-5 text-muted-foreground/40" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Name + meta */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm leading-tight truncate">{p.name}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                          <span className="text-xs text-muted-foreground">฿{p.retailPrice}</span>
                           {popResult && (
-                            <div className="flex flex-wrap gap-1 mt-0.5 items-center">
-                              <span className="text-xs text-violet-600">
-                                ✓ {popResult.variations.filter((v) => v.imageUrl).length}/{popResult.variations.length} variations
-                              </span>
-                              {popResult.variations[0]?.cutoutUsed && (
-                                <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300">cutout ✓</Badge>
-                              )}
-                              {popResult.productImageSize && (popResult.productImageSize.width < 400 || popResult.productImageSize.height < 400) && (
-                                <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300">
-                                  รูป ERP ความละเอียดต่ำ ({popResult.productImageSize.width}×{popResult.productImageSize.height}px)
-                                </Badge>
-                              )}
-                            </div>
+                            <span className="text-xs text-violet-600">
+                              ✓ {popResult.variations.filter((v) => v.imageUrl).length}/{popResult.variations.length} POP
+                            </span>
                           )}
-                        </div>
-                        <div className="flex gap-1.5 shrink-0">
-                          <Button
-                            size="sm"
-                            variant={popResult ? 'outline' : 'default'}
-                            className="h-8 text-xs"
-                            disabled={isGenerating || !!generating}
-                            onClick={() => void handleGeneratePopStickers(p.sku)}
-                          >
-                            {isGenerating ? (
-                              <><Loader2 className="h-3 w-3 animate-spin mr-1" />กำลังสร้าง...</>
-                            ) : (
-                              <><Sparkles className="h-3 w-3 mr-1" />{popResult ? 'Regenerate' : 'สร้าง POP'}</>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs"
-                            disabled={isVideoSubmitting || videoProvider === 'grok' || (videoTask?.status === 'queued' || videoTask?.status === 'processing')}
-                            onClick={() => void handleVideoSubmit(p.sku)}
-                          >
-                            {isVideoSubmitting ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : videoTask?.status === 'done' ? (
-                              <><CheckCircle2 className="h-3 w-3 text-green-500 mr-1" />Video</>
-                            ) : videoTask?.status === 'queued' || videoTask?.status === 'processing' ? (
-                              <><Loader2 className="h-3 w-3 animate-spin mr-1" />Video</>
-                            ) : (
-                              <><Video className="h-3 w-3 mr-1" />Video</>
-                            )}
-                          </Button>
-                          {popResult && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 text-xs"
-                              onClick={() => setExpandedSku(isExpanded ? null : p.sku)}
-                            >
-                              {isExpanded ? '▲ ซ่อน' : '▼ ดู 4 แบบ'}
-                            </Button>
+                          {videoTask?.status === 'done' && (
+                            <span className="text-xs text-green-600">✓ Video</span>
+                          )}
+                          {(videoTask?.status === 'queued' || videoTask?.status === 'processing') && (
+                            <span className="text-xs text-blue-600 flex items-center gap-1">
+                              <Loader2 className="h-2.5 w-2.5 animate-spin" />Video...
+                            </span>
+                          )}
+                          {videoTask?.status === 'failed' && (
+                            <span className="text-xs text-red-500">✗ Video ล้มเหลว</span>
                           )}
                         </div>
                       </div>
 
-                      <div className="rounded-md border bg-muted/20 px-3 py-2 space-y-2">
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Brief toggle */}
+                        <Button
+                          size="sm"
+                          variant={briefOpen || hasBrief ? 'secondary' : 'ghost'}
+                          className="h-8 w-8 p-0"
+                          title="Video Brief"
+                          onClick={() => toggleBriefPanel(p.sku)}
+                        >
+                          <Pencil className={`h-3.5 w-3.5 ${hasBrief ? 'text-violet-600' : ''}`} />
+                        </Button>
+
+                        {/* POP */}
+                        <Button
+                          size="sm"
+                          variant={popResult ? 'outline' : 'default'}
+                          className="h-8 gap-1 text-xs px-3"
+                          disabled={isGenerating || !!generating}
+                          onClick={() => void handleGeneratePopStickers(p.sku)}
+                        >
+                          {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                          <span className="hidden sm:inline">{isGenerating ? 'สร้าง...' : popResult ? 'Regen' : 'POP'}</span>
+                        </Button>
+
+                        {/* Video */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 gap-1 text-xs px-3"
+                          disabled={isVideoSubmitting || videoProvider === 'grok' || videoTask?.status === 'queued' || videoTask?.status === 'processing'}
+                          onClick={() => void handleVideoSubmit(p.sku)}
+                        >
+                          {isVideoSubmitting || videoTask?.status === 'queued' || videoTask?.status === 'processing'
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : videoTask?.status === 'done'
+                              ? <CheckCircle2 className="h-3 w-3 text-green-500" />
+                              : <Video className="h-3 w-3" />}
+                          <span className="hidden sm:inline">Video</span>
+                        </Button>
+
+                        {/* Expand results */}
+                        {popResult && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setExpandedSku(isExpanded ? null : p.sku)}
+                          >
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ── Generating progress ── */}
+                    {isGenerating && (
+                      <div className="mx-4 mb-3 rounded-lg bg-violet-50 border border-violet-100 px-3 py-2 text-xs text-violet-700 flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                        <span>กำลังสร้าง POP Sticker AI... (~1–2 นาที)</span>
+                      </div>
+                    )}
+
+                    {/* ── Video brief panel (collapsible) ── */}
+                    {briefOpen && (
+                      <div className="mx-4 mb-3 rounded-lg border bg-muted/20 px-3 py-2.5 space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium">Video brief เสริม (ไม่กรอกก็ได้)</p>
+                          <span className="text-xs font-medium text-muted-foreground">Video Brief เสริม</span>
                           <div className="flex items-center gap-1.5">
-                            <Badge variant="outline" className="text-[10px]">
-                              {videoProvider} · {videoModel}
-                            </Badge>
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 text-[11px]"
+                              className="h-7 text-[11px] gap-1"
                               disabled={briefGenerating === p.sku}
                               onClick={() => void handleDraftVideoBrief(p)}
                             >
-                              {briefGenerating === p.sku ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-                              AI ช่วยร่าง
+                              {briefGenerating === p.sku ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                              AI ร่างให้
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => toggleBriefPanel(p.sku)}
+                            >
+                              <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         </div>
                         <textarea
-                          className="min-h-[70px] w-full rounded-md border bg-background px-3 py-2 text-xs"
-                          placeholder="ปล่อยว่างได้: AI จะวิเคราะห์รูป/ชื่อสินค้าและสรุปสรรพคุณให้เอง หรือพิมพ์เพิ่ม เช่น ให้ mascot ถือสินค้า ยิ้ม และชี้จุดเด่นในร้าน"
+                          className="min-h-[72px] w-full rounded-md border bg-background px-3 py-2 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                          placeholder="เว้นว่างได้ — AI จะสร้าง brief จากชื่อ/รูปสินค้าให้อัตโนมัติ"
                           value={videoBriefs[p.sku] ?? ''}
                           onChange={(e) => setVideoBriefs((prev) => ({ ...prev, [p.sku]: e.target.value }))}
                         />
-                        <p className="text-[11px] text-muted-foreground">
-                          กด Video ได้เลย: AI จะหา benefit ปลอดภัย + เขียน voiceover จากสินค้าอัตโนมัติ แล้วใช้ mascot ที่เลือกไว้ + รูปสินค้า ERP {videoUseCutout ? '+ พยายามลบพื้นหลังด้วย n8n' : ''} เป็น reference
-                        </p>
                       </div>
+                    )}
 
-                      {videoTask && (
-                        <div className={`rounded-md px-3 py-2 text-xs border ${
-                          videoTask.status === 'failed'
-                            ? 'bg-red-50 border-red-200 text-red-700'
-                            : videoTask.status === 'done'
-                              ? 'bg-green-50 border-green-200 text-green-700'
-                              : 'bg-blue-50 border-blue-200 text-blue-700'
-                        }`}>
-                          <p className="font-medium">
-                            Video {videoTask.status} · {videoTask.provider ?? videoProvider} · {videoTask.model ?? videoModel}
-                          </p>
-                          {videoTask.error && <p className="mt-1">{videoTask.error}</p>}
-                          {videoTask.videoUrl && (
-                            <a
-                              className="mt-1 inline-flex underline"
-                              href={resolveMediaUrl(videoTask.localPath ?? videoTask.videoUrl)}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              เปิดวิดีโอที่สร้าง
-                            </a>
-                          )}
-                        </div>
-                      )}
+                    {/* ── Video status ── */}
+                    {videoTask && (
+                      <div className={`mx-4 mb-3 rounded-lg px-3 py-2 text-xs border ${
+                        videoTask.status === 'failed'
+                          ? 'bg-red-50 border-red-200 text-red-700'
+                          : videoTask.status === 'done'
+                            ? 'bg-green-50 border-green-200 text-green-700'
+                            : 'bg-blue-50 border-blue-200 text-blue-700'
+                      }`}>
+                        <span className="font-medium">Video {videoTask.status}</span>
+                        {videoTask.error && <span className="ml-2">{videoTask.error}</span>}
+                        {videoTask.videoUrl && (
+                          <a
+                            className="ml-2 underline"
+                            href={resolveMediaUrl(videoTask.localPath ?? videoTask.videoUrl)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            เปิดวิดีโอ
+                          </a>
+                        )}
+                      </div>
+                    )}
 
-                      {/* Generating progress */}
-                      {isGenerating && (
-                        <div className="rounded-md bg-violet-50 border border-violet-100 px-3 py-2.5 text-xs text-violet-700 space-y-1">
-                          <p className="font-medium">กำลังสร้าง POP Sticker AI...</p>
-                          <p>
-                            1. วิเคราะห์รูปสินค้า ERP → 2. สร้าง copy ปลอดภัย → 3. GPT Image สร้าง die-cut POP sticker
-                            {includeBranded && selectedBrandAssets.size > 0 ? ' 4 แบบหลัก + Branded เพิ่ม' : ' ×4'}
-                          </p>
-                          <p className="text-violet-500">ใช้เวลาประมาณ 1–2 นาที</p>
-                        </div>
-                      )}
-
-                      {/* 4-variation gallery */}
-                      {isExpanded && popResult && (
-                        <div className="space-y-3 pt-1">
-                          {/* Copy summary */}
-                          <div className="rounded-md bg-muted/40 px-3 py-2 text-xs space-y-1">
-                            <p className="font-semibold text-sm">{popResult.copy.headline}</p>
-                            <p className="text-muted-foreground">{popResult.copy.subheadline}</p>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {popResult.copy.benefits.map((b) => (
-                                <Badge key={b} variant="secondary" className="text-[10px]">✓ {b}</Badge>
-                              ))}
-                              {popResult.copy.badges.map((b) => (
-                                <Badge key={b} variant="outline" className="text-[10px]">{b}</Badge>
-                              ))}
-                            </div>
-                          </div>
-                          {/* Image grid */}
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {popResult.variations.map((v) => (
-                              <div key={v.styleId} className="space-y-1">
-                                <div className="aspect-square rounded-lg overflow-hidden bg-muted/50 relative group">
-                                  {v.imageUrl ? (
-                                    <>
-                                      <img
-                                        src={resolveMediaUrl(v.imageUrl)}
-                                        alt={v.styleName}
-                                        className="w-full h-full object-cover"
-                                      />
-                                      {v.branded && (
-                                        <Badge className="absolute left-2 top-2 bg-violet-600 text-[10px] hover:bg-violet-600">
-                                          Branded
-                                        </Badge>
-                                      )}
-                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <a
-                                          href={resolveMediaUrl(v.imageUrl)}
-                                          download={v.filename}
-                                          className="bg-white text-black rounded-full p-2"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          <Download className="h-4 w-4" />
-                                        </a>
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <div className="flex h-full items-center justify-center text-xs text-muted-foreground px-2 text-center">
-                                      สร้างไม่สำเร็จ
-                                    </div>
-                                  )}
-                                </div>
-                                <p className="text-[10px] font-medium text-center truncate px-1">{v.styleName}</p>
-                              </div>
+                    {/* ── POP results gallery ── */}
+                    {isExpanded && popResult && (
+                      <div className="mx-4 mb-4 space-y-3">
+                        <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs space-y-1">
+                          <p className="font-semibold">{popResult.copy.headline}</p>
+                          <p className="text-muted-foreground">{popResult.copy.subheadline}</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {popResult.copy.benefits.map((b) => (
+                              <Badge key={b} variant="secondary" className="text-[10px]">✓ {b}</Badge>
+                            ))}
+                            {popResult.copy.badges.map((b) => (
+                              <Badge key={b} variant="outline" className="text-[10px]">{b}</Badge>
                             ))}
                           </div>
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {popResult.variations.map((v) => (
+                            <div key={v.styleId} className="space-y-1">
+                              <div className="aspect-square rounded-lg overflow-hidden bg-muted/50 relative group">
+                                {v.imageUrl ? (
+                                  <>
+                                    <img
+                                      src={resolveMediaUrl(v.imageUrl)}
+                                      alt={v.styleName}
+                                      className="h-full w-full object-cover"
+                                    />
+                                    {v.branded && (
+                                      <Badge className="absolute left-2 top-2 bg-violet-600 text-[10px] hover:bg-violet-600">
+                                        Branded
+                                      </Badge>
+                                    )}
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <a
+                                        href={resolveMediaUrl(v.imageUrl)}
+                                        download={v.filename}
+                                        className="bg-white text-black rounded-full p-2"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Download className="h-4 w-4" />
+                                      </a>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                                    สร้างไม่สำเร็จ
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-[10px] font-medium text-center truncate px-1">{v.styleName}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
