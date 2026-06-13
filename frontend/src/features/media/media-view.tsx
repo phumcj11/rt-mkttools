@@ -84,6 +84,7 @@ export function MediaView() {
   const [videoSubmitting, setVideoSubmitting] = useState<string | null>(null);
   const [briefGenerating, setBriefGenerating] = useState<string | null>(null);
   const [videoTasks, setVideoTasks] = useState<Record<string, VideoTask>>({});
+  const [, setVideoProgressTick] = useState(0);
   const [videoProvider, setVideoProvider] = useState<VideoProviderId>('gemini');
   const [videoModel, setVideoModel] = useState(VIDEO_MODELS.gemini[0]);
   const [videoUseCutout, setVideoUseCutout] = useState(true);
@@ -186,6 +187,13 @@ export function MediaView() {
     return () => window.clearTimeout(timer);
   }, [videoTasks]);
 
+  useEffect(() => {
+    const hasActiveVideo = Object.values(videoTasks).some((task) => task.status === 'queued' || task.status === 'processing');
+    if (!hasActiveVideo) return;
+    const timer = window.setInterval(() => setVideoProgressTick((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [videoTasks]);
+
   const handleGeneratePopStickers = async (sku: string) => {
     setGenerating(sku);
     setExpandedSku(sku);
@@ -266,7 +274,16 @@ export function MediaView() {
         return;
       }
       if ('taskId' in res) {
-        setVideoTasks((prev) => ({ ...prev, [sku]: res }));
+        setVideoTasks((prev) => ({
+          ...prev,
+          [sku]: {
+            ...res,
+            metadata: {
+              ...res.metadata,
+              clientStartedAt: Date.now(),
+            },
+          },
+        }));
       }
     } catch (err: unknown) {
       showError(
@@ -488,6 +505,16 @@ export function MediaView() {
             ? 'ยังไม่มีสินค้าที่พร้อมทำสื่อ — ลองเลือก “ทั้งหมด”'
             : 'ไม่มีสินค้าในเงื่อนไขนี้';
 
+  const videoProgress = (task: VideoTask) => {
+    if (task.status === 'done') return 100;
+    if (task.status === 'failed') return 100;
+    const started = typeof task.metadata?.clientStartedAt === 'number' ? task.metadata.clientStartedAt : Date.now();
+    const elapsedSeconds = Math.max(0, (Date.now() - started) / 1000);
+    const expectedSeconds = task.provider === 'gemini' ? 180 : 240;
+    const base = task.status === 'processing' ? 25 : 8;
+    return Math.min(92, Math.round(base + (elapsedSeconds / expectedSeconds) * 70));
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -662,6 +689,7 @@ export function MediaView() {
                 const isExpanded = expandedSku === p.sku;
                 const isVideoSubmitting = videoSubmitting === p.sku;
                 const videoTask = videoTasks[p.sku];
+                const videoPlayableUrl = videoTask?.localPath ?? videoTask?.videoUrl ?? null;
                 const briefOpen = openBriefSkus.has(p.sku);
                 const hasBrief = !!videoBriefs[p.sku]?.trim();
 
@@ -819,12 +847,25 @@ export function MediaView() {
                             ? 'bg-green-50 border-green-200 text-green-700'
                             : 'bg-blue-50 border-blue-200 text-blue-700'
                       }`}>
-                        <span className="font-medium">Video {videoTask.status}</span>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium">
+                            Video {videoTask.status === 'queued' ? 'กำลังเข้าคิว' : videoTask.status === 'processing' ? 'กำลังประมวลผล' : videoTask.status === 'done' ? 'เสร็จแล้ว' : 'ล้มเหลว'}
+                          </span>
+                          <span className="tabular-nums">{videoProgress(videoTask)}%</span>
+                        </div>
+                        {(videoTask.status === 'queued' || videoTask.status === 'processing') && (
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
+                            <div
+                              className="h-full rounded-full bg-blue-500 transition-all duration-700"
+                              style={{ width: `${videoProgress(videoTask)}%` }}
+                            />
+                          </div>
+                        )}
                         {videoTask.error && <span className="ml-2">{videoTask.error}</span>}
-                        {videoTask.videoUrl && (
+                        {videoPlayableUrl && (
                           <a
-                            className="ml-2 underline"
-                            href={resolveMediaUrl(videoTask.localPath ?? videoTask.videoUrl)}
+                            className="mt-2 inline-flex underline"
+                            href={resolveMediaUrl(videoPlayableUrl)}
                             target="_blank"
                             rel="noreferrer"
                           >

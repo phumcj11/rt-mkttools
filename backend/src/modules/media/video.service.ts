@@ -57,16 +57,32 @@ export class VideoService {
     if (!(await provider.isConfigured())) throw new Error(`${this.providerLabel(providerId)} API Key ยังไม่ได้ตั้งค่า`);
 
     const assets = await this.prepareAssets(product, options);
-    return provider.submit(assets, { model });
+    const result = await provider.submit(assets, { model });
+    return {
+      ...result,
+      metadata: {
+        ...result.metadata,
+        sku: product.sku,
+      },
+    };
   }
 
   async pollVideoTask(taskId: string, options: VideoPollOptions = {}): Promise<VideoGenerationResult> {
     const providerId = options.provider ?? await this.resolveProvider();
-    return this.getProvider(providerId).poll(taskId, {
+    const result = await this.getProvider(providerId).poll(taskId, {
       ...options,
       provider: providerId,
       model: options.model || await this.resolveModel(providerId),
     });
+    if (result.status === 'done' && result.videoUrl && !result.localPath) {
+      const sku = typeof result.metadata?.sku === 'string' ? result.metadata.sku : 'video';
+      const localPath = await this.saveCompletedVideo(result.videoUrl, sku, result.metadata).catch((err) => {
+        this.logger.warn(`Video save failed for ${taskId}: ${String(err)}`);
+        return null;
+      });
+      if (localPath) return { ...result, localPath };
+    }
+    return result;
   }
 
   /**
@@ -91,13 +107,11 @@ export class VideoService {
 
       if (status.status === 'done' && status.videoUrl) {
         // Download video
-        const filename = `video-${sku}-${Date.now()}.mp4`;
-        const localPath = path.join(this.uploadsDir, filename);
         try {
-          await this.downloadFile(status.videoUrl, localPath);
+          const localPath = await this.saveCompletedVideo(status.videoUrl, sku, status.metadata);
           return {
             ...status,
-            localPath: `/media/serve/${filename}`,
+            localPath,
           };
         } catch (dlErr) {
           this.logger.warn(`Video download failed: ${String(dlErr)}`);
@@ -122,12 +136,47 @@ export class VideoService {
     const fileStream = fs.createWriteStream(dest);
     return new Promise((resolve, reject) => {
       const client = url.startsWith('https') ? https : http;
-      (client as typeof https).get(url, (res) => {
+      const headers: Record<string, string> = {};
+      const apiKey = this.extractApiKeyFromUrl(url);
+      if (apiKey) headers['x-goog-api-key'] = apiKey;
+      (client as typeof https).get(url, { headers }, (res) => {
+        if ((res.statusCode ?? 500) >= 400) {
+          fileStream.close();
+          fs.rmSync(dest, { force: true });
+          reject(new Error(`download returned HTTP ${res.statusCode}`));
+          return;
+        }
         res.pipe(fileStream);
         fileStream.on('finish', () => { fileStream.close(); resolve(); });
         fileStream.on('error', reject);
       }).on('error', reject);
     });
+  }
+
+  private async saveCompletedVideo(videoUrl: string, sku: string, metadata?: Record<string, unknown>): Promise<string> {
+    const filename = `video-${this.safeFilename(sku)}-${Date.now()}.mp4`;
+    const localFilePath = path.join(this.uploadsDir, filename);
+    const downloadableUrl = await this.resolveDownloadUrl(videoUrl, metadata);
+    await this.downloadFile(downloadableUrl, localFilePath);
+    return `/media/serve/${filename}`;
+  }
+
+  private async resolveDownloadUrl(videoUrl: string, metadata?: Record<string, unknown>): Promise<string> {
+    if (!videoUrl.includes('generativelanguage.googleapis.com')) return videoUrl;
+    const apiKey = await this.settings.get('gemini_api_key');
+    if (!apiKey) return videoUrl;
+    const separator = videoUrl.includes('?') ? '&' : '?';
+    const url = `${videoUrl}${separator}key=${encodeURIComponent(apiKey)}`;
+    if (url.includes('alt=media')) return url;
+    return `${url}&alt=media`;
+  }
+
+  private extractApiKeyFromUrl(url: string): string | null {
+    try {
+      return new URL(url).searchParams.get('key');
+    } catch {
+      return null;
+    }
   }
 
   private getProvider(id: VideoProviderId): VideoProvider {

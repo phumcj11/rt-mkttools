@@ -119,7 +119,7 @@ export class GeminiVideoProvider implements VideoProvider {
         model: options.model || this.defaultModel,
         status: 'failed',
         error: data.error.message || 'Gemini video task failed',
-        metadata: { operationName },
+        metadata: { ...options.metadata, operationName, apiBase },
       };
     }
 
@@ -130,7 +130,7 @@ export class GeminiVideoProvider implements VideoProvider {
         model: options.model || this.defaultModel,
         status: 'processing',
         pollAfterSeconds: 15,
-        metadata: { operationName },
+        metadata: { ...options.metadata, operationName, apiBase },
       };
     }
 
@@ -140,7 +140,7 @@ export class GeminiVideoProvider implements VideoProvider {
       model: options.model || this.defaultModel,
       status: 'done',
       videoUrl: this.extractVideoUrl(data),
-      metadata: { operationName },
+      metadata: { ...options.metadata, operationName, apiBase },
     };
   }
 
