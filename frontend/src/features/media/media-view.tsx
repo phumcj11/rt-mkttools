@@ -14,6 +14,7 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  Search,
   Sparkles,
   Trash2,
   Upload,
@@ -51,6 +52,7 @@ import {
   type DriveSettings,
   type ErpProduct,
   type MediaFile,
+  type MediaProductFilter,
   type N8nSettings,
   type PopStickerResult,
   type VideoSettings,
@@ -68,6 +70,8 @@ export function MediaView() {
 
   const [products, setProducts] = useState<ErpProduct[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
+  const [productSearch, setProductSearch] = useState('');
+  const [productFilter, setProductFilter] = useState<MediaProductFilter>('ready');
   const [generating, setGenerating] = useState<string | null>(null);
   const [popResults, setPopResults] = useState<Record<string, PopStickerResult>>({});
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
@@ -114,14 +118,21 @@ export function MediaView() {
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    setProductsLoading(true);
-    Promise.all([
-      listMediaProducts(100).then(setProducts).catch(() => undefined),
-      listBrandAssets()
-        .then((assets) => setBrandAssets(Array.isArray(assets) ? assets : []))
-        .catch(() => undefined),
-    ]).finally(() => setProductsLoading(false));
+    listBrandAssets()
+      .then((assets) => setBrandAssets(Array.isArray(assets) ? assets : []))
+      .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setProductsLoading(true);
+      listMediaProducts(100, 0, { q: productSearch, filter: productFilter })
+        .then(setProducts)
+        .catch(() => setProducts([]))
+        .finally(() => setProductsLoading(false));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [productSearch, productFilter]);
 
   // Pre-select all brand assets on load so the Branded checkbox works after refresh.
   useEffect(() => {
@@ -595,7 +606,31 @@ export function MediaView() {
               </label>
             </div>
 
-            <span className="ml-auto text-xs text-muted-foreground">{products.length} สินค้า</span>
+            <div className="h-5 w-px bg-border hidden lg:block" />
+
+            <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
+              <NativeSelect
+                value={productFilter}
+                className="h-8 text-xs lg:w-[150px]"
+                onChange={(e) => setProductFilter(e.target.value as MediaProductFilter)}
+              >
+                <option value="new_today">เข้าใหม่วันนี้</option>
+                <option value="new">สินค้าใหม่ 7 วัน</option>
+                <option value="ready">พร้อมทำสื่อ</option>
+                <option value="promo">มีโปรโมชั่น</option>
+                <option value="all">ทั้งหมด</option>
+              </NativeSelect>
+              <div className="relative lg:w-[260px]">
+                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="ค้นหา SKU / ชื่อสินค้า"
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+              <span className="whitespace-nowrap text-xs text-muted-foreground">{products.length} สินค้า</span>
+            </div>
           </div>
 
           {/* ─── Product list ─── */}
@@ -638,6 +673,12 @@ export function MediaView() {
                         <p className="font-medium text-sm leading-tight truncate">{p.name}</p>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                           <span className="text-xs text-muted-foreground">฿{p.retailPrice}</span>
+                          {p.activePromotionCount ? (
+                            <span className="text-xs text-amber-600">{p.activePromotionCount} โปร</span>
+                          ) : null}
+                          {typeof p.effectiveGpPct === 'number' && p.effectiveGpPct > 0 ? (
+                            <span className="text-xs text-muted-foreground">GP {p.effectiveGpPct.toFixed(1)}%</span>
+                          ) : null}
                           {popResult && (
                             <span className="text-xs text-violet-600">
                               ✓ {popResult.variations.filter((v) => v.imageUrl).length}/{popResult.variations.length} POP

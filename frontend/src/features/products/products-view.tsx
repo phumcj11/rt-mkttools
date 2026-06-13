@@ -28,6 +28,7 @@ import {
 
 const FILTERS: { value: ProductCatalogFilter; label: string }[] = [
   { value: 'ready', label: 'พร้อมทำสื่อ' },
+  { value: 'new_today', label: 'เข้าใหม่วันนี้' },
   { value: 'new', label: 'สินค้าใหม่' },
   { value: 'changed', label: 'เพิ่งเปลี่ยน' },
   { value: 'promo', label: 'มีโปรโมชั่น' },

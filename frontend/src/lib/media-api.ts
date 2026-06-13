@@ -16,6 +16,8 @@ export interface ErpProduct {
   imageUrl: string;
 }
 
+export type MediaProductFilter = 'ready' | 'new_today' | 'new' | 'promo' | 'all';
+
 export interface ProductMediaResult {
   sku: string;
   productName: string;
@@ -105,10 +107,20 @@ export interface VideoSubmitOptions {
 }
 
 // Products
-export function listMediaProducts(limit = 50, offset = 0) {
+export function listMediaProducts(
+  limit = 50,
+  offset = 0,
+  options: { q?: string; filter?: MediaProductFilter } = {},
+) {
   const page = Math.floor(offset / limit) + 1;
+  const search = new URLSearchParams({
+    filter: options.filter ?? 'ready',
+    page: String(page),
+    limit: String(limit),
+  });
+  if (options.q?.trim()) search.set('q', options.q.trim());
   return apiRequest<{ items: Array<Omit<ErpProduct, 'retailPrice'> & { retailPrice: number }> }>(
-    `/products/catalog?filter=ready&page=${page}&limit=${limit}`,
+    `/products/catalog?${search.toString()}`,
   ).then((res) => res.items.map((item) => ({ ...item, retailPrice: String(item.retailPrice) })));
 }
 

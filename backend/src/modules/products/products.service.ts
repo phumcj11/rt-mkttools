@@ -20,7 +20,7 @@ export interface ProductCatalogQuery {
   category?: string;
   brand?: string;
   abc?: string;
-  filter?: 'all' | 'new' | 'changed' | 'missing_image' | 'ready' | 'low_gp' | 'promo' | 'inactive';
+  filter?: 'all' | 'new_today' | 'new' | 'changed' | 'missing_image' | 'ready' | 'low_gp' | 'promo' | 'inactive';
   page?: number;
   limit?: number;
 }
@@ -128,7 +128,12 @@ export class ProductsService {
 
     const since = new Date();
     since.setDate(since.getDate() - 7);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     switch (query.filter) {
+      case 'new_today':
+        qb.andWhere('p.is_active = 1 AND p.first_seen_at >= :today', { today });
+        break;
       case 'new':
         qb.andWhere('p.first_seen_at >= :since', { since });
         break;

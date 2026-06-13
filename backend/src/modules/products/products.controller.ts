@@ -33,7 +33,7 @@ export class ProductsController {
     @Query('category') category?: string,
     @Query('brand') brand?: string,
     @Query('abc') abc?: string,
-    @Query('filter') filter?: 'all' | 'new' | 'changed' | 'missing_image' | 'ready' | 'low_gp' | 'promo' | 'inactive',
+    @Query('filter') filter?: 'all' | 'new_today' | 'new' | 'changed' | 'missing_image' | 'ready' | 'low_gp' | 'promo' | 'inactive',
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {

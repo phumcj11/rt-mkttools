@@ -1,7 +1,7 @@
 import { apiRequest } from './api';
 import type { Category, Product, ProductInput } from './types';
 
-export type ProductCatalogFilter = 'all' | 'new' | 'changed' | 'missing_image' | 'ready' | 'low_gp' | 'promo' | 'inactive';
+export type ProductCatalogFilter = 'all' | 'new_today' | 'new' | 'changed' | 'missing_image' | 'ready' | 'low_gp' | 'promo' | 'inactive';
 
 export interface ProductCatalogItem {
   sku: string;
