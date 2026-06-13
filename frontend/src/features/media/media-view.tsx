@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
   CloudUpload,
@@ -57,6 +57,8 @@ export function MediaView() {
   const [selectedBrandAssets, setSelectedBrandAssets] = useState<Set<string>>(new Set());
   const [includeBranded, setIncludeBranded] = useState(false);
   const [brandUploading, setBrandUploading] = useState<'logo' | 'mascot' | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const mascotInputRef = useRef<HTMLInputElement>(null);
   const [videoSubmitting, setVideoSubmitting] = useState<string | null>(null);
   const [videoTasks, setVideoTasks] = useState<Record<string, string>>({});
 
@@ -79,7 +81,9 @@ export function MediaView() {
     setProductsLoading(true);
     Promise.all([
       listMediaProducts(100).then(setProducts).catch(() => undefined),
-      listBrandAssets().then(setBrandAssets).catch(() => undefined),
+      listBrandAssets()
+        .then((assets) => setBrandAssets(Array.isArray(assets) ? assets : []))
+        .catch(() => undefined),
     ]).finally(() => setProductsLoading(false));
   }, []);
 
@@ -127,7 +131,10 @@ export function MediaView() {
         reader.readAsDataURL(file);
       });
       const saved = await uploadBrandAsset(kind, dataUrl);
-      setBrandAssets((prev) => [saved, ...prev]);
+      if (!saved?.filename || !saved.url) {
+        throw new Error('เซิร์ฟเวอร์ไม่ส่งข้อมูล asset กลับมาครบ');
+      }
+      setBrandAssets((prev) => [saved, ...(Array.isArray(prev) ? prev : [])]);
       setSelectedBrandAssets((prev) => new Set(prev).add(saved.filename));
       setIncludeBranded(true);
     } catch (err: unknown) {
@@ -291,34 +298,46 @@ export function MediaView() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <label className="inline-flex">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => void handleBrandAssetUpload('logo', e.target.files?.[0] ?? null)}
-                  />
-                  <Button size="sm" variant="outline" type="button" disabled={brandUploading === 'logo'} asChild>
-                    <span>
-                      {brandUploading === 'logo' ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                      อัปโหลด Logo
-                    </span>
-                  </Button>
-                </label>
-                <label className="inline-flex">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => void handleBrandAssetUpload('mascot', e.target.files?.[0] ?? null)}
-                  />
-                  <Button size="sm" variant="outline" type="button" disabled={brandUploading === 'mascot'} asChild>
-                    <span>
-                      {brandUploading === 'mascot' ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                      อัปโหลด Mascot
-                    </span>
-                  </Button>
-                </label>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    void handleBrandAssetUpload('logo', e.target.files?.[0] ?? null);
+                    e.target.value = '';
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="button"
+                  disabled={brandUploading === 'logo'}
+                  onClick={() => logoInputRef.current?.click()}
+                >
+                  {brandUploading === 'logo' ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                  อัปโหลด Logo
+                </Button>
+                <input
+                  ref={mascotInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    void handleBrandAssetUpload('mascot', e.target.files?.[0] ?? null);
+                    e.target.value = '';
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="button"
+                  disabled={brandUploading === 'mascot'}
+                  onClick={() => mascotInputRef.current?.click()}
+                >
+                  {brandUploading === 'mascot' ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                  อัปโหลด Mascot
+                </Button>
                 <label className="ml-1 flex items-center gap-2 text-xs text-muted-foreground">
                   <input
                     type="checkbox"
@@ -341,7 +360,7 @@ export function MediaView() {
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {brandAssets.map((asset) => {
+                  {brandAssets.filter((asset) => asset?.filename && asset?.url).map((asset) => {
                     const selected = selectedBrandAssets.has(asset.filename);
                     return (
                       <button
