@@ -768,11 +768,14 @@ export class MediaService {
       '- Do not show codes like PM00005, PM00010, or any similar product code anywhere.',
       '',
       'Output requirements:',
-      '- Die-cut POP sticker / retail shelf talker shape, not a plain square poster.',
-      '- Keep the full sign background inside the sticker (white, gold, gradient, or colored panel). Only the outer GPT canvas margin should be transparent.',
+      'Die-cut shape requirements:',
+      '- Custom shelf-talker silhouette with wavy, rounded, crown-top, banner-bottom, or decorative contour — NOT a full-bleed square poster.',
+      '- Add a visible outer edge around the entire sticker: soft drop shadow, gold outline, or contrasting trim separating sticker from canvas.',
+      '- Plain uniform light margin must appear ONLY outside that outer edge.',
+      '- Keep the full sign background INSIDE the sticker silhouette (white, gold, gradient, or colored panel).',
       '- Product bottle/package large in center, naturally integrated with design.',
       '- Easy to read from 2-3 meters.',
-      '- High resolution, print-ready PNG with alpha, no watermark.',
+      '- High resolution, print-ready PNG, no watermark.',
       '- Supplement-safe wording only; no cure/treat/prevent disease/medicine claims.',
     ];
 
@@ -834,6 +837,9 @@ export class MediaService {
         'Japanese health store',
         'Premium wellness product',
         'Highly attractive for tourists',
+        'Die-cut rounded shelf-talker or wavy oval silhouette',
+        'Gold border trim and soft drop shadow around the entire outer contour',
+        'White/gold panel stays inside the contour only',
         ...commonRules,
       ].join('\n');
     }
@@ -966,7 +972,8 @@ export class MediaService {
       '- Keep product-led retail design first; branding is secondary.',
       '',
       'Design requirements:',
-      '- Die-cut POP sticker / shelf talker shape, not a plain square poster.',
+      '- Custom die-cut shelf-talker silhouette with visible outer edge (drop shadow, gold trim, or contour).',
+      '- Plain light margin only outside the sticker contour; keep full sign background inside.',
       '- White, gold, black, and clean retail pharmacy style.',
       '- Clear English benefit copy readable from 2-3 meters.',
       '- Premium tourist-store retail style suitable for 100 Baht Shop Thailand.',
@@ -1045,10 +1052,134 @@ export class MediaService {
     input: Buffer,
     _label: string,
   ): Promise<{ buffer: Buffer; cutoutUsed: boolean }> {
-    // POP stickers are full graphic layouts — do NOT run rembg/n8n on them (it eats the sign background).
-    // Only strip the uniform outer canvas margin that GPT Image adds around the design.
-    const buffer = await this.removeUniformOuterMargins(sharp, input);
+    const buffer = await this.applyDieCutTransparency(sharp, input);
     return { buffer, cutoutUsed: false };
+  }
+
+  private centerRegionMeanAlpha(data: Buffer, width: number, height: number): number {
+    const x0 = Math.floor(width * 0.25);
+    const x1 = Math.ceil(width * 0.75);
+    const y0 = Math.floor(height * 0.25);
+    const y1 = Math.ceil(height * 0.75);
+    let sum = 0;
+    let count = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        sum += data[((y * width) + x) * 4 + 3];
+        count++;
+      }
+    }
+    return count > 0 ? sum / count : 255;
+  }
+
+  private floodFillOuterBackground(
+    data: Buffer,
+    width: number,
+    height: number,
+    bg: [number, number, number],
+    tolerance: number,
+  ): Buffer {
+    const out = Buffer.from(data);
+    const visited = new Uint8Array(width * height);
+    const queue: number[] = [];
+    const pixelIndex = (x: number, y: number) => ((y * width) + x) * 4;
+    const cellIndex = (x: number, y: number) => (y * width) + x;
+
+    const enqueue = (x: number, y: number) => {
+      const cell = cellIndex(x, y);
+      if (visited[cell]) return;
+      if (!this.pixelMatchesBg(out, width, x, y, bg, tolerance)) return;
+      visited[cell] = 1;
+      queue.push(cell);
+    };
+
+    for (let x = 0; x < width; x++) {
+      enqueue(x, 0);
+      enqueue(x, height - 1);
+    }
+    for (let y = 0; y < height; y++) {
+      enqueue(0, y);
+      enqueue(width - 1, y);
+    }
+
+    while (queue.length > 0) {
+      const cell = queue.pop()!;
+      const x = cell % width;
+      const y = Math.floor(cell / width);
+      out[pixelIndex(x, y) + 3] = 0;
+      if (x > 0) enqueue(x - 1, y);
+      if (x < width - 1) enqueue(x + 1, y);
+      if (y > 0) enqueue(x, y - 1);
+      if (y < height - 1) enqueue(x, y + 1);
+    }
+
+    return out;
+  }
+
+  private async applyDieCutTransparency(
+    sharp: (input?: Buffer | object) => any,
+    input: Buffer,
+    tolerance = 20,
+    uniformLineThreshold = 0.9,
+  ): Promise<Buffer> {
+    const { data, info } = await sharp(input)
+      .flatten({ background: '#ffffff' })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const width = info.width;
+    const height = info.height;
+    const bg = this.averageCornerRgb(data, width, height);
+    const centerBefore = this.centerRegionMeanAlpha(data, width, height);
+
+    const rowBgRatio = (y: number) => {
+      let match = 0;
+      for (let x = 0; x < width; x++) {
+        if (this.pixelMatchesBg(data, width, x, y, bg, tolerance)) match++;
+      }
+      return match / width;
+    };
+    const colBgRatio = (x: number) => {
+      let match = 0;
+      for (let y = 0; y < height; y++) {
+        if (this.pixelMatchesBg(data, width, x, y, bg, tolerance)) match++;
+      }
+      return match / height;
+    };
+
+    let top = 0;
+    while (top < height && rowBgRatio(top) >= uniformLineThreshold) top++;
+    let bottom = height - 1;
+    while (bottom > top && rowBgRatio(bottom) >= uniformLineThreshold) bottom--;
+    let left = 0;
+    while (left < width && colBgRatio(left) >= uniformLineThreshold) left++;
+    let right = width - 1;
+    while (right > left && colBgRatio(right) >= uniformLineThreshold) right--;
+
+    const pixelIndex = (x: number, y: number) => ((y * width) + x) * 4;
+    let working = Buffer.from(data);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const inOuterMargin = y < top || y > bottom || x < left || x > right;
+        if (inOuterMargin && this.pixelMatchesBg(working, width, x, y, bg, tolerance)) {
+          working[pixelIndex(x, y) + 3] = 0;
+        }
+      }
+    }
+
+    const flooded = this.floodFillOuterBackground(working, width, height, bg, tolerance);
+    const centerAfter = this.centerRegionMeanAlpha(flooded, width, height);
+    if (centerAfter >= centerBefore * 0.88) {
+      working = flooded;
+    }
+
+    return (sharp as (input: Buffer, options?: { raw: { width: number; height: number; channels: number } }) => ReturnType<typeof sharp>)(
+      working,
+      { raw: { width, height, channels: 4 } },
+    )
+      .png()
+      .trim({ threshold: 8 })
+      .toBuffer();
   }
 
   private averageCornerRgb(data: Buffer, width: number, height: number): [number, number, number] {
@@ -1087,60 +1218,8 @@ export class MediaService {
   private async removeUniformOuterMargins(
     sharp: (input?: Buffer | object) => any,
     input: Buffer,
-    tolerance = 20,
-    uniformLineThreshold = 0.9,
   ): Promise<Buffer> {
-    const { data, info } = await sharp(input)
-      .flatten({ background: '#ffffff' })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    const width = info.width;
-    const height = info.height;
-    const bg = this.averageCornerRgb(data, width, height);
-
-    const rowBgRatio = (y: number) => {
-      let match = 0;
-      for (let x = 0; x < width; x++) {
-        if (this.pixelMatchesBg(data, width, x, y, bg, tolerance)) match++;
-      }
-      return match / width;
-    };
-
-    const colBgRatio = (x: number) => {
-      let match = 0;
-      for (let y = 0; y < height; y++) {
-        if (this.pixelMatchesBg(data, width, x, y, bg, tolerance)) match++;
-      }
-      return match / height;
-    };
-
-    let top = 0;
-    while (top < height && rowBgRatio(top) >= uniformLineThreshold) top++;
-    let bottom = height - 1;
-    while (bottom > top && rowBgRatio(bottom) >= uniformLineThreshold) bottom--;
-    let left = 0;
-    while (left < width && colBgRatio(left) >= uniformLineThreshold) left++;
-    let right = width - 1;
-    while (right > left && colBgRatio(right) >= uniformLineThreshold) right--;
-
-    const pixelIndex = (x: number, y: number) => (y * width + x) * 4;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const inOuterMargin = y < top || y > bottom || x < left || x > right;
-        if (inOuterMargin && this.pixelMatchesBg(data, width, x, y, bg, tolerance)) {
-          data[pixelIndex(x, y) + 3] = 0;
-        }
-      }
-    }
-
-    return (sharp as (input: Buffer, options?: { raw: { width: number; height: number; channels: number } }) => ReturnType<typeof sharp>)(
-      data,
-      { raw: { width, height, channels: 4 } },
-    )
-      .png()
-      .trim({ threshold: 8 })
-      .toBuffer();
+    return this.applyDieCutTransparency(sharp, input);
   }
 
   private async callN8nCutout(webhookUrl: string, imageUrl: string, sku: string): Promise<Buffer> {
