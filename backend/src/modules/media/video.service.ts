@@ -154,7 +154,8 @@ export class VideoService {
   }
 
   private async prepareAssets(product: ErpProductCache, options: VideoSubmitOptions): Promise<PreparedVideoAssets> {
-    const script = (options.script || await this.generateScript(product)).trim();
+    const benefits = await this.generateVideoBenefits(product);
+    const script = (options.script || await this.generateScript(product, benefits)).trim();
     const visualBrief = (options.visualBrief || this.defaultVisualBrief()).trim();
     const referenceImages: VideoReferenceImage[] = [];
     let primaryImageUrl = product.imageUrl || undefined;
@@ -184,16 +185,59 @@ export class VideoService {
     }
 
     const contactSheet = await this.buildContactSheet(referenceImages);
-    const prompt = this.buildVideoPrompt(product, script, visualBrief, referenceImages, cutoutUsed);
-    return { product, prompt, script, visualBrief, referenceImages, primaryImageUrl, contactSheet, cutoutUsed };
+    const prompt = this.buildVideoPrompt(product, script, benefits, visualBrief, referenceImages, cutoutUsed);
+    return { product, prompt, script, benefits, visualBrief, referenceImages, primaryImageUrl, contactSheet, cutoutUsed };
   }
 
-  private async generateScript(product: ErpProductCache): Promise<string> {
-    const fallback = `${product.name} ราคาเพียง ฿${product.retailPrice} เหมาะสำหรับลูกค้าที่มองหาสินค้าคุณภาพในร้าน 100 บาท`;
+  private async generateVideoBenefits(product: ErpProductCache): Promise<string[]> {
+    const fallback = [
+      'สินค้าคุณภาพ คุ้มค่าสำหรับลูกค้า',
+      'เหมาะสำหรับใช้ในชีวิตประจำวัน',
+      'หาซื้อง่ายที่ 100 Baht Shop',
+    ];
+    const prompt = [
+      'Analyze this retail product and write 3 short claim-safe benefits for a 6-second product explainer video.',
+      'Use Thai language. Keep each benefit under 8 Thai words.',
+      'Avoid medical claims: do not say cure, treat, prevent disease, guaranteed result, doctor recommended, medicine.',
+      'Do not include SKU, product code, ERP/catalog text, or price.',
+      `Product name: ${product.name}`,
+      `Category: ${product.category}`,
+    ].join('\n');
+
+    try {
+      const content = product.imageUrl
+        ? await this.openAi.analyzeImage(product.imageUrl, prompt)
+        : (await this.openAi.complete(
+          'คุณเป็นนักเขียน benefit สินค้าปลีก ตอบสั้น ปลอดภัย ไม่กล่าวอ้างรักษาโรค',
+          prompt,
+        )).content;
+      const lines = content
+        .split('\n')
+        .map((line) => line.replace(/^[-*\d\.\)\s]+/, '').trim())
+        .filter((line) => line.length > 2)
+        .slice(0, 3);
+      return lines.length > 0 ? lines : fallback;
+    } catch (err) {
+      this.logger.warn(`Video benefit generation failed for ${product.sku}: ${String(err)}`);
+      return fallback;
+    }
+  }
+
+  private async generateScript(product: ErpProductCache, benefits: string[]): Promise<string> {
+    const fallback = `${product.name} จุดเด่นคือ ${benefits.slice(0, 2).join(' และ ')} แวะเลือกซื้อได้ที่ 100 Baht Shop`;
     try {
       const res = await this.openAi.complete(
         'คุณเป็นนักเขียนสคริปต์วิดีโอขายสินค้า ตอบภาษาไทย กระชับ ไม่กล่าวอ้างเกินจริง',
-        `เขียน voiceover 1-2 ประโยคสำหรับคลิปสินค้า 6 วินาที: ${product.name} หมวด ${product.category} ราคา ฿${product.retailPrice}`,
+        [
+          'เขียน voiceover 1 ประโยคสำหรับคลิปสินค้า 6 วินาที',
+          'ให้ mascot พูดแนะนำสินค้าแบบเป็นธรรมชาติ',
+          'ใช้ benefit ที่ให้มาเท่านั้น ห้ามแต่งสรรพคุณรักษาโรคเพิ่ม',
+          'ห้ามพูด SKU/product code',
+          `สินค้า: ${product.name}`,
+          `หมวด: ${product.category}`,
+          `ราคา: ฿${product.retailPrice}`,
+          `จุดเด่นปลอดภัย: ${benefits.join(' / ')}`,
+        ].join('\n'),
       );
       return res.content || fallback;
     } catch {
@@ -215,6 +259,7 @@ export class VideoService {
   private buildVideoPrompt(
     product: ErpProductCache,
     script: string,
+    benefits: string[],
     visualBrief: string,
     references: VideoReferenceImage[],
     cutoutUsed: boolean,
@@ -225,6 +270,7 @@ export class VideoService {
       '',
       `Product: ${product.name}`,
       `Category: ${product.category}`,
+      `Safe product benefits: ${benefits.join(' / ')}`,
       `Voiceover: "${script}"`,
       '',
       'Reference rules:',

@@ -43,6 +43,7 @@ export interface PreparedVideoAssets {
   product: ErpProductCache;
   prompt: string;
   script: string;
+  benefits: string[];
   visualBrief: string;
   referenceImages: VideoReferenceImage[];
   primaryImageUrl?: string;

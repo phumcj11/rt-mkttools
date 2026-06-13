@@ -257,7 +257,8 @@ export function MediaView() {
         price: Number(product.retailPrice) || undefined,
         tone: 'friendly',
         details: [
-          'สร้าง brief สำหรับ image-to-video 6 วินาที แนวตั้ง 9:16',
+          'สร้างคำสั่งเสริมสำหรับ image-to-video 6 วินาที แนวตั้ง 9:16',
+          'ไม่ต้องเขียนสรรพคุณละเอียด เพราะ backend จะวิเคราะห์ benefit จากรูป/ชื่อสินค้าให้อัตโนมัติ',
           'ให้ mascot จากรูป reference เป็นคนพูด/ชี้สินค้า ถ้ามี mascot',
           'ใช้รูปสินค้า ERP ที่ลบพื้นหลังแล้วเป็น product reference',
           'ฉากในร้าน ChangSiam 100 Baht Shop Thailand',
@@ -643,7 +644,7 @@ export function MediaView() {
 
                       <div className="rounded-md border bg-muted/20 px-3 py-2 space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium">Video brief แบบคุยกับ AI</p>
+                          <p className="text-xs font-medium">Video brief เสริม (ไม่กรอกก็ได้)</p>
                           <div className="flex items-center gap-1.5">
                             <Badge variant="outline" className="text-[10px]">
                               {videoProvider} · {videoModel}
@@ -663,12 +664,12 @@ export function MediaView() {
                         </div>
                         <textarea
                           className="min-h-[70px] w-full rounded-md border bg-background px-3 py-2 text-xs"
-                          placeholder="ตัวอย่าง: ให้ mascot ถือสินค้า ชี้จุดเด่น พูดสั้นๆ ในร้าน ChangSiam 100 Baht Shop แบบโฆษณาแนวตั้ง 6 วินาที"
+                          placeholder="ปล่อยว่างได้: AI จะวิเคราะห์รูป/ชื่อสินค้าและสรุปสรรพคุณให้เอง หรือพิมพ์เพิ่ม เช่น ให้ mascot ถือสินค้า ยิ้ม และชี้จุดเด่นในร้าน"
                           value={videoBriefs[p.sku] ?? ''}
                           onChange={(e) => setVideoBriefs((prev) => ({ ...prev, [p.sku]: e.target.value }))}
                         />
                         <p className="text-[11px] text-muted-foreground">
-                          ระบบจะใช้ mascot ที่เลือกไว้ + รูปสินค้าจาก ERP {videoUseCutout ? '+ พยายามลบพื้นหลังด้วย n8n' : ''} เป็น reference ให้ video provider
+                          กด Video ได้เลย: AI จะหา benefit ปลอดภัย + เขียน voiceover จากสินค้าอัตโนมัติ แล้วใช้ mascot ที่เลือกไว้ + รูปสินค้า ERP {videoUseCutout ? '+ พยายามลบพื้นหลังด้วย n8n' : ''} เป็น reference
                         </p>
                       </div>
 
