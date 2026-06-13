@@ -7,7 +7,6 @@ import { ErpProductCache } from '../../database/entities/erp-product-cache.entit
 import { OpenAiService } from '../ai/openai.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { PromoCompositeService } from './promo-composite.service';
-import { getApiBaseUrl } from '../../common/utils/app-urls';
 
 export interface ProductMediaResult {
   sku: string;
@@ -770,7 +769,7 @@ export class MediaService {
       '',
       'Output requirements:',
       '- Die-cut POP sticker / retail shelf talker shape, not a plain square poster.',
-      '- Transparent background outside the sticker silhouette. No full-canvas white or colored square fill.',
+      '- Keep the full sign background inside the sticker (white, gold, gradient, or colored panel). Only the outer GPT canvas margin should be transparent.',
       '- Product bottle/package large in center, naturally integrated with design.',
       '- Easy to read from 2-3 meters.',
       '- High resolution, print-ready PNG with alpha, no watermark.',
@@ -1044,89 +1043,95 @@ export class MediaService {
   private async prepareTransparentPopSticker(
     sharp: (input?: Buffer | object) => any,
     input: Buffer,
-    label: string,
+    _label: string,
   ): Promise<{ buffer: Buffer; cutoutUsed: boolean }> {
-    const webhookUrl = await this.settings.get('n8n_promo_webhook_url');
-    if (webhookUrl?.startsWith('http')) {
-      try {
-        const cutout = await this.cutoutBufferViaN8n(webhookUrl, input, label);
-        const trimmed = await sharp(cutout).png().trim({ threshold: 8 }).toBuffer();
-        return { buffer: trimmed, cutoutUsed: true };
-      } catch (err) {
-        this.logger.warn(`POP transparent cutout failed for ${label}: ${String(err)}`);
-      }
-    }
-
-    const fallback = await this.floodFillBackgroundTransparent(sharp, input);
-    return { buffer: fallback, cutoutUsed: false };
+    // POP stickers are full graphic layouts — do NOT run rembg/n8n on them (it eats the sign background).
+    // Only strip the uniform outer canvas margin that GPT Image adds around the design.
+    const buffer = await this.removeUniformOuterMargins(sharp, input);
+    return { buffer, cutoutUsed: false };
   }
 
-  private async cutoutBufferViaN8n(webhookUrl: string, input: Buffer, label: string): Promise<Buffer> {
-    const tempName = `tmp-pop-cutout-${Date.now()}-${this.safeFilename(label)}.png`;
-    const tempPath = path.join(this.uploadsDir, tempName);
-    fs.writeFileSync(tempPath, input);
-    try {
-      const publicUrl = `${getApiBaseUrl()}/media/serve/${tempName}`;
-      return await this.callN8nCutout(webhookUrl, publicUrl, label);
-    } finally {
-      try {
-        fs.unlinkSync(tempPath);
-      } catch {
-        // ignore temp cleanup errors
-      }
+  private averageCornerRgb(data: Buffer, width: number, height: number): [number, number, number] {
+    const corners = [
+      [0, 0],
+      [width - 1, 0],
+      [0, height - 1],
+      [width - 1, height - 1],
+    ];
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    for (const [x, y] of corners) {
+      const i = (y * width + x) * 4;
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
     }
+    return [Math.round(r / 4), Math.round(g / 4), Math.round(b / 4)];
   }
 
-  private async floodFillBackgroundTransparent(
+  private pixelMatchesBg(
+    data: Buffer,
+    width: number,
+    x: number,
+    y: number,
+    bg: [number, number, number],
+    tolerance: number,
+  ): boolean {
+    const i = (y * width + x) * 4;
+    return Math.abs(data[i] - bg[0]) <= tolerance
+      && Math.abs(data[i + 1] - bg[1]) <= tolerance
+      && Math.abs(data[i + 2] - bg[2]) <= tolerance;
+  }
+
+  private async removeUniformOuterMargins(
     sharp: (input?: Buffer | object) => any,
     input: Buffer,
-    tolerance = 24,
+    tolerance = 20,
+    uniformLineThreshold = 0.9,
   ): Promise<Buffer> {
-    const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { data, info } = await sharp(input)
+      .flatten({ background: '#ffffff' })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
     const width = info.width;
     const height = info.height;
-    const visited = new Uint8Array(width * height);
-    const queue: number[] = [];
+    const bg = this.averageCornerRgb(data, width, height);
+
+    const rowBgRatio = (y: number) => {
+      let match = 0;
+      for (let x = 0; x < width; x++) {
+        if (this.pixelMatchesBg(data, width, x, y, bg, tolerance)) match++;
+      }
+      return match / width;
+    };
+
+    const colBgRatio = (x: number) => {
+      let match = 0;
+      for (let y = 0; y < height; y++) {
+        if (this.pixelMatchesBg(data, width, x, y, bg, tolerance)) match++;
+      }
+      return match / height;
+    };
+
+    let top = 0;
+    while (top < height && rowBgRatio(top) >= uniformLineThreshold) top++;
+    let bottom = height - 1;
+    while (bottom > top && rowBgRatio(bottom) >= uniformLineThreshold) bottom--;
+    let left = 0;
+    while (left < width && colBgRatio(left) >= uniformLineThreshold) left++;
+    let right = width - 1;
+    while (right > left && colBgRatio(right) >= uniformLineThreshold) right--;
 
     const pixelIndex = (x: number, y: number) => (y * width + x) * 4;
-    const cellIndex = (x: number, y: number) => y * width + x;
-    const readRgb = (x: number, y: number) => {
-      const i = pixelIndex(x, y);
-      return [data[i], data[i + 1], data[i + 2]] as const;
-    };
-    const [seedR, seedG, seedB] = readRgb(0, 0);
-    const matchesBackground = (r: number, g: number, b: number) =>
-      Math.abs(r - seedR) <= tolerance
-      && Math.abs(g - seedG) <= tolerance
-      && Math.abs(b - seedB) <= tolerance;
-
-    const enqueue = (x: number, y: number) => {
-      const cell = cellIndex(x, y);
-      if (visited[cell]) return;
-      const [r, g, b] = readRgb(x, y);
-      if (!matchesBackground(r, g, b)) return;
-      visited[cell] = 1;
-      queue.push(cell);
-    };
-
-    for (let x = 0; x < width; x++) {
-      enqueue(x, 0);
-      enqueue(x, height - 1);
-    }
     for (let y = 0; y < height; y++) {
-      enqueue(0, y);
-      enqueue(width - 1, y);
-    }
-
-    while (queue.length > 0) {
-      const cell = queue.pop()!;
-      const x = cell % width;
-      const y = Math.floor(cell / width);
-      data[pixelIndex(x, y) + 3] = 0;
-      if (x > 0) enqueue(x - 1, y);
-      if (x < width - 1) enqueue(x + 1, y);
-      if (y > 0) enqueue(x, y - 1);
-      if (y < height - 1) enqueue(x, y + 1);
+      for (let x = 0; x < width; x++) {
+        const inOuterMargin = y < top || y > bottom || x < left || x > right;
+        if (inOuterMargin && this.pixelMatchesBg(data, width, x, y, bg, tolerance)) {
+          data[pixelIndex(x, y) + 3] = 0;
+        }
+      }
     }
 
     return (sharp as (input: Buffer, options?: { raw: { width: number; height: number; channels: number } }) => ReturnType<typeof sharp>)(
