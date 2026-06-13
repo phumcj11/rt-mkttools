@@ -94,8 +94,10 @@ export type VideoProviderId = 'gemini' | 'kling' | 'grok';
 export const VIDEO_MODELS: Record<VideoProviderId, string[]> = {
   gemini: ['veo-3.1-generate-preview', 'veo-3.0-generate-preview', 'veo-2.0-generate-001'],
   kling: ['kling-v1', 'kling-v1-6'],
-  grok: ['grok-video'],
+  grok: ['grok-imagine-video-1.5-preview', 'grok-imagine-video'],
 };
+
+export const VIDEO_DURATION_OPTIONS = [8, 10, 15] as const;
 
 export interface VideoSubmitOptions {
   provider?: VideoProviderId;
@@ -104,6 +106,9 @@ export interface VideoSubmitOptions {
   visualBrief?: string;
   mascotAssetFilenames?: string[];
   useCutoutProductImage?: boolean;
+  duration?: number;
+  aspectRatio?: string;
+  resolution?: '720p' | '480p';
 }
 
 // Products

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { SystemSettingsService } from '../../system-settings/system-settings.service';
 import {
   PreparedVideoAssets,
+  VideoGenerationConfig,
   VideoGenerationResult,
   VideoPollOptions,
   VideoProvider,
@@ -37,10 +38,12 @@ export class KlingVideoProvider implements VideoProvider {
 
   async submit(
     assets: PreparedVideoAssets,
-    options: { model: string },
+    options: VideoGenerationConfig,
   ): Promise<VideoGenerationResult> {
     const apiKey = await this.settings.get('kling_api_key');
     if (!apiKey) throw new Error('Kling API Key ยังไม่ได้ตั้งค่า');
+
+    const duration = String(Math.min(10, Math.max(5, options.duration ?? 5)));
 
     const hasImage = !!assets.primaryImageUrl;
     const body: Record<string, unknown> = {
@@ -49,7 +52,7 @@ export class KlingVideoProvider implements VideoProvider {
       negative_prompt: 'text, watermark, low quality, distorted product, wrong mascot, extra hands',
       cfg_scale: 0.5,
       mode: 'std',
-      duration: '5',
+      duration,
     };
 
     if (hasImage) body.image_url = assets.primaryImageUrl;

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { SystemSettingsService } from '../../system-settings/system-settings.service';
 import {
   PreparedVideoAssets,
+  VideoGenerationConfig,
   VideoGenerationResult,
   VideoPollOptions,
   VideoProvider,
@@ -46,13 +47,15 @@ export class GeminiVideoProvider implements VideoProvider {
 
   async submit(
     assets: PreparedVideoAssets,
-    options: { model: string },
+    options: VideoGenerationConfig,
   ): Promise<VideoGenerationResult> {
     const apiKey = await this.settings.get('gemini_api_key');
     if (!apiKey) throw new Error('Gemini API Key ยังไม่ได้ตั้งค่า');
 
     const model = options.model || this.defaultModel;
     const apiBase = this.apiBaseForModel(model);
+    const durationSeconds = Math.min(8, Math.max(4, options.duration ?? 6));
+    const aspectRatio = options.aspectRatio ?? '9:16';
     const image = assets.contactSheet ?? assets.referenceImages[0];
     const instances: Record<string, unknown>[] = [{ prompt: assets.prompt }];
     if (image) {
@@ -68,9 +71,9 @@ export class GeminiVideoProvider implements VideoProvider {
       body: JSON.stringify({
         instances,
         parameters: {
-          aspectRatio: '9:16',
+          aspectRatio,
           sampleCount: 1,
-          durationSeconds: 6,
+          durationSeconds,
         },
       }),
       signal: AbortSignal.timeout(60_000),

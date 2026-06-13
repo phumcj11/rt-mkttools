@@ -95,6 +95,18 @@ class VideoSubmitDto {
   @IsOptional()
   @IsBoolean()
   useCutoutProductImage?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  duration?: number;
+
+  @IsOptional()
+  @IsString()
+  aspectRatio?: string;
+
+  @IsOptional()
+  @IsIn(['720p', '480p'])
+  resolution?: '720p' | '480p';
 }
 
 class GeneratePopStickersDto {

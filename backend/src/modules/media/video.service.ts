@@ -9,10 +9,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { getApiBaseUrl } from '../../common/utils/app-urls';
 import { GeminiVideoProvider } from './providers/gemini-video.provider';
+import { GrokVideoProvider } from './providers/grok-video.provider';
 import { KlingVideoProvider } from './providers/kling-video.provider';
 import {
+  DEFAULT_VIDEO_ASPECT_RATIO,
+  DEFAULT_VIDEO_DURATION,
   DEFAULT_VIDEO_MODEL,
   DEFAULT_VIDEO_PROVIDER,
+  DEFAULT_VIDEO_RESOLUTION,
   PreparedVideoAssets,
   VideoGenerationResult,
   VideoPollOptions,
@@ -36,6 +40,7 @@ export class VideoService {
     private readonly settings: SystemSettingsService,
     private readonly gemini: GeminiVideoProvider,
     private readonly kling: KlingVideoProvider,
+    private readonly grok: GrokVideoProvider,
   ) {
     this.uploadsDir = path.join(process.cwd(), 'uploads', 'media');
     this.brandAssetsDir = path.join(this.uploadsDir, 'brand-assets');
@@ -57,7 +62,13 @@ export class VideoService {
     if (!(await provider.isConfigured())) throw new Error(`${this.providerLabel(providerId)} API Key ยังไม่ได้ตั้งค่า`);
 
     const assets = await this.prepareAssets(product, options);
-    const result = await provider.submit(assets, { model });
+    const generationConfig = {
+      model,
+      duration: options.duration ?? DEFAULT_VIDEO_DURATION,
+      aspectRatio: options.aspectRatio ?? DEFAULT_VIDEO_ASPECT_RATIO,
+      resolution: options.resolution ?? DEFAULT_VIDEO_RESOLUTION,
+    };
+    const result = await provider.submit(assets, generationConfig);
     return {
       ...result,
       metadata: {
@@ -183,7 +194,8 @@ export class VideoService {
   private getProvider(id: VideoProviderId): VideoProvider {
     if (id === 'gemini') return this.gemini;
     if (id === 'kling') return this.kling;
-    throw new Error('Grok video provider ยังไม่พร้อมใช้งาน');
+    if (id === 'grok') return this.grok;
+    throw new Error(`Unknown video provider: ${id}`);
   }
 
   private async resolveProvider(): Promise<VideoProviderId> {
@@ -246,7 +258,7 @@ export class VideoService {
       'หาซื้อง่ายที่ 100 Baht Shop',
     ];
     const prompt = [
-      'Analyze this retail product and write 3 short claim-safe benefits for a 6-second product explainer video.',
+      'Analyze this retail product and write 3 short claim-safe benefits for a 15-second product explainer video.',
       'Use Thai language. Keep each benefit under 8 Thai words.',
       'Avoid medical claims: do not say cure, treat, prevent disease, guaranteed result, doctor recommended, medicine.',
       'Do not include SKU, product code, ERP/catalog text, or price.',
@@ -279,8 +291,8 @@ export class VideoService {
       const res = await this.openAi.complete(
         'คุณเป็นนักเขียนสคริปต์วิดีโอขายสินค้า ตอบภาษาไทย กระชับ ไม่กล่าวอ้างเกินจริง',
         [
-          'เขียน voiceover 1 ประโยคสำหรับคลิปสินค้า 6 วินาที',
-          'ให้ mascot พูดแนะนำสินค้าแบบเป็นธรรมชาติ',
+          'เขียน voiceover ภาษาไทยสำหรับคลิปสินค้า 15 วินาที',
+          'ให้ mascot พูดแนะนำสินค้าแบบเป็นธรรมชาติ พูดได้ครบทั้ง benefit ที่ให้มา',
           'ใช้ benefit ที่ให้มาเท่านั้น ห้ามแต่งสรรพคุณรักษาโรคเพิ่ม',
           'ห้ามพูด SKU/product code',
           `สินค้า: ${product.name}`,
@@ -297,12 +309,12 @@ export class VideoService {
 
   private defaultVisualBrief(): string {
     return [
-      'Create a 6-second vertical product explainer video.',
+      'Create a 15-second vertical product explainer video with native audio.',
       'Use the uploaded mascot as the speaking character reference when provided.',
       'Use the product image exactly as reference. Keep label and packaging recognizable.',
       'Scene: inside a bright ChangSiam 100 Baht Shop Thailand branch.',
-      'Action: mascot holds or points to the product, smiles, and talks to camera.',
-      'Camera: stable commercial product shot, 9:16 vertical, realistic retail advertisement.',
+      'Action: mascot holds or points to the product, smiles, and talks to camera with voiceover.',
+      'Camera: stable commercial product shot, 9:16 vertical, realistic retail advertisement with sound.',
     ].join('\n');
   }
 

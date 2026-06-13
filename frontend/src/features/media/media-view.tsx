@@ -59,6 +59,7 @@ import {
   type VideoSubmitOptions,
   type VideoTask,
   VIDEO_MODELS,
+  VIDEO_DURATION_OPTIONS,
   type VideoProviderId,
 } from '@/lib/media-api';
 import { PromoTab } from './promo-tab';
@@ -85,8 +86,9 @@ export function MediaView() {
   const [briefGenerating, setBriefGenerating] = useState<string | null>(null);
   const [videoTasks, setVideoTasks] = useState<Record<string, VideoTask>>({});
   const [, setVideoProgressTick] = useState(0);
-  const [videoProvider, setVideoProvider] = useState<VideoProviderId>('gemini');
-  const [videoModel, setVideoModel] = useState(VIDEO_MODELS.gemini[0]);
+  const [videoProvider, setVideoProvider] = useState<VideoProviderId>('grok');
+  const [videoModel, setVideoModel] = useState(VIDEO_MODELS.grok[0]);
+  const [videoDuration, setVideoDuration] = useState<number>(15);
   const [videoUseCutout, setVideoUseCutout] = useState(true);
   const [videoBriefs, setVideoBriefs] = useState<Record<string, string>>({});
   const [openBriefSkus, setOpenBriefSkus] = useState<Set<string>>(new Set());
@@ -261,6 +263,9 @@ export function MediaView() {
       const options: VideoSubmitOptions = {
         provider: videoProvider,
         model: videoModel,
+        duration: videoDuration,
+        aspectRatio: '9:16',
+        resolution: '720p',
         visualBrief: videoBriefs[sku]?.trim() || undefined,
         mascotAssetFilenames: Array.from(selectedBrandAssets).filter((filename) => {
           const asset = brandAssets.find((a) => a.filename === filename);
@@ -309,7 +314,7 @@ export function MediaView() {
         price: Number(product.retailPrice) || undefined,
         tone: 'friendly',
         details: [
-          'สร้างคำสั่งเสริมสำหรับ image-to-video 6 วินาที แนวตั้ง 9:16',
+          'สร้างคำสั่งเสริมสำหรับ image-to-video 15 วินาที แนวตั้ง 9:16 พร้อมเสียง voiceover ภาษาไทย',
           'ไม่ต้องเขียนสรรพคุณละเอียด เพราะ backend จะวิเคราะห์ benefit จากรูป/ชื่อสินค้าให้อัตโนมัติ',
           'ให้ mascot จากรูป reference เป็นคนพูด/ชี้สินค้า ถ้ามี mascot',
           'ใช้รูปสินค้า ERP ที่ลบพื้นหลังแล้วเป็น product reference',
@@ -510,7 +515,7 @@ export function MediaView() {
     if (task.status === 'failed') return 100;
     const started = typeof task.metadata?.clientStartedAt === 'number' ? task.metadata.clientStartedAt : Date.now();
     const elapsedSeconds = Math.max(0, (Date.now() - started) / 1000);
-    const expectedSeconds = task.provider === 'gemini' ? 180 : 240;
+    const expectedSeconds = task.provider === 'grok' ? 360 : task.provider === 'gemini' ? 180 : 240;
     const base = task.status === 'processing' ? 25 : 8;
     return Math.min(92, Math.round(base + (elapsedSeconds / expectedSeconds) * 70));
   };
@@ -557,17 +562,28 @@ export function MediaView() {
               >
                 <option value="gemini">Gemini / Veo</option>
                 <option value="kling">Kling AI</option>
-                <option value="grok">Grok</option>
+                <option value="grok">Grok Imagine</option>
               </NativeSelect>
               <NativeSelect
                 value={videoModel}
-                className="h-8 text-xs w-[160px]"
+                className="h-8 text-xs w-[180px]"
                 onChange={(e) => setVideoModel(e.target.value)}
               >
                 {(VIDEO_MODELS[videoProvider] ?? []).map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </NativeSelect>
+              <NativeSelect
+                value={String(videoDuration)}
+                className="h-8 text-xs w-[72px]"
+                onChange={(e) => setVideoDuration(Number(e.target.value))}
+                title="ความยาวคลิป (วินาที)"
+              >
+                {VIDEO_DURATION_OPTIONS.map((d) => (
+                  <option key={d} value={d}>{d}s</option>
+                ))}
+              </NativeSelect>
+              <span className="text-[11px] text-muted-foreground whitespace-nowrap">9:16</span>
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
                 <input
                   type="checkbox"
@@ -768,7 +784,7 @@ export function MediaView() {
                           size="sm"
                           variant="outline"
                           className="h-8 gap-1 text-xs px-3"
-                          disabled={isVideoSubmitting || videoProvider === 'grok' || videoTask?.status === 'queued' || videoTask?.status === 'processing'}
+                          disabled={isVideoSubmitting || videoTask?.status === 'queued' || videoTask?.status === 'processing'}
                           onClick={() => void handleVideoSubmit(p.sku)}
                         >
                           {isVideoSubmitting || videoTask?.status === 'queued' || videoTask?.status === 'processing'
@@ -861,16 +877,26 @@ export function MediaView() {
                             />
                           </div>
                         )}
-                        {videoTask.error && <span className="ml-2">{videoTask.error}</span>}
-                        {videoPlayableUrl && (
-                          <a
-                            className="mt-2 inline-flex underline"
-                            href={resolveMediaUrl(videoPlayableUrl)}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            เปิดวิดีโอ
-                          </a>
+                        {videoTask.error && <p className="mt-1 text-red-600">{videoTask.error}</p>}
+                        {videoPlayableUrl && videoTask.status === 'done' && (
+                          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start">
+                            <video
+                              key={videoPlayableUrl}
+                              controls
+                              preload="metadata"
+                              playsInline
+                              className="w-full max-w-[220px] rounded-lg border bg-black aspect-[9/16] object-contain"
+                              src={resolveMediaUrl(videoPlayableUrl)}
+                            />
+                            <a
+                              className="inline-flex text-xs underline self-start sm:mt-2"
+                              href={resolveMediaUrl(videoPlayableUrl)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              เปิดในแท็บใหม่
+                            </a>
+                          </div>
                         )}
                       </div>
                     )}
@@ -1176,7 +1202,7 @@ export function MediaView() {
               ) : (
                 <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800">
                   <p className="font-semibold">ตั้งค่า Video Provider:</p>
-                  <p>รอบแรกใช้ Gemini / Veo เป็นหลัก และยังเก็บ Kling/Grok ไว้สำหรับเลือก provider ต่อไป</p>
+                  <p>แนะนำ Grok Imagine — รองรับ 9:16, 15 วินาที และเสียง voiceover ภาษาไทย</p>
                 </div>
               )}
               <div className="grid gap-3 md:grid-cols-2">
@@ -1192,7 +1218,7 @@ export function MediaView() {
                   >
                     <option value="gemini">Gemini / Veo</option>
                     <option value="kling">Kling AI</option>
-                    <option value="grok">Grok (เตรียมไว้)</option>
+                    <option value="grok">Grok Imagine</option>
                   </NativeSelect>
                 </div>
                 <div className="space-y-1.5">
@@ -1225,7 +1251,7 @@ export function MediaView() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Grok / xAI API Key (เตรียมไว้)</Label>
+                <Label>Grok / xAI API Key</Label>
                 <Input
                   type="password"
                   placeholder="xai-..."

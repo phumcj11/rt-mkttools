@@ -7,6 +7,7 @@ import { DriveService } from './drive.service';
 import { MediaController } from './media.controller';
 import { MediaService } from './media.service';
 import { GeminiVideoProvider } from './providers/gemini-video.provider';
+import { GrokVideoProvider } from './providers/grok-video.provider';
 import { KlingVideoProvider } from './providers/kling-video.provider';
 import { PromoCompositeService } from './promo-composite.service';
 import { VideoService } from './video.service';
@@ -18,7 +19,7 @@ import { VideoService } from './video.service';
     SystemSettingsModule,
   ],
   controllers: [MediaController],
-  providers: [MediaService, DriveService, VideoService, PromoCompositeService, GeminiVideoProvider, KlingVideoProvider],
+  providers: [MediaService, DriveService, VideoService, PromoCompositeService, GeminiVideoProvider, KlingVideoProvider, GrokVideoProvider],
   exports: [MediaService, DriveService, VideoService],
 })
 export class MediaModule {}
