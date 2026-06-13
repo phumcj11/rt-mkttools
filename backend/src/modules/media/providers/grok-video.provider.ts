@@ -139,23 +139,25 @@ export class GrokVideoProvider implements VideoProvider {
     assets: PreparedVideoAssets,
     config: Required<Pick<VideoGenerationConfig, 'model' | 'duration' | 'aspectRatio' | 'resolution'>>,
   ): { payload: Record<string, unknown>; mode: string } {
-    const duration = Math.min(15, Math.max(1, config.duration));
+    const requestedDuration = Math.min(15, Math.max(1, config.duration));
     const base = {
       model: config.model,
-      duration,
       aspect_ratio: config.aspectRatio,
       resolution: config.resolution,
     };
 
     const mascotRefs = assets.referenceImages.filter((img) => img.label.includes('mascot'));
     const hasMultipleRefs = assets.referenceImages.length >= 2 && mascotRefs.length > 0;
+    // Grok reference-to-video is capped at 10s; use image-to-video + contact sheet for longer clips.
+    const useReferenceMode = hasMultipleRefs && requestedDuration <= 10;
 
-    if (hasMultipleRefs) {
+    if (useReferenceMode) {
       const refs = assets.referenceImages.slice(0, 4);
       return {
         mode: 'reference-to-video',
         payload: {
           ...base,
+          duration: Math.min(10, requestedDuration),
           prompt: this.buildReferencePrompt(assets, refs),
           reference_images: refs.map((img) => ({ url: this.toDataUri(img) })),
         },
@@ -163,16 +165,30 @@ export class GrokVideoProvider implements VideoProvider {
     }
 
     const hero =
+      assets.contactSheet ??
       assets.referenceImages.find((img) => img.label.includes('product cutout')) ??
       assets.referenceImages.find((img) => img.label.includes('product')) ??
       assets.referenceImages[0];
 
     if (hero) {
+      const prompt = hero.label.includes('contact sheet')
+        ? this.enhancePrompt(
+          [
+            assets.prompt,
+            '',
+            'The reference image is a contact sheet: mascot and product references are shown side by side.',
+            'Animate the mascot presenting the product while keeping both recognizable.',
+          ].join('\n'),
+          assets.script,
+        )
+        : this.enhancePrompt(assets.prompt, assets.script);
+
       return {
         mode: 'image-to-video',
         payload: {
           ...base,
-          prompt: this.enhancePrompt(assets.prompt, assets.script),
+          duration: requestedDuration,
+          prompt,
           image: this.toDataUri(hero),
         },
       };
@@ -182,6 +198,7 @@ export class GrokVideoProvider implements VideoProvider {
       mode: 'text-to-video',
       payload: {
         ...base,
+        duration: requestedDuration,
         prompt: this.enhancePrompt(assets.prompt, assets.script),
       },
     };
