@@ -476,6 +476,18 @@ export function MediaView() {
     { id: 'settings',  label: 'ตั้งค่า', icon: CheckCircle2 },
   ];
 
+  const productEmptyMessage = productSearch.trim()
+    ? 'ไม่พบสินค้าที่ค้นหา — ลองเปลี่ยนคำค้นหรือเลือกตัวกรอง “ทั้งหมด”'
+    : productFilter === 'new_today'
+      ? 'ยังไม่มีสินค้าเข้าใหม่วันนี้'
+      : productFilter === 'new'
+        ? 'ยังไม่มีสินค้าใหม่ใน 7 วันล่าสุด'
+        : productFilter === 'promo'
+          ? 'ยังไม่มีสินค้าที่มีโปรโมชั่น'
+          : productFilter === 'ready'
+            ? 'ยังไม่มีสินค้าที่พร้อมทำสื่อ — ลองเลือก “ทั้งหมด”'
+            : 'ไม่มีสินค้าในเงื่อนไขนี้';
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -640,7 +652,7 @@ export function MediaView() {
             </div>
           ) : products.length === 0 ? (
             <div className="flex items-center justify-center py-16">
-              <p className="text-sm text-muted-foreground">ยังไม่มีข้อมูลสินค้า — ซิงค์สินค้าจาก ERP ก่อน</p>
+              <p className="text-sm text-muted-foreground">{productEmptyMessage}</p>
             </div>
           ) : (
             <div className="rounded-xl border divide-y overflow-hidden">
