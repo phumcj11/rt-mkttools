@@ -189,7 +189,7 @@ export class GrokVideoProvider implements VideoProvider {
           ...base,
           duration: requestedDuration,
           prompt,
-          image: this.toDataUri(hero),
+          image: this.toImagePayload(hero),
         },
       };
     }
@@ -233,5 +233,13 @@ export class GrokVideoProvider implements VideoProvider {
 
   private toDataUri(img: VideoReferenceImage): string {
     return `data:${img.mimeType};base64,${img.buffer.toString('base64')}`;
+  }
+
+  /** Grok REST API expects image as `{ url }`, not a bare string. */
+  private toImagePayload(img: VideoReferenceImage): { url: string } {
+    if (img.url?.startsWith('http')) {
+      return { url: img.url };
+    }
+    return { url: this.toDataUri(img) };
   }
 }
