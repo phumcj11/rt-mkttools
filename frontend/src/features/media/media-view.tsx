@@ -34,6 +34,7 @@ import {
   getDriveSettings,
   getN8nSettings,
   getVideoSettings,
+  getVideoPlan,
   listBrandAssets,
   listMediaFiles,
   listMediaProducts,
@@ -55,6 +56,7 @@ import {
   type MediaProductFilter,
   type N8nSettings,
   type PopStickerResult,
+  type VideoPlanResult,
   type VideoSettings,
   type VideoSubmitOptions,
   type VideoTask,
@@ -90,6 +92,8 @@ export function MediaView() {
   const [videoModel, setVideoModel] = useState(VIDEO_MODELS.grok[0]);
   const [videoDuration, setVideoDuration] = useState<number>(15);
   const [videoUseCutout, setVideoUseCutout] = useState(true);
+  const [videoPlans, setVideoPlans] = useState<Record<string, VideoPlanResult>>({});
+  const [planLoading, setPlanLoading] = useState<string | null>(null);
   const [videoBriefs, setVideoBriefs] = useState<Record<string, string>>({});
   const [openBriefSkus, setOpenBriefSkus] = useState<Set<string>>(new Set());
 
@@ -257,22 +261,34 @@ export function MediaView() {
     });
   };
 
+  const buildVideoOptions = (sku: string): VideoSubmitOptions => ({
+    provider: videoProvider,
+    model: videoModel,
+    duration: videoDuration,
+    aspectRatio: '9:16',
+    resolution: '720p',
+    locale: 'en',
+    visualBrief: videoBriefs[sku]?.trim() || undefined,
+    useCutoutProductImage: videoUseCutout,
+  });
+
+  const handleVideoPlan = async (sku: string) => {
+    setPlanLoading(sku);
+    try {
+      const plan = await getVideoPlan(sku, buildVideoOptions(sku));
+      setVideoPlans((prev) => ({ ...prev, [sku]: plan }));
+      setOpenBriefSkus((prev) => new Set(prev).add(sku));
+    } catch (err: unknown) {
+      showError('สร้างแผน Video ไม่สำเร็จ', err instanceof Error ? err.message : undefined);
+    } finally {
+      setPlanLoading(null);
+    }
+  };
+
   const handleVideoSubmit = async (sku: string) => {
     setVideoSubmitting(sku);
     try {
-      const options: VideoSubmitOptions = {
-        provider: videoProvider,
-        model: videoModel,
-        duration: videoDuration,
-        aspectRatio: '9:16',
-        resolution: '720p',
-        visualBrief: videoBriefs[sku]?.trim() || undefined,
-        mascotAssetFilenames: Array.from(selectedBrandAssets).filter((filename) => {
-          const asset = brandAssets.find((a) => a.filename === filename);
-          return asset?.kind === 'mascot';
-        }),
-        useCutoutProductImage: videoUseCutout,
-      };
+      const options = buildVideoOptions(sku);
       const res = await submitProductVideo(sku, options);
       if ('error' in res && res.error) {
         showError('ส่งคำขอ Video ไม่สำเร็จ', (res as { error: true; message: string }).message);
@@ -304,27 +320,20 @@ export function MediaView() {
     setBriefGenerating(product.sku);
     try {
       const current = videoBriefs[product.sku]?.trim();
-      const mascotCount = Array.from(selectedBrandAssets).filter((filename) => {
-        const asset = brandAssets.find((a) => a.filename === filename);
-        return asset?.kind === 'mascot';
-      }).length;
       const res = await generateContent({
         type: 'tiktok_script',
         productName: product.name,
         price: Number(product.retailPrice) || undefined,
         tone: 'friendly',
         details: [
-          'สร้างคำสั่งเสริมสำหรับ image-to-video 15 วินาที แนวตั้ง 9:16 พร้อมเสียง voiceover ภาษาไทย',
-          'ไม่ต้องเขียนสรรพคุณละเอียด เพราะ backend จะวิเคราะห์ benefit จากรูป/ชื่อสินค้าให้อัตโนมัติ',
-          'ให้ mascot จากรูป reference เป็นคนพูด/ชี้สินค้า ถ้ามี mascot',
-          'ใช้รูปสินค้า ERP ที่ลบพื้นหลังแล้วเป็น product reference',
-          'ฉากในร้าน ChangSiam 100 Baht Shop Thailand',
-          'ห้ามกล่าวอ้างรักษาโรค ห้ามใส่ SKU/product code',
+          'Product explainer video brief in English for international customers.',
+          '15-second vertical 9:16 clip with English voiceover explaining product benefits.',
+          'Focus on die-cut product hero on clean background — no mascot, no store scene.',
+          'Explain what the product is and what it helps with.',
           `Provider: ${videoProvider}, Model: ${videoModel}`,
-          `Mascot selected: ${mascotCount}`,
-          current ? `คำสั่งเดิมของผู้ใช้: ${current}` : '',
+          current ? `Existing brief: ${current}` : '',
         ].filter(Boolean).join('\n'),
-      }, 'th');
+      }, 'en');
       setVideoBriefs((prev) => ({ ...prev, [product.sku]: res.content }));
     } catch (err: unknown) {
       showError('AI ช่วยร่าง brief ไม่สำเร็จ', err instanceof Error ? err.message : undefined);
@@ -551,6 +560,9 @@ export function MediaView() {
             {/* Video provider */}
             <div className="flex items-center gap-2">
               <Video className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-[11px] font-medium text-violet-700 whitespace-nowrap px-1.5 py-0.5 rounded bg-violet-100">
+                Explainer EN
+              </span>
               <NativeSelect
                 value={videoProvider}
                 className="h-8 text-xs w-[120px]"
@@ -595,9 +607,19 @@ export function MediaView() {
               </label>
             </div>
 
+            <div className="hidden lg:flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <span className="rounded bg-muted px-1.5 py-0.5">1 Die-cut</span>
+              <span>→</span>
+              <span className="rounded bg-muted px-1.5 py-0.5">2 AI Benefits</span>
+              <span>→</span>
+              <span className="rounded bg-muted px-1.5 py-0.5">3 Script EN</span>
+              <span>→</span>
+              <span className="rounded bg-muted px-1.5 py-0.5">4 Video</span>
+            </div>
+
             <div className="h-5 w-px bg-border hidden sm:block" />
 
-            {/* Brand assets */}
+            {/* Brand assets for POP */}
             <div className="flex flex-wrap items-center gap-2">
               <input
                 ref={logoInputRef}
@@ -706,6 +728,7 @@ export function MediaView() {
                 const isVideoSubmitting = videoSubmitting === p.sku;
                 const videoTask = videoTasks[p.sku];
                 const videoPlayableUrl = videoTask?.localPath ?? videoTask?.videoUrl ?? null;
+                const videoPlan = videoPlans[p.sku];
                 const briefOpen = openBriefSkus.has(p.sku);
                 const hasBrief = !!videoBriefs[p.sku]?.trim();
 
@@ -821,8 +844,19 @@ export function MediaView() {
                     {briefOpen && (
                       <div className="mx-4 mb-3 rounded-lg border bg-muted/20 px-3 py-2.5 space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-muted-foreground">Video Brief เสริม</span>
+                          <span className="text-xs font-medium text-muted-foreground">Product Explainer (EN)</span>
                           <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[11px] gap-1"
+                              disabled={planLoading === p.sku}
+                              onClick={() => void handleVideoPlan(p.sku)}
+                            >
+                              {planLoading === p.sku ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
+                              ดูแผน AI
+                            </Button>
                             <Button
                               type="button"
                               variant="outline"
@@ -832,7 +866,7 @@ export function MediaView() {
                               onClick={() => void handleDraftVideoBrief(p)}
                             >
                               {briefGenerating === p.sku ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                              AI ร่างให้
+                              AI Brief
                             </Button>
                             <Button
                               type="button"
@@ -847,10 +881,49 @@ export function MediaView() {
                         </div>
                         <textarea
                           className="min-h-[72px] w-full rounded-md border bg-background px-3 py-2 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-                          placeholder="เว้นว่างได้ — AI จะสร้าง brief จากชื่อ/รูปสินค้าให้อัตโนมัติ"
+                          placeholder="Optional visual brief — AI auto-generates die-cut, English benefits & script"
                           value={videoBriefs[p.sku] ?? ''}
                           onChange={(e) => setVideoBriefs((prev) => ({ ...prev, [p.sku]: e.target.value }))}
                         />
+                        {videoPlan && (
+                          <div className="rounded-md border bg-background px-3 py-2 text-[11px] space-y-2">
+                            <p className="font-medium text-violet-700">แผน AI ({videoPlan.locale.toUpperCase()})</p>
+                            <div className="flex flex-wrap gap-1">
+                              {videoPlan.steps.map((step) => (
+                                <span
+                                  key={step.step}
+                                  className={`rounded px-1.5 py-0.5 ${
+                                    step.status === 'done' ? 'bg-green-100 text-green-800'
+                                      : step.status === 'failed' ? 'bg-red-100 text-red-700'
+                                        : 'bg-muted text-muted-foreground'
+                                  }`}
+                                >
+                                  {step.step}: {step.status}
+                                </span>
+                              ))}
+                            </div>
+                            {videoPlan.cutoutUrl && (
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={resolveMediaUrl(videoPlan.cutoutUrl)}
+                                  alt="cutout"
+                                  className="h-16 w-16 object-contain rounded border bg-white"
+                                />
+                                <span className="text-muted-foreground">Die-cut product</span>
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-medium">Benefits</p>
+                              <ul className="list-disc pl-4 text-muted-foreground">
+                                {videoPlan.benefits.map((b) => <li key={b}>{b}</li>)}
+                              </ul>
+                            </div>
+                            <div>
+                              <p className="font-medium">Script (EN voiceover)</p>
+                              <p className="text-muted-foreground whitespace-pre-wrap">{videoPlan.script}</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -890,6 +963,11 @@ export function MediaView() {
                               <p className="mt-1 text-[10px] opacity-80">
                                 Script: {videoTask.metadata.script}
                               </p>
+                            )}
+                            {Array.isArray(videoTask.metadata?.benefits) && (
+                              <ul className="mt-1 list-disc pl-4 text-[10px] opacity-80">
+                                {(videoTask.metadata.benefits as string[]).map((b) => <li key={b}>{b}</li>)}
+                              </ul>
                             )}
                           </details>
                         )}

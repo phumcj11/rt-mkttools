@@ -26,6 +26,27 @@ export interface VideoSubmitOptions {
   duration?: number;
   aspectRatio?: string;
   resolution?: '720p' | '480p';
+  /** Product benefit explainer voiceover language. Default: English for international shoppers. */
+  locale?: 'en' | 'th';
+}
+
+export interface VideoPlanStep {
+  step: 'cutout' | 'benefits' | 'script' | 'prompt';
+  status: 'done' | 'skipped' | 'failed';
+  detail?: string;
+}
+
+export interface VideoPlanResult {
+  sku: string;
+  productName: string;
+  cutoutUsed: boolean;
+  cutoutUrl?: string;
+  benefits: string[];
+  script: string;
+  visualBrief: string;
+  prompt: string;
+  locale: 'en' | 'th';
+  steps: VideoPlanStep[];
 }
 
 export interface VideoGenerationConfig {
@@ -55,6 +76,7 @@ export interface PreparedVideoAssets {
   script: string;
   benefits: string[];
   visualBrief: string;
+  locale: 'en' | 'th';
   referenceImages: VideoReferenceImage[];
   primaryImageUrl?: string;
   contactSheet?: VideoReferenceImage;

@@ -25,6 +25,8 @@ import {
   VideoReferenceImage,
   VideoSubmitOptions,
   VIDEO_PROVIDER_MODELS,
+  VideoPlanResult,
+  VideoPlanStep,
 } from './video.types';
 
 @Injectable()
@@ -75,8 +77,47 @@ export class VideoService {
         ...result.metadata,
         sku: product.sku,
         script: assets.script,
+        benefits: assets.benefits,
         visualBrief: assets.visualBrief,
+        cutoutUsed: assets.cutoutUsed,
+        locale: assets.locale,
       },
+    };
+  }
+
+  /** Preview the video pipeline (cutout → benefits → script → prompt) without submitting to a provider. */
+  async buildVideoPlan(sku: string, options: VideoSubmitOptions = {}): Promise<VideoPlanResult> {
+    const product = await this.productRepo.findOneBy({ sku });
+    if (!product) throw new Error(`Product SKU "${sku}" not found`);
+
+    const assets = await this.prepareAssets(product, options);
+    const steps: VideoPlanStep[] = [
+      {
+        step: 'cutout',
+        status: assets.cutoutUsed ? 'done' : options.useCutoutProductImage === false ? 'skipped' : 'failed',
+        detail: assets.cutoutUsed
+          ? 'Product die-cut ready'
+          : options.useCutoutProductImage === false
+            ? 'Die-cut disabled'
+            : 'Die-cut unavailable — check n8n webhook in settings',
+      },
+      { step: 'benefits', status: 'done', detail: assets.benefits.join(' · ') },
+      { step: 'script', status: 'done', detail: assets.script.slice(0, 120) },
+      { step: 'prompt', status: 'done' },
+    ];
+
+    const cutoutRef = assets.referenceImages.find((img) => img.label.includes('product cutout'));
+    return {
+      sku: product.sku,
+      productName: product.name,
+      cutoutUsed: assets.cutoutUsed,
+      cutoutUrl: cutoutRef?.url,
+      benefits: assets.benefits,
+      script: assets.script,
+      visualBrief: assets.visualBrief,
+      prompt: assets.prompt,
+      locale: assets.locale,
+      steps,
     };
   }
 
@@ -218,46 +259,66 @@ export class VideoService {
   }
 
   private async prepareAssets(product: ErpProductCache, options: VideoSubmitOptions): Promise<PreparedVideoAssets> {
-    const benefits = await this.generateVideoBenefits(product);
-    const script = (options.script || await this.generateScript(product, benefits)).trim();
-    const visualBrief = (options.visualBrief || this.defaultVisualBrief()).trim();
+    const locale = options.locale ?? 'en';
+    const useCutout = options.useCutoutProductImage !== false;
     const referenceImages: VideoReferenceImage[] = [];
     let primaryImageUrl = product.imageUrl || undefined;
     let cutoutUsed = false;
 
+    // Step 1 — Die-cut product hero (product only, no background)
+    if (product.imageUrl && useCutout) {
+      const cutout = await this.cutoutProductImage(product.imageUrl, product.sku).catch((err) => {
+        this.logger.warn(`Video cutout failed for ${product.sku}: ${String(err)}`);
+        return null;
+      });
+      if (cutout) {
+        const filename = `video-cutout-${this.safeFilename(product.sku)}-${Date.now()}.png`;
+        fs.writeFileSync(path.join(this.uploadsDir, filename), cutout);
+        primaryImageUrl = `${getApiBaseUrl()}/media/serve/${filename}`;
+        referenceImages.push({
+          label: 'product cutout',
+          buffer: cutout,
+          mimeType: 'image/png',
+          url: primaryImageUrl,
+        });
+        cutoutUsed = true;
+      }
+    }
+
+    if (!cutoutUsed && product.imageUrl) {
+      const original = await this.fetchImage(product.imageUrl, 'product original');
+      if (original) referenceImages.push(original);
+    }
+
+    // Optional mascot — not part of default explainer concept
     for (const filename of options.mascotAssetFilenames ?? []) {
       const asset = await this.loadBrandAsset(filename);
       if (asset) referenceImages.push(asset);
     }
 
-    if (product.imageUrl) {
-      const original = await this.fetchImage(product.imageUrl, 'product original');
-      if (original) referenceImages.push(original);
-      if (options.useCutoutProductImage) {
-        const cutout = await this.cutoutProductImage(product.imageUrl, product.sku).catch((err) => {
-          this.logger.warn(`Video cutout failed for ${product.sku}: ${String(err)}`);
-          return null;
-        });
-        if (cutout) {
-          const filename = `video-cutout-${this.safeFilename(product.sku)}-${Date.now()}.png`;
-          fs.writeFileSync(path.join(this.uploadsDir, filename), cutout);
-          primaryImageUrl = `${getApiBaseUrl()}/media/serve/${filename}`;
-          referenceImages.push({ label: 'product cutout', buffer: cutout, mimeType: 'image/png', url: primaryImageUrl });
-          cutoutUsed = true;
-        }
-      }
-    }
+    const analysisUrl = primaryImageUrl ?? product.imageUrl ?? undefined;
 
+    // Step 2 — AI product benefits
+    const benefits = await this.generateVideoBenefits(product, analysisUrl, locale);
+
+    // Step 3 — Voiceover script
+    const script = (options.script || await this.generateScript(product, benefits, locale)).trim();
+
+    // Step 4 — Visual brief + final prompt
+    const visualBrief = (options.visualBrief || this.defaultVisualBrief(locale)).trim();
+    const productHero = referenceImages.find((img) => img.label.includes('product cutout'))
+      ?? referenceImages.find((img) => img.label.includes('product'));
+    const verticalFrame = productHero ? await this.buildProductHeroFrame(productHero) : undefined;
     const contactSheet = await this.buildContactSheet(referenceImages);
-    const frameSources = referenceImages.filter((img) => !img.label.includes('product original'));
-    const verticalFrame = await this.buildVerticalVideoFrame(frameSources);
-    const prompt = this.buildVideoPrompt(product, script, benefits, visualBrief, referenceImages, cutoutUsed);
+    const prompt = this.buildVideoPrompt(product, script, benefits, visualBrief, referenceImages, cutoutUsed, locale);
+
     return {
       product,
       prompt,
       script,
       benefits,
       visualBrief,
+      locale,
       referenceImages,
       primaryImageUrl,
       contactSheet,
@@ -266,26 +327,50 @@ export class VideoService {
     };
   }
 
-  private async generateVideoBenefits(product: ErpProductCache): Promise<string[]> {
-    const fallback = [
-      'สินค้าคุณภาพ คุ้มค่าสำหรับลูกค้า',
-      'เหมาะสำหรับใช้ในชีวิตประจำวัน',
-      'หาซื้อง่ายที่ 100 Baht Shop',
+  private async generateVideoBenefits(
+    product: ErpProductCache,
+    imageUrl: string | undefined,
+    locale: 'en' | 'th',
+  ): Promise<string[]> {
+    const fallbackEn = [
+      'Quality everyday product for daily use',
+      'Easy to use and good value',
+      'Popular choice for shoppers',
     ];
-    const prompt = [
-      'Analyze this retail product and write 3 short claim-safe benefits for a 15-second product explainer video.',
-      'Use Thai language. Keep each benefit under 8 Thai words.',
-      'Avoid medical claims: do not say cure, treat, prevent disease, guaranteed result, doctor recommended, medicine.',
-      'Do not include SKU, product code, ERP/catalog text, or price.',
-      `Product name: ${product.name}`,
-      `Category: ${product.category}`,
-    ].join('\n');
+    const fallbackTh = [
+      'สินค้าคุณภาพ ใช้งานได้จริงในชีวิตประจำวัน',
+      'ใช้งานง่าย คุ้มค่า',
+      'เป็นที่นิยมในร้านค้า',
+    ];
+    const fallback = locale === 'th' ? fallbackTh : fallbackEn;
+
+    const prompt = locale === 'th'
+      ? [
+        'วิเคราะห์สินค้านี้และเขียน 3 ประโยคสรรพคุณที่ปลอดภัย สำหรับวิดีโออธิบายสินค้า 15 วินาที',
+        'อธิบายว่าสินค้าช่วยอะไร / เหมาะกับใคร / ใช้ทำอะไร',
+        'ภาษาไทย สั้น ไม่เกิน 10 คำต่อข้อ',
+        'ห้ามกล่าวอ้างรักษาโรค ห้ามใส่ SKU',
+        `ชื่อสินค้า: ${product.name}`,
+        `หมวด: ${product.category}`,
+      ].join('\n')
+      : [
+        'Analyze this retail product and write 3 short claim-safe benefits for a 15-second product explainer video.',
+        'Explain what the product helps with, who it is for, or how it is used — for international shoppers who cannot read the packaging.',
+        'Use English. Max 12 words per benefit. Be factual based on the product image and name.',
+        'Avoid medical claims: no cure, treat, prevent disease, guaranteed results, doctor recommended.',
+        'Do not include SKU, product codes, or price.',
+        `Product name: ${product.name}`,
+        `Category: ${product.category}`,
+        product.brand ? `Brand: ${product.brand}` : '',
+      ].filter(Boolean).join('\n');
 
     try {
-      const content = product.imageUrl
-        ? await this.openAi.analyzeImage(product.imageUrl, prompt)
+      const content = imageUrl
+        ? await this.openAi.analyzeImage(imageUrl, prompt)
         : (await this.openAi.complete(
-          'คุณเป็นนักเขียน benefit สินค้าปลีก ตอบสั้น ปลอดภัย ไม่กล่าวอ้างรักษาโรค',
+          locale === 'th'
+            ? 'คุณเป็นนักเขียน benefit สินค้าปลีก ตอบสั้น ปลอดภัย'
+            : 'You write concise, claim-safe retail product benefits in English.',
           prompt,
         )).content;
       const lines = content
@@ -300,36 +385,61 @@ export class VideoService {
     }
   }
 
-  private async generateScript(product: ErpProductCache, benefits: string[]): Promise<string> {
-    const fallback = `${product.name} จุดเด่นคือ ${benefits.slice(0, 2).join(' และ ')} แวะเลือกซื้อได้ที่ 100 Baht Shop`;
+  private async generateScript(
+    product: ErpProductCache,
+    benefits: string[],
+    locale: 'en' | 'th',
+  ): Promise<string> {
+    const fallbackEn = `This is ${product.name}. ${benefits.slice(0, 2).join('. ')}. A practical choice for everyday use.`;
+    const fallbackTh = `${product.name} ช่วย${benefits.slice(0, 2).join(' และ ')} เหมาะสำหรับใช้ในชีวิตประจำวัน`;
+
     try {
       const res = await this.openAi.complete(
-        'คุณเป็นนักเขียนสคริปต์วิดีโอขายสินค้า ตอบภาษาไทย กระชับ ไม่กล่าวอ้างเกินจริง',
-        [
-          'เขียน voiceover ภาษาไทยสำหรับคลิปสินค้า 15 วินาที',
-          'ให้ mascot พูดแนะนำสินค้าแบบเป็นธรรมชาติ พูดได้ครบทั้ง benefit ที่ให้มา',
-          'ใช้ benefit ที่ให้มาเท่านั้น ห้ามแต่งสรรพคุณรักษาโรคเพิ่ม',
-          'ห้ามพูด SKU/product code',
-          `สินค้า: ${product.name}`,
-          `หมวด: ${product.category}`,
-          `ราคา: ฿${product.retailPrice}`,
-          `จุดเด่นปลอดภัย: ${benefits.join(' / ')}`,
-        ].join('\n'),
+        locale === 'th'
+          ? 'คุณเป็นนักเขียนสคริปต์วิดีโออธิบายสินค้า ตอบภาษาไทย กระชับ ไม่กล่าวอ้างเกินจริง'
+          : 'You write product explainer voiceover scripts in clear English for international retail shoppers.',
+        locale === 'th'
+          ? [
+            'เขียน voiceover ภาษาไทย 15 วินาที อธิบายว่าสินค้าช่วยอะไร',
+            'ใช้ benefit ที่ให้มาเท่านั้น ห้ามแต่งสรรพคุณรักษาโรค',
+            `สินค้า: ${product.name}`,
+            `หมวด: ${product.category}`,
+            `จุดเด่น: ${benefits.join(' / ')}`,
+          ].join('\n')
+          : [
+            'Write an English voiceover script for a 15-second vertical product explainer video.',
+            'Audience: foreign customers who want to understand what this product does and how it helps.',
+            'Start with what the product is, then explain 2-3 key benefits naturally.',
+            'Use only the provided benefits — do not invent medical or exaggerated claims.',
+            'No SKU or product codes. Friendly, clear, professional tone.',
+            `Product: ${product.name}`,
+            `Category: ${product.category}`,
+            `Key benefits: ${benefits.join(' / ')}`,
+          ].join('\n'),
       );
-      return res.content || fallback;
+      return res.content || (locale === 'th' ? fallbackTh : fallbackEn);
     } catch {
-      return fallback;
+      return locale === 'th' ? fallbackTh : fallbackEn;
     }
   }
 
-  private defaultVisualBrief(): string {
+  private defaultVisualBrief(locale: 'en' | 'th'): string {
+    if (locale === 'th') {
+      return [
+        'สร้างวิดีโออธิบายสินค้าแนวตั้ง 15 วินาที พร้อมเสียง voiceover',
+        'ฮีโร่: รูปสินค้า die-cut บนพื้นหลังเรียบสะอาด',
+        'กล้อง: เคลื่อนไหวช้าๆ สินค้าอยู่กลางเฟรม ฉลากชัดเจน',
+        'จุดประสงค์: ให้ลูกค้าเข้าใจว่าสินค้าช่วยอะไร',
+        '9:16 แนวตั้ง สไตล์ explainer e-commerce',
+      ].join('\n');
+    }
     return [
-      'Create a 15-second vertical product explainer video with native audio.',
-      'Use the uploaded mascot as the speaking character reference when provided.',
-      'Use the product image exactly as reference. Keep label and packaging recognizable.',
-      'Scene: inside a bright ChangSiam 100 Baht Shop Thailand branch.',
-      'Action: mascot holds or points to the product, smiles, and talks to camera with voiceover.',
-      'Camera: stable commercial product shot, 9:16 vertical, realistic retail advertisement with sound.',
+      'Create a 15-second vertical product explainer video with native English audio.',
+      'Hero: isolated product die-cut on a clean minimal white/soft gradient background.',
+      'Camera: slow subtle motion — gentle push-in or soft parallax. Product stays centered; packaging label stays readable.',
+      'Purpose: help international customers understand what this product is and what it helps with.',
+      'No busy store background, no mascot, no collage. Product-focused e-commerce explainer.',
+      '9:16 vertical, polished and professional.',
     ].join('\n');
   }
 
@@ -340,22 +450,61 @@ export class VideoService {
     visualBrief: string,
     references: VideoReferenceImage[],
     cutoutUsed: boolean,
+    locale: 'en' | 'th',
   ): string {
     const hasMascot = references.some((r) => r.label.includes('mascot'));
+    const voiceLabel = locale === 'th' ? 'Voiceover (Thai)' : 'Voiceover (English)';
     return [
       visualBrief,
       '',
       `Product: ${product.name}`,
       `Category: ${product.category}`,
-      `Safe product benefits: ${benefits.join(' / ')}`,
-      `Voiceover: "${script}"`,
+      `Key benefits: ${benefits.join(' / ')}`,
+      `${voiceLabel}: "${script}"`,
       '',
-      'Reference rules:',
-      hasMascot ? '- Preserve the mascot character appearance from the reference sheet.' : '- If no mascot is provided, make a simple product-only retail clip.',
-      cutoutUsed ? '- Use the cutout product reference as the clean product hero.' : '- Use the product reference exactly and avoid changing packaging text.',
-      '- Do not add SKU/product codes, watermarks, random Thai text, or medical claims.',
-      '- Output should feel like a polished commercial short video.',
+      'Visual rules:',
+      cutoutUsed
+        ? '- Use the die-cut product as the hero. Keep packaging text and shape exactly recognizable.'
+        : '- Keep the product packaging exactly recognizable.',
+      hasMascot
+        ? '- Optional mascot may appear but product remains the focus.'
+        : '- Product-only shot. No mascot or store clutter.',
+      '- No SKU codes, watermarks, or medical claims.',
+      '- Output: polished product explainer short video.',
     ].join('\n');
+  }
+
+  private async buildProductHeroFrame(product: VideoReferenceImage): Promise<VideoReferenceImage> {
+    const width = 720;
+    const height = 1280;
+    const productWidth = Math.round(width * 0.74);
+    const productHeight = Math.round(height * 0.58);
+    const productBuf = await sharp(product.buffer)
+      .resize(productWidth, productHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+      .png()
+      .toBuffer();
+
+    const buffer = await sharp({
+      create: {
+        width,
+        height,
+        channels: 4,
+        background: { r: 248, g: 249, b: 252, alpha: 1 },
+      },
+    })
+      .composite([{
+        input: productBuf,
+        top: Math.round(height * 0.2),
+        left: Math.round((width - productWidth) / 2),
+      }])
+      .png()
+      .toBuffer();
+
+    return {
+      label: 'vertical 9:16 product hero frame',
+      buffer,
+      mimeType: 'image/png',
+    };
   }
 
   private async loadBrandAsset(filename: string): Promise<VideoReferenceImage | null> {
@@ -391,78 +540,6 @@ export class VideoService {
     const json = (await res.json()) as { cutoutBase64?: string };
     if (!json.cutoutBase64) throw new Error('n8n response missing cutoutBase64');
     return Buffer.from(json.cutoutBase64, 'base64');
-  }
-
-  private async buildVerticalVideoFrame(images: VideoReferenceImage[]): Promise<VideoReferenceImage | undefined> {
-    if (images.length === 0) return undefined;
-
-    const width = 720;
-    const height = 1280;
-    const mascot = images.find((img) => img.label.includes('mascot'));
-    const product =
-      images.find((img) => img.label.includes('product cutout')) ??
-      images.find((img) => img.label.includes('product'));
-
-    const layers: sharp.OverlayOptions[] = [];
-
-    if (mascot) {
-      const mascotWidth = Math.round(width * 0.82);
-      const mascotHeight = Math.round(height * 0.4);
-      const mascotBuf = await sharp(mascot.buffer)
-        .resize(mascotWidth, mascotHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
-        .png()
-        .toBuffer();
-      layers.push({
-        input: mascotBuf,
-        top: Math.round(height * 0.06),
-        left: Math.round((width - mascotWidth) / 2),
-      });
-    }
-
-    if (product) {
-      const productWidth = Math.round(width * 0.52);
-      const productHeight = Math.round(height * 0.34);
-      const productBuf = await sharp(product.buffer)
-        .resize(productWidth, productHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
-        .png()
-        .toBuffer();
-      layers.push({
-        input: productBuf,
-        top: Math.round(height * 0.5),
-        left: Math.round((width - productWidth) / 2),
-      });
-    }
-
-    if (layers.length === 0) {
-      const single = images[0];
-      const singleBuf = await sharp(single.buffer)
-        .resize(width, height, { fit: 'contain', background: { r: 250, g: 250, b: 252, alpha: 1 } })
-        .png()
-        .toBuffer();
-      return {
-        label: 'vertical 9:16 video starter frame',
-        buffer: singleBuf,
-        mimeType: 'image/png',
-      };
-    }
-
-    const buffer = await sharp({
-      create: {
-        width,
-        height,
-        channels: 4,
-        background: { r: 250, g: 250, b: 252, alpha: 1 },
-      },
-    })
-      .composite(layers)
-      .png()
-      .toBuffer();
-
-    return {
-      label: 'vertical 9:16 video starter frame',
-      buffer,
-      mimeType: 'image/png',
-    };
   }
 
   private async buildContactSheet(images: VideoReferenceImage[]): Promise<VideoReferenceImage | undefined> {

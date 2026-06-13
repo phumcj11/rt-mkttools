@@ -107,6 +107,10 @@ class VideoSubmitDto {
   @IsOptional()
   @IsIn(['720p', '480p'])
   resolution?: '720p' | '480p';
+
+  @IsOptional()
+  @IsIn(['en', 'th'])
+  locale?: 'en' | 'th';
 }
 
 class GeneratePopStickersDto {
@@ -311,6 +315,18 @@ export class MediaController {
   @HttpCode(HttpStatus.OK)
   deleteFile(@Param('filename') filename: string) {
     return this.media.deleteGeneratedFile(filename);
+  }
+
+  /** Preview pipeline: die-cut → benefits → script → prompt (no provider call). */
+  @Post('products/:sku/video/plan')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  async videoPlan(@Param('sku') sku: string, @Body() dto: Omit<VideoSubmitDto, 'sku'> = {}) {
+    try {
+      return await this.video.buildVideoPlan(sku, dto);
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : 'สร้างแผน Video ล้มเหลว');
+    }
   }
 
   /** Submit video generation task */

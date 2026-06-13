@@ -109,6 +109,26 @@ export interface VideoSubmitOptions {
   duration?: number;
   aspectRatio?: string;
   resolution?: '720p' | '480p';
+  locale?: 'en' | 'th';
+}
+
+export interface VideoPlanStep {
+  step: 'cutout' | 'benefits' | 'script' | 'prompt';
+  status: 'done' | 'skipped' | 'failed';
+  detail?: string;
+}
+
+export interface VideoPlanResult {
+  sku: string;
+  productName: string;
+  cutoutUsed: boolean;
+  cutoutUrl?: string;
+  benefits: string[];
+  script: string;
+  visualBrief: string;
+  prompt: string;
+  locale: 'en' | 'th';
+  steps: VideoPlanStep[];
 }
 
 // Products
@@ -306,6 +326,13 @@ export function submitProductVideo(sku: string, options: VideoSubmitOptions = {}
     '/media/products/video',
     { method: 'POST', body: { sku, ...options } },
   );
+}
+
+export function getVideoPlan(sku: string, options: Omit<VideoSubmitOptions, never> = {}) {
+  return apiRequest<VideoPlanResult>(`/media/products/${encodeURIComponent(sku)}/video/plan`, {
+    method: 'POST',
+    body: options,
+  });
 }
 
 export function pollVideoTask(task: Pick<VideoTask, 'taskId' | 'provider' | 'model' | 'metadata'> & { taskType?: string }) {

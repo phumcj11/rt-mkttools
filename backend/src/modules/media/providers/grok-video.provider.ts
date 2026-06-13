@@ -207,22 +207,22 @@ export class GrokVideoProvider implements VideoProvider {
   }
 
   private buildImageToVideoPrompt(assets: PreparedVideoAssets): string {
-    const hasMascot = assets.referenceImages.some((img) => img.label.includes('mascot'));
+    const isEnglish = assets.locale !== 'th';
     return [
       assets.visualBrief,
       '',
-      'Animate this 9:16 vertical starter frame into one unified mobile product ad.',
-      'Fill the entire vertical frame edge-to-edge. No letterboxing, no side panels, no collage layout.',
-      hasMascot
-        ? 'Keep the mascot character appearance exactly. Mascot presents the product to camera.'
-        : 'Keep product packaging and label exactly recognizable.',
-      'Scene: bright ChangSiam 100 Baht Shop Thailand retail store, cinematic lighting, smooth camera push-in.',
+      isEnglish
+        ? 'Animate this 9:16 vertical product explainer starter frame into one unified clip.'
+        : 'Animate this 9:16 vertical product explainer starter frame into one unified clip.',
+      'Fill the entire vertical frame edge-to-edge. No letterboxing, no side panels, no collage.',
+      'Keep product packaging and label exactly recognizable on a clean minimal background.',
+      'Camera: slow subtle push-in or soft parallax. Professional e-commerce explainer style.',
       '',
       `Product: ${assets.product.name}`,
       `Category: ${assets.product.category}`,
-      `Safe benefits: ${assets.benefits.join(' / ')}`,
+      `Key benefits: ${assets.benefits.join(' / ')}`,
       '',
-      this.audioBlock(assets.script),
+      this.audioBlock(assets.script, assets.locale),
     ].join('\n');
   }
 
@@ -231,35 +231,38 @@ export class GrokVideoProvider implements VideoProvider {
     return [
       assets.visualBrief,
       '',
-      `Use reference images ${labels}.`,
-      refs.some((r) => r.label.includes('mascot'))
-        ? 'The mascot from the mascot reference speaks to camera and presents the product from the product reference.'
-        : 'Present the product from the reference images naturally.',
-      'Full-frame vertical 9:16 mobile ad. No collage, no letterboxing.',
+      `Use reference images ${labels}. Product remains the hero.`,
+      'Full-frame vertical 9:16 product explainer. No collage, no letterboxing.',
       `Product: ${assets.product.name}`,
-      `Safe benefits: ${assets.benefits.join(' / ')}`,
-      'Scene: bright ChangSiam 100 Baht Shop Thailand retail store.',
-      'Do not add SKU codes, watermarks, or medical claims.',
+      `Key benefits: ${assets.benefits.join(' / ')}`,
+      'Clean minimal background. Do not add SKU codes, watermarks, or medical claims.',
       '',
-      this.audioBlock(assets.script),
+      this.audioBlock(assets.script, assets.locale),
     ].join('\n');
   }
 
   private buildTextToVideoPrompt(assets: PreparedVideoAssets): string {
     return [
       assets.prompt,
-      'Full-frame vertical 9:16 mobile product advertisement.',
-      this.audioBlock(assets.script),
+      'Full-frame vertical 9:16 product explainer video.',
+      this.audioBlock(assets.script, assets.locale),
     ].join('\n\n');
   }
 
-  private audioBlock(script: string): string {
+  private audioBlock(script: string, locale: 'en' | 'th'): string {
+    if (locale === 'th') {
+      return [
+        'AUDIO:',
+        `Thai voiceover narration, clear and friendly: "${script}"`,
+        'Include synchronized spoken Thai voiceover. Not silent.',
+      ].join('\n');
+    }
     return [
       'AUDIO:',
-      `Thai voiceover narration in a friendly retail tone: "${script}"`,
-      'Include synchronized spoken Thai voiceover and subtle upbeat retail background music.',
-      'Not silent — audio must be present throughout the clip.',
-      'Mascot can lip-sync or gesture while the voiceover plays.',
+      `English voiceover narration for international shoppers, clear and professional: "${script}"`,
+      'Include synchronized spoken English voiceover with subtle soft background music.',
+      'Not silent — English audio must be present throughout the clip.',
+      'Explain what the product is and how it helps the customer.',
     ].join('\n');
   }
 
