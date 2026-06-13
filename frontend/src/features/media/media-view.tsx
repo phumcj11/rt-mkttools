@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  CheckSquare,
   CheckCircle2,
   CloudUpload,
   Download,
+  Eye,
   Film,
   Image,
   Loader2,
   RefreshCw,
   Sparkles,
+  Trash2,
   Video,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +41,7 @@ import {
   uploadFileToDrive,
   resolveMediaUrl,
   type BrandAsset,
+  deleteMediaFile,
   type DriveSettings,
   type ErpProduct,
   type MediaFile,
@@ -78,6 +82,8 @@ export function MediaView() {
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [uploadingFile, setUploadingFile] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [deletingFile, setDeletingFile] = useState<string | null>(null);
   const [syncRunning, setSyncRunning] = useState(false);
 
   const [driveSettings, setDriveSettings] = useState<DriveSettings | null>(null);
@@ -294,6 +300,35 @@ export function MediaView() {
     }
   };
 
+  const toggleFileSelected = (filename: string) => {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      next.has(filename) ? next.delete(filename) : next.add(filename);
+      return next;
+    });
+  };
+
+  const handleSyncSelected = async () => {
+    const filenames = Array.from(selectedFiles);
+    if (filenames.length === 0) return;
+    setSyncRunning(true);
+    try {
+      const uploaded: string[] = [];
+      const failed: string[] = [];
+      for (const filename of filenames) {
+        try {
+          await uploadFileToDrive(filename);
+          uploaded.push(filename);
+        } catch {
+          failed.push(filename);
+        }
+      }
+      alert(`อัปโหลดไฟล์ที่เลือกสำเร็จ ${uploaded.length} ไฟล์${failed.length ? `, ล้มเหลว ${failed.length} ไฟล์` : ''}`);
+    } finally {
+      setSyncRunning(false);
+    }
+  };
+
   const handleUploadOne = async (filename: string) => {
     setUploadingFile(filename);
     try {
@@ -303,6 +338,51 @@ export function MediaView() {
       alert('Upload ล้มเหลว — ตรวจสอบการตั้งค่า Google Drive');
     } finally {
       setUploadingFile(null);
+    }
+  };
+
+  const handleDeleteOne = async (filename: string) => {
+    if (!window.confirm(`ลบไฟล์นี้หรือไม่?\n${filename}`)) return;
+    setDeletingFile(filename);
+    try {
+      await deleteMediaFile(filename);
+      setFiles((prev) => prev.filter((file) => file.filename !== filename));
+      setSelectedFiles((prev) => {
+        const next = new Set(prev);
+        next.delete(filename);
+        return next;
+      });
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'ลบไฟล์ไม่สำเร็จ');
+    } finally {
+      setDeletingFile(null);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    const filenames = Array.from(selectedFiles);
+    if (filenames.length === 0) return;
+    if (!window.confirm(`ลบไฟล์ที่เลือก ${filenames.length} ไฟล์หรือไม่?`)) return;
+    setDeletingFile('__selected__');
+    try {
+      const deleted = new Set<string>();
+      for (const filename of filenames) {
+        try {
+          await deleteMediaFile(filename);
+          deleted.add(filename);
+        } catch {
+          // Keep failed deletes in the list so the user can retry.
+        }
+      }
+      setFiles((prev) => prev.filter((file) => !deleted.has(file.filename)));
+      setSelectedFiles((prev) => {
+        const next = new Set(prev);
+        deleted.forEach((filename) => next.delete(filename));
+        return next;
+      });
+      alert(`ลบแล้ว ${deleted.size}/${filenames.length} ไฟล์`);
+    } finally {
+      setDeletingFile(null);
     }
   };
 
@@ -783,23 +863,69 @@ export function MediaView() {
       {/* Files Tab */}
       {tab === 'files' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Button size="sm" variant="outline" onClick={() => {
-              setFilesLoading(true);
-              listMediaFiles().then(setFiles).finally(() => setFilesLoading(false));
-            }}>
-              <RefreshCw className="mr-2 h-4 w-4" /> รีเฟรช
-            </Button>
-            <Button
-              size="sm"
-              disabled={syncRunning || files.length === 0}
-              onClick={() => void handleSyncDrive()}
-            >
-              {syncRunning
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />กำลัง Sync...</>
-                : <><CloudUpload className="mr-2 h-4 w-4" />Sync ทั้งหมดขึ้น Drive</>}
-            </Button>
-          </div>
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Generated Media Library</p>
+                  <p className="text-xs text-muted-foreground">
+                    ดูตัวอย่าง เลือกหลายไฟล์ อัปโหลดขึ้น Drive หรือลบไฟล์ที่ไม่ใช้
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setFilesLoading(true);
+                    listMediaFiles().then((items) => {
+                      setFiles(items);
+                      setSelectedFiles((prev) => new Set([...prev].filter((filename) => items.some((f) => f.filename === filename))));
+                    }).finally(() => setFilesLoading(false));
+                  }}>
+                    <RefreshCw className="mr-2 h-4 w-4" /> รีเฟรช
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={files.length === 0}
+                    onClick={() => {
+                      setSelectedFiles((prev) => prev.size === files.length ? new Set() : new Set(files.map((file) => file.filename)));
+                    }}
+                  >
+                    <CheckSquare className="mr-2 h-4 w-4" />
+                    {selectedFiles.size === files.length && files.length > 0 ? 'ยกเลิกเลือกทั้งหมด' : 'เลือกทั้งหมด'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={syncRunning || selectedFiles.size === 0}
+                    onClick={() => void handleSyncSelected()}
+                  >
+                    {syncRunning
+                      ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />กำลังส่ง...</>
+                      : <><CloudUpload className="mr-2 h-4 w-4" />ส่งที่เลือก ({selectedFiles.size})</>}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={syncRunning || files.length === 0}
+                    onClick={() => void handleSyncDrive()}
+                  >
+                    <CloudUpload className="mr-2 h-4 w-4" />Sync ทั้งหมด
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={selectedFiles.size === 0 || deletingFile === '__selected__'}
+                    onClick={() => void handleDeleteSelected()}
+                  >
+                    {deletingFile === '__selected__' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    ลบที่เลือก
+                  </Button>
+                </div>
+              </div>
+              {selectedFiles.size > 0 && (
+                <p className="text-xs text-muted-foreground">เลือกอยู่ {selectedFiles.size} ไฟล์</p>
+              )}
+            </CardContent>
+          </Card>
 
           {filesLoading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -810,49 +936,79 @@ export function MediaView() {
               ยังไม่มีไฟล์ — ไปที่ &ldquo;สินค้า ERP&rdquo; เพื่อสร้างรูปหรือ Video
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {files.map((file) => {
-                const isImage = file.filename.endsWith('.png') || file.filename.endsWith('.jpg');
+                const isImage = /\.(png|jpe?g|webp)$/i.test(file.filename);
+                const isVideo = /\.mp4$/i.test(file.filename);
                 const isUploading = uploadingFile === file.filename;
+                const isDeleting = deletingFile === file.filename;
+                const selected = selectedFiles.has(file.filename);
+                const url = resolveMediaUrl(file.url);
                 return (
-                  <div key={file.filename} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/50 shrink-0">
-                      {isImage
-                        ? <Image className="h-5 w-5 text-muted-foreground" />
-                        : <Film className="h-5 w-5 text-muted-foreground" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{file.filename}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(file.createdAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
-                      </p>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        asChild
-                        title="ดาวน์โหลด"
+                  <Card key={file.filename} className={`overflow-hidden transition-colors ${selected ? 'border-primary ring-1 ring-primary/30' : ''}`}>
+                    <div className="relative aspect-square bg-muted/40">
+                      <button
+                        type="button"
+                        className="absolute left-2 top-2 z-10 rounded-md bg-background/90 px-2 py-1 text-xs shadow-sm"
+                        onClick={() => toggleFileSelected(file.filename)}
                       >
-                        <a href={resolveMediaUrl(file.url)} download={file.filename}>
-                          <Download className="h-4 w-4" />
-                        </a>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        title="อัปโหลดขึ้น Drive"
-                        disabled={isUploading}
-                        onClick={() => void handleUploadOne(file.filename)}
-                      >
-                        {isUploading
-                          ? <Loader2 className="h-4 w-4 animate-spin" />
-                          : <CloudUpload className="h-4 w-4" />}
-                      </Button>
+                        <input type="checkbox" readOnly checked={selected} className="mr-1 align-middle" />
+                        เลือก
+                      </button>
+                      {isImage ? (
+                        <img src={url} alt={file.filename} className="h-full w-full object-contain bg-white" />
+                      ) : isVideo ? (
+                        <video src={url} className="h-full w-full bg-black object-contain" controls preload="metadata" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center">
+                          <Film className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                      )}
+                      <Badge className="absolute bottom-2 left-2 text-[10px]" variant="secondary">
+                        {isVideo ? 'Video' : 'Image'}
+                      </Badge>
                     </div>
-                  </div>
+                    <CardContent className="space-y-3 p-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium" title={file.filename}>{file.filename}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {new Date(file.createdAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1">
+                        <Button variant="outline" size="icon" className="h-8 w-full" asChild title="ดูตัวอย่าง">
+                          <a href={url} target="_blank" rel="noreferrer">
+                            <Eye className="h-4 w-4" />
+                          </a>
+                        </Button>
+                        <Button variant="outline" size="icon" className="h-8 w-full" asChild title="ดาวน์โหลด">
+                          <a href={url} download={file.filename}>
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-full"
+                          title="อัปโหลดขึ้น Drive"
+                          disabled={isUploading}
+                          onClick={() => void handleUploadOne(file.filename)}
+                        >
+                          {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-full text-destructive hover:text-destructive"
+                          title="ลบไฟล์"
+                          disabled={isDeleting}
+                          onClick={() => void handleDeleteOne(file.filename)}
+                        >
+                          {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>

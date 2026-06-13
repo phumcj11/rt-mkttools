@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -283,6 +284,14 @@ export class MediaController {
     const mime = safe.endsWith('.mp4') ? 'video/mp4' : 'image/png';
     res.setHeader('Content-Type', mime);
     res.sendFile(filePath);
+  }
+
+  /** Delete a generated media file */
+  @Delete('files/:filename')
+  @Roles('admin', 'super_admin', 'marketing_manager', 'marketing_staff')
+  @HttpCode(HttpStatus.OK)
+  deleteFile(@Param('filename') filename: string) {
+    return this.media.deleteGeneratedFile(filename);
   }
 
   /** Submit video generation task */

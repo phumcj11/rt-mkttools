@@ -286,6 +286,24 @@ export class MediaService {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  deleteGeneratedFile(filename: string): { ok: boolean; filename: string } {
+    const safe = path.basename(filename);
+    if (!safe || safe !== filename || safe === 'brand-assets') {
+      throw new BadRequestException('Invalid media filename');
+    }
+    if (!/\.(png|jpg|jpeg|webp|mp4)$/i.test(safe)) {
+      throw new BadRequestException('Unsupported media file type');
+    }
+
+    const filePath = path.join(this.uploadsDir, safe);
+    if (!fs.existsSync(filePath)) {
+      throw new BadRequestException('Media file not found');
+    }
+
+    fs.unlinkSync(filePath);
+    return { ok: true, filename: safe };
+  }
+
   listBrandAssets(): BrandAsset[] {
     if (!fs.existsSync(this.brandAssetsDir)) return [];
     return fs

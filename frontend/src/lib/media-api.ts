@@ -268,6 +268,12 @@ export function listMediaFiles() {
   return apiRequest<MediaFile[]>('/media/files');
 }
 
+export function deleteMediaFile(filename: string) {
+  return apiRequest<{ ok: boolean; filename: string }>(`/media/files/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+  });
+}
+
 // Video generation
 export function submitProductVideo(sku: string, options: VideoSubmitOptions = {}) {
   return apiRequest<VideoTask | { error: true; message: string }>(
