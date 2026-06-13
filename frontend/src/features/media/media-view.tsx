@@ -878,6 +878,21 @@ export function MediaView() {
                           </div>
                         )}
                         {videoTask.error && <p className="mt-1 text-red-600">{videoTask.error}</p>}
+                        {typeof videoTask.metadata?.promptSent === 'string' && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-[11px] underline opacity-80">
+                              ดู Prompt ที่ส่งไป API ({String(videoTask.metadata?.mode ?? videoTask.provider)})
+                            </summary>
+                            <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-black/5 p-2 text-[10px] text-foreground">
+                              {videoTask.metadata.promptSent}
+                            </pre>
+                            {typeof videoTask.metadata?.script === 'string' && (
+                              <p className="mt-1 text-[10px] opacity-80">
+                                Script: {videoTask.metadata.script}
+                              </p>
+                            )}
+                          </details>
+                        )}
                         {videoPlayableUrl && videoTask.status === 'done' && (
                           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start">
                             <video

@@ -74,6 +74,8 @@ export class VideoService {
       metadata: {
         ...result.metadata,
         sku: product.sku,
+        script: assets.script,
+        visualBrief: assets.visualBrief,
       },
     };
   }
@@ -247,8 +249,21 @@ export class VideoService {
     }
 
     const contactSheet = await this.buildContactSheet(referenceImages);
+    const frameSources = referenceImages.filter((img) => !img.label.includes('product original'));
+    const verticalFrame = await this.buildVerticalVideoFrame(frameSources);
     const prompt = this.buildVideoPrompt(product, script, benefits, visualBrief, referenceImages, cutoutUsed);
-    return { product, prompt, script, benefits, visualBrief, referenceImages, primaryImageUrl, contactSheet, cutoutUsed };
+    return {
+      product,
+      prompt,
+      script,
+      benefits,
+      visualBrief,
+      referenceImages,
+      primaryImageUrl,
+      contactSheet,
+      verticalFrame,
+      cutoutUsed,
+    };
   }
 
   private async generateVideoBenefits(product: ErpProductCache): Promise<string[]> {
@@ -376,6 +391,78 @@ export class VideoService {
     const json = (await res.json()) as { cutoutBase64?: string };
     if (!json.cutoutBase64) throw new Error('n8n response missing cutoutBase64');
     return Buffer.from(json.cutoutBase64, 'base64');
+  }
+
+  private async buildVerticalVideoFrame(images: VideoReferenceImage[]): Promise<VideoReferenceImage | undefined> {
+    if (images.length === 0) return undefined;
+
+    const width = 720;
+    const height = 1280;
+    const mascot = images.find((img) => img.label.includes('mascot'));
+    const product =
+      images.find((img) => img.label.includes('product cutout')) ??
+      images.find((img) => img.label.includes('product'));
+
+    const layers: sharp.OverlayOptions[] = [];
+
+    if (mascot) {
+      const mascotWidth = Math.round(width * 0.82);
+      const mascotHeight = Math.round(height * 0.4);
+      const mascotBuf = await sharp(mascot.buffer)
+        .resize(mascotWidth, mascotHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+        .png()
+        .toBuffer();
+      layers.push({
+        input: mascotBuf,
+        top: Math.round(height * 0.06),
+        left: Math.round((width - mascotWidth) / 2),
+      });
+    }
+
+    if (product) {
+      const productWidth = Math.round(width * 0.52);
+      const productHeight = Math.round(height * 0.34);
+      const productBuf = await sharp(product.buffer)
+        .resize(productWidth, productHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+        .png()
+        .toBuffer();
+      layers.push({
+        input: productBuf,
+        top: Math.round(height * 0.5),
+        left: Math.round((width - productWidth) / 2),
+      });
+    }
+
+    if (layers.length === 0) {
+      const single = images[0];
+      const singleBuf = await sharp(single.buffer)
+        .resize(width, height, { fit: 'contain', background: { r: 250, g: 250, b: 252, alpha: 1 } })
+        .png()
+        .toBuffer();
+      return {
+        label: 'vertical 9:16 video starter frame',
+        buffer: singleBuf,
+        mimeType: 'image/png',
+      };
+    }
+
+    const buffer = await sharp({
+      create: {
+        width,
+        height,
+        channels: 4,
+        background: { r: 250, g: 250, b: 252, alpha: 1 },
+      },
+    })
+      .composite(layers)
+      .png()
+      .toBuffer();
+
+    return {
+      label: 'vertical 9:16 video starter frame',
+      buffer,
+      mimeType: 'image/png',
+    };
   }
 
   private async buildContactSheet(images: VideoReferenceImage[]): Promise<VideoReferenceImage | undefined> {

@@ -58,6 +58,7 @@ export interface PreparedVideoAssets {
   referenceImages: VideoReferenceImage[];
   primaryImageUrl?: string;
   contactSheet?: VideoReferenceImage;
+  verticalFrame?: VideoReferenceImage;
   cutoutUsed: boolean;
 }
 

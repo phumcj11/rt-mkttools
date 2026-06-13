@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { SystemSettingsService } from '../../system-settings/system-settings.service';
 import {
   DEFAULT_VIDEO_ASPECT_RATIO,
@@ -30,6 +30,7 @@ export class GrokVideoProvider implements VideoProvider {
   readonly defaultModel = VIDEO_PROVIDER_MODELS.grok[0];
   readonly models = VIDEO_PROVIDER_MODELS.grok;
   private readonly apiBase = 'https://api.x.ai/v1';
+  private readonly logger = new Logger(GrokVideoProvider.name);
 
   constructor(private readonly settings: SystemSettingsService) {}
 
@@ -52,6 +53,11 @@ export class GrokVideoProvider implements VideoProvider {
       aspectRatio: options.aspectRatio ?? DEFAULT_VIDEO_ASPECT_RATIO,
       resolution: options.resolution ?? DEFAULT_VIDEO_RESOLUTION,
     });
+
+    this.logger.log(
+      `Grok video submit sku=${assets.product.sku} mode=${body.mode} duration=${body.payload.duration} aspect=${configAspect(body.payload)}`,
+    );
+    this.logger.debug(`Grok prompt:\n${String(body.payload.prompt)}`);
 
     const response = await fetch(`${this.apiBase}/videos/generations`, {
       method: 'POST',
@@ -82,6 +88,11 @@ export class GrokVideoProvider implements VideoProvider {
         requestId: data.request_id,
         cutoutUsed: assets.cutoutUsed,
         mode: body.mode,
+        promptSent: String(body.payload.prompt),
+        script: assets.script,
+        duration: body.payload.duration,
+        aspectRatio: body.payload.aspect_ratio,
+        resolution: body.payload.resolution,
       },
     };
   }
@@ -146,43 +157,33 @@ export class GrokVideoProvider implements VideoProvider {
       resolution: config.resolution,
     };
 
-    const mascotRefs = assets.referenceImages.filter((img) => img.label.includes('mascot'));
-    const hasMultipleRefs = assets.referenceImages.length >= 2 && mascotRefs.length > 0;
-    // Grok reference-to-video is capped at 10s; use image-to-video + contact sheet for longer clips.
+    const frameRefs = assets.referenceImages.filter((img) => !img.label.includes('product original'));
+    const mascotRefs = frameRefs.filter((img) => img.label.includes('mascot'));
+    const hasMultipleRefs = frameRefs.length >= 2 && mascotRefs.length > 0;
     const useReferenceMode = hasMultipleRefs && requestedDuration <= 10;
 
     if (useReferenceMode) {
-      const refs = assets.referenceImages.slice(0, 4);
+      const refs = frameRefs.slice(0, 4);
+      const prompt = this.buildReferencePrompt(assets, refs);
       return {
         mode: 'reference-to-video',
         payload: {
           ...base,
           duration: Math.min(10, requestedDuration),
-          prompt: this.buildReferencePrompt(assets, refs),
+          prompt,
           reference_images: refs.map((img) => ({ url: this.toDataUri(img) })),
         },
       };
     }
 
     const hero =
-      assets.contactSheet ??
-      assets.referenceImages.find((img) => img.label.includes('product cutout')) ??
-      assets.referenceImages.find((img) => img.label.includes('product')) ??
-      assets.referenceImages[0];
+      assets.verticalFrame ??
+      frameRefs.find((img) => img.label.includes('product cutout')) ??
+      frameRefs.find((img) => img.label.includes('product')) ??
+      frameRefs[0];
 
     if (hero) {
-      const prompt = hero.label.includes('contact sheet')
-        ? this.enhancePrompt(
-          [
-            assets.prompt,
-            '',
-            'The reference image is a contact sheet: mascot and product references are shown side by side.',
-            'Animate the mascot presenting the product while keeping both recognizable.',
-          ].join('\n'),
-          assets.script,
-        )
-        : this.enhancePrompt(assets.prompt, assets.script);
-
+      const prompt = this.buildImageToVideoPrompt(assets);
       return {
         mode: 'image-to-video',
         payload: {
@@ -194,40 +195,71 @@ export class GrokVideoProvider implements VideoProvider {
       };
     }
 
+    const prompt = this.buildTextToVideoPrompt(assets);
     return {
       mode: 'text-to-video',
       payload: {
         ...base,
         duration: requestedDuration,
-        prompt: this.enhancePrompt(assets.prompt, assets.script),
+        prompt,
       },
     };
+  }
+
+  private buildImageToVideoPrompt(assets: PreparedVideoAssets): string {
+    const hasMascot = assets.referenceImages.some((img) => img.label.includes('mascot'));
+    return [
+      assets.visualBrief,
+      '',
+      'Animate this 9:16 vertical starter frame into one unified mobile product ad.',
+      'Fill the entire vertical frame edge-to-edge. No letterboxing, no side panels, no collage layout.',
+      hasMascot
+        ? 'Keep the mascot character appearance exactly. Mascot presents the product to camera.'
+        : 'Keep product packaging and label exactly recognizable.',
+      'Scene: bright ChangSiam 100 Baht Shop Thailand retail store, cinematic lighting, smooth camera push-in.',
+      '',
+      `Product: ${assets.product.name}`,
+      `Category: ${assets.product.category}`,
+      `Safe benefits: ${assets.benefits.join(' / ')}`,
+      '',
+      this.audioBlock(assets.script),
+    ].join('\n');
   }
 
   private buildReferencePrompt(assets: PreparedVideoAssets, refs: VideoReferenceImage[]): string {
     const labels = refs.map((_, idx) => `<IMAGE_${idx + 1}>`).join(', ');
     return [
-      this.enhancePrompt(assets.visualBrief, assets.script),
+      assets.visualBrief,
       '',
       `Use reference images ${labels}.`,
       refs.some((r) => r.label.includes('mascot'))
         ? 'The mascot from the mascot reference speaks to camera and presents the product from the product reference.'
         : 'Present the product from the reference images naturally.',
+      'Full-frame vertical 9:16 mobile ad. No collage, no letterboxing.',
       `Product: ${assets.product.name}`,
       `Safe benefits: ${assets.benefits.join(' / ')}`,
       'Scene: bright ChangSiam 100 Baht Shop Thailand retail store.',
       'Do not add SKU codes, watermarks, or medical claims.',
+      '',
+      this.audioBlock(assets.script),
     ].join('\n');
   }
 
-  private enhancePrompt(prompt: string, script: string): string {
+  private buildTextToVideoPrompt(assets: PreparedVideoAssets): string {
     return [
-      prompt,
-      '',
-      'Audio requirements: include native audio with clear spoken Thai voiceover throughout the clip.',
-      `Thai voiceover script (speak naturally, complete all lines): "${script}"`,
-      'Camera: stable vertical 9:16 product advertisement for mobile reels/TikTok with ambient store sound.',
-      'Quality: cinematic lighting, smooth motion, recognizable product packaging.',
+      assets.prompt,
+      'Full-frame vertical 9:16 mobile product advertisement.',
+      this.audioBlock(assets.script),
+    ].join('\n\n');
+  }
+
+  private audioBlock(script: string): string {
+    return [
+      'AUDIO:',
+      `Thai voiceover narration in a friendly retail tone: "${script}"`,
+      'Include synchronized spoken Thai voiceover and subtle upbeat retail background music.',
+      'Not silent — audio must be present throughout the clip.',
+      'Mascot can lip-sync or gesture while the voiceover plays.',
     ].join('\n');
   }
 
@@ -235,11 +267,14 @@ export class GrokVideoProvider implements VideoProvider {
     return `data:${img.mimeType};base64,${img.buffer.toString('base64')}`;
   }
 
-  /** Grok REST API expects image as `{ url }`, not a bare string. */
   private toImagePayload(img: VideoReferenceImage): { url: string } {
     if (img.url?.startsWith('http')) {
       return { url: img.url };
     }
     return { url: this.toDataUri(img) };
   }
+}
+
+function configAspect(payload: Record<string, unknown>): string {
+  return typeof payload.aspect_ratio === 'string' ? payload.aspect_ratio : 'unknown';
 }
