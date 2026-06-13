@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { generateContent } from '@/lib/ai-api';
+import { confirmDelete, showError, showInfo, showSuccess } from '@/lib/sweetalert';
 import {
   generatePopStickers,
   getDriveSettings,
@@ -172,7 +173,7 @@ export function MediaView() {
       setPopResults((prev) => ({ ...prev, [sku]: res }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'สร้าง POP Sticker ไม่สำเร็จ';
-      alert(`${sku}: ${msg}`);
+      showError('สร้าง POP ไม่สำเร็จ', `${sku}: ${msg}`);
     } finally {
       setGenerating(null);
     }
@@ -207,7 +208,7 @@ export function MediaView() {
       setSelectedBrandAssets((prev) => new Set(prev).add(uploaded.filename));
       setIncludeBranded(true);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'อัปโหลด Brand Asset ไม่สำเร็จ');
+      showError('อัปโหลดไม่สำเร็จ', err instanceof Error ? err.message : 'อัปโหลด Brand Asset ไม่สำเร็จ');
     } finally {
       setBrandUploading(null);
     }
@@ -236,14 +237,17 @@ export function MediaView() {
       };
       const res = await submitProductVideo(sku, options);
       if ('error' in res && res.error) {
-        alert((res as { error: true; message: string }).message);
+        showError('ส่งคำขอ Video ไม่สำเร็จ', (res as { error: true; message: string }).message);
         return;
       }
       if ('taskId' in res) {
         setVideoTasks((prev) => ({ ...prev, [sku]: res }));
       }
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'ส่งคำขอ Video ล้มเหลว — ตรวจสอบ API Key ในหน้าตั้งค่า');
+      showError(
+        'ส่งคำขอ Video ล้มเหลว',
+        err instanceof Error ? err.message : 'ตรวจสอบ API Key ในหน้าตั้งค่า',
+      );
     } finally {
       setVideoSubmitting(null);
     }
@@ -276,7 +280,7 @@ export function MediaView() {
       }, 'th');
       setVideoBriefs((prev) => ({ ...prev, [product.sku]: res.content }));
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'AI ช่วยร่าง brief ไม่สำเร็จ');
+      showError('AI ช่วยร่าง brief ไม่สำเร็จ', err instanceof Error ? err.message : undefined);
     } finally {
       setBriefGenerating(null);
     }
@@ -287,14 +291,17 @@ export function MediaView() {
     try {
       const res = await syncToDrive();
       if ('error' in (res as object)) {
-        alert((res as unknown as { message: string }).message);
+        showError('Sync ไม่สำเร็จ', (res as unknown as { message: string }).message);
         return;
       }
-      alert(`อัปโหลดสำเร็จ ${res.uploaded.length} ไฟล์, ล้มเหลว ${res.failed.length} ไฟล์`);
+      showInfo(
+        'Sync สำเร็จ',
+        `อัปโหลดสำเร็จ ${res.uploaded.length} ไฟล์${res.failed.length ? `, ล้มเหลว ${res.failed.length} ไฟล์` : ''}`,
+      );
       setFilesLoading(true);
       listMediaFiles().then(setFiles).finally(() => setFilesLoading(false));
     } catch {
-      alert('Sync ล้มเหลว — ตรวจสอบการตั้งค่า Google Drive');
+      showError('Sync ล้มเหลว', 'ตรวจสอบการตั้งค่า Google Drive');
     } finally {
       setSyncRunning(false);
     }
@@ -323,7 +330,10 @@ export function MediaView() {
           failed.push(filename);
         }
       }
-      alert(`อัปโหลดไฟล์ที่เลือกสำเร็จ ${uploaded.length} ไฟล์${failed.length ? `, ล้มเหลว ${failed.length} ไฟล์` : ''}`);
+      showInfo(
+        'อัปโหลดไฟล์ที่เลือก',
+        `สำเร็จ ${uploaded.length} ไฟล์${failed.length ? `, ล้มเหลว ${failed.length} ไฟล์` : ''}`,
+      );
     } finally {
       setSyncRunning(false);
     }
@@ -333,16 +343,17 @@ export function MediaView() {
     setUploadingFile(filename);
     try {
       const res = await uploadFileToDrive(filename);
-      alert(`อัปโหลดสำเร็จ! ดูที่: ${res.webViewLink}`);
+      showSuccess('อัปโหลดสำเร็จ', `ดูไฟล์ได้ที่ Google Drive\n${res.webViewLink}`);
     } catch {
-      alert('Upload ล้มเหลว — ตรวจสอบการตั้งค่า Google Drive');
+      showError('Upload ล้มเหลว', 'ตรวจสอบการตั้งค่า Google Drive');
     } finally {
       setUploadingFile(null);
     }
   };
 
   const handleDeleteOne = async (filename: string) => {
-    if (!window.confirm(`ลบไฟล์นี้หรือไม่?\n${filename}`)) return;
+    const confirmed = await confirmDelete('ลบไฟล์นี้หรือไม่?', filename);
+    if (!confirmed) return;
     setDeletingFile(filename);
     try {
       await deleteMediaFile(filename);
@@ -352,8 +363,9 @@ export function MediaView() {
         next.delete(filename);
         return next;
       });
+      showSuccess('ลบไฟล์แล้ว');
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'ลบไฟล์ไม่สำเร็จ');
+      showError('ลบไฟล์ไม่สำเร็จ', err instanceof Error ? err.message : undefined);
     } finally {
       setDeletingFile(null);
     }
@@ -362,7 +374,11 @@ export function MediaView() {
   const handleDeleteSelected = async () => {
     const filenames = Array.from(selectedFiles);
     if (filenames.length === 0) return;
-    if (!window.confirm(`ลบไฟล์ที่เลือก ${filenames.length} ไฟล์หรือไม่?`)) return;
+    const confirmed = await confirmDelete(
+      `ลบไฟล์ที่เลือก ${filenames.length} ไฟล์หรือไม่?`,
+      'การลบไม่สามารถย้อนกลับได้',
+    );
+    if (!confirmed) return;
     setDeletingFile('__selected__');
     try {
       const deleted = new Set<string>();
@@ -380,7 +396,11 @@ export function MediaView() {
         deleted.forEach((filename) => next.delete(filename));
         return next;
       });
-      alert(`ลบแล้ว ${deleted.size}/${filenames.length} ไฟล์`);
+      if (deleted.size === filenames.length) {
+        showSuccess(`ลบแล้ว ${deleted.size} ไฟล์`);
+      } else {
+        showInfo('ลบบางส่วนสำเร็จ', `ลบแล้ว ${deleted.size}/${filenames.length} ไฟล์`);
+      }
     } finally {
       setDeletingFile(null);
     }
