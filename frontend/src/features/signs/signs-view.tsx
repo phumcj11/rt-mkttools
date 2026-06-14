@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
   Download,
@@ -436,25 +436,30 @@ export function SignsView() {
     }));
   }
 
-  async function handleTemplateUpload(e: ChangeEvent<HTMLInputElement>, tplSignType?: SignType, tplSignSize?: SignSize) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
+  async function handleTemplateUpload(
+    file: File,
+    meta?: { name?: string; signType?: SignType; signSize?: SignSize },
+  ) {
     try {
-      const name = tplSignType && tplSignSize
-        ? `${SIGN_TYPES.find((t) => t.id === tplSignType)?.label ?? tplSignType} ${SIGN_SIZES.find((s) => s.id === tplSignSize)?.label ?? tplSignSize}`
-        : file.name.replace(/\.[^.]+$/, '');
-      await uploadSignTemplate({ name, signType: tplSignType, signSize: tplSignSize, dataUrl });
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const name = meta?.name?.trim()
+        || file.name.replace(/\.[^.]+$/, '');
+      await uploadSignTemplate({
+        name,
+        signType: meta?.signType,
+        signSize: meta?.signSize,
+        dataUrl,
+      });
       showSuccess('อัปโหลด Template แล้ว', name);
       await loadTemplates();
     } catch (err) {
       showError('อัปโหลดไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+      throw err;
     }
   }
 
@@ -1313,6 +1318,15 @@ function SignSizePicker({ value, onChange }: { value: SignSize; onChange: (s: Si
   );
 }
 
+function templateDisplayLabel(tpl: SignTemplateRecord): string {
+  if (tpl.signType && tpl.signSize) {
+    return formatSignLabel(tpl.signType, tpl.signSize);
+  }
+  if (tpl.signSize === 'shelf_tag') return 'ป้ายติดขอบชั้น';
+  if (tpl.signType) return SIGN_TYPES.find((t) => t.id === tpl.signType)?.label ?? tpl.name;
+  return tpl.name;
+}
+
 function TemplatesPanel({
   templates,
   loading,
@@ -1321,98 +1335,208 @@ function TemplatesPanel({
 }: {
   templates: SignTemplateRecord[];
   loading: boolean;
-  onUpload: (e: ChangeEvent<HTMLInputElement>, signType?: SignType, signSize?: SignSize) => Promise<void>;
+  onUpload: (file: File, meta?: { name?: string; signType?: SignType; signSize?: SignSize }) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }) {
+  const [uploadName, setUploadName] = useState('');
+  const [uploadFormat, setUploadFormat] = useState<'shelf_edge' | 'standing'>('shelf_edge');
+  const [uploadType, setUploadType] = useState<SignType>('price_tag');
+  const [uploadSize, setUploadSize] = useState<SignSize>('a6');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function submitUpload() {
+    if (!uploadFile) {
+      fileInputRef.current?.click();
+      return;
+    }
+    setUploading(true);
+    try {
+      const signSize: SignSize = uploadFormat === 'shelf_edge' ? 'shelf_tag' : uploadSize;
+      const signType: SignType = uploadFormat === 'shelf_edge' ? 'shelf_tag' : uploadType;
+      await onUpload(uploadFile, {
+        name: uploadName.trim() || uploadFile.name.replace(/\.[^.]+$/, ''),
+        signType,
+        signSize,
+      });
+      setUploadFile(null);
+      setUploadName('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <CardTitle className="text-base">Templates พื้นหลัง</CardTitle>
-            <p className="mt-0.5 text-xs text-muted-foreground">อัปโหลดภาพพื้นหลัง PNG — ระบบจะ overlay ข้อความสินค้าและราคาทับอัตโนมัติ</p>
-          </div>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90">
-            <ImagePlus className="h-3.5 w-3.5" />
-            อัปโหลดใหม่
-            <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => void onUpload(e)} />
-          </label>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> กำลังโหลด...
-          </div>
-        ) : templates.length === 0 ? (
-          <div className="rounded-xl border border-dashed py-16 text-center text-sm text-muted-foreground">
-            <ImagePlus className="mx-auto mb-2 h-8 w-8 opacity-30" />
-            <p>ยังไม่มี Template</p>
-            <p className="text-xs mt-1">อัปโหลด PNG พื้นหลังเพื่อใช้แทน Template เริ่มต้น</p>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {templates.map((tpl) => (
-              <div key={tpl.id} className="group relative overflow-hidden rounded-xl border bg-muted/20">
-                <div className="aspect-[3/4] overflow-hidden bg-muted">
-                  <img src={resolveSignUrl(tpl.url)} alt={tpl.name} className="h-full w-full object-cover" />
-                </div>
-                <div className="p-2">
-                  <p className="text-sm font-medium leading-tight">{tpl.name}</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {tpl.signType && (
-                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                        {SIGN_TYPES.find((t) => t.id === tpl.signType)?.label ?? tpl.signType}
-                      </span>
-                    )}
-                    {tpl.signSize && (
-                      <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
-                        {SIGN_SIZES.find((s) => s.id === tpl.signSize)?.label ?? tpl.signSize}
-                      </span>
-                    )}
-                    {!tpl.signType && !tpl.signSize && (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">ใช้กับทุกขนาด</span>
-                    )}
-                  </div>
-                </div>
+    <div className="space-y-4">
+      {/* Upload form */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">อัปโหลด Template ใหม่</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            อัปโหลดไฟล์ PNG/JPG เป็นพื้นหลังป้าย — ระบบจะใส่ชื่อสินค้า ราคา และข้อความทับอัตโนมัติ
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="ชื่อ Template">
+              <Input
+                value={uploadName}
+                onChange={(e) => setUploadName(e.target.value)}
+                placeholder="เช่น ป้ายติดชั้น 100 Baht Shop"
+              />
+            </Field>
+            <Field label="รูปแบบป้าย">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  className="absolute right-1.5 top-1.5 hidden rounded-full bg-red-600 p-1 text-white shadow group-hover:flex"
-                  onClick={() => void onDelete(tpl.id)}
+                  onClick={() => setUploadFormat('shelf_edge')}
+                  className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition
+                    ${uploadFormat === 'shelf_edge' ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:border-primary/40'}`}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  ติดขอบชั้น
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUploadFormat('standing')}
+                  className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition
+                    ${uploadFormat === 'standing' ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:border-primary/40'}`}
+                >
+                  ยืนบนชั้น
                 </button>
               </div>
-            ))}
+            </Field>
           </div>
-        )}
 
-        <div className="mt-6">
-          <p className="mb-3 text-sm font-semibold text-muted-foreground">อัปโหลดตาม Type × Size</p>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {SIGN_TYPES.flatMap((type) =>
-              SIGN_SIZES.map((size) => (
-                <label
-                  key={`${type.id}-${size.id}`}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed p-2.5 text-xs hover:bg-muted/40"
-                >
-                  <ImagePlus className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="font-medium">{type.label}</span>
-                  <span className="text-muted-foreground">×</span>
-                  <span>{size.label}</span>
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    className="hidden"
-                    onChange={(e) => void onUpload(e, type.id, size.id)}
-                  />
-                </label>
-              ))
+          {uploadFormat === 'standing' && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="เนื้อหา">
+                <div className="flex flex-wrap gap-1.5">
+                  {CONTENT_TYPES.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setUploadType(t.id)}
+                      className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition
+                        ${uploadType === t.id ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:border-primary/40'}`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="ขนาด">
+                <div className="flex flex-wrap gap-1.5">
+                  {STANDING_SIZES.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setUploadSize(s.id)}
+                      className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition
+                        ${uploadSize === s.id ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:border-primary/40'}`}
+                    >
+                      {s.label} ({s.sub.split('·')[0].trim()})
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </div>
+          )}
+
+          <div
+            className={`rounded-xl border-2 border-dashed p-6 text-center transition cursor-pointer
+              ${uploadFile ? 'border-primary/50 bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/40 hover:bg-muted/30'}`}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setUploadFile(f);
+                if (f && !uploadName.trim()) {
+                  setUploadName(f.name.replace(/\.[^.]+$/, ''));
+                }
+              }}
+            />
+            {uploadFile ? (
+              <div className="space-y-2">
+                <FileImage className="mx-auto h-8 w-8 text-primary" />
+                <p className="text-sm font-medium">{uploadFile.name}</p>
+                <p className="text-xs text-muted-foreground">{(uploadFile.size / 1024).toFixed(0)} KB — คลิกเพื่อเปลี่ยนไฟล์</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <ImagePlus className="mx-auto h-8 w-8 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">คลิกเพื่อเลือกไฟล์ PNG / JPG</p>
+              </div>
             )}
           </div>
-        </div>
-      </CardContent>
-    </Card>
+
+          <Button className="w-full sm:w-auto gap-2" onClick={() => void submitUpload()} disabled={uploading}>
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {uploadFile ? 'อัปโหลด Template' : 'เลือกไฟล์ก่อน'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Template list */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Template ทั้งหมด ({templates.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              กำลังโหลด...
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="rounded-xl border border-dashed py-12 text-center">
+              <FileImage className="mx-auto h-10 w-10 text-muted-foreground/30" />
+              <p className="mt-3 text-sm font-medium text-muted-foreground">ยังไม่มี Template</p>
+              <p className="mt-1 text-xs text-muted-foreground">อัปโหลด Template แรกด้านบน</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {templates.map((tpl) => {
+                const isLandscape = tpl.signSize === 'shelf_tag';
+                return (
+                  <div key={tpl.id} className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                    <div className={`relative flex items-center justify-center bg-[#f4f4f5] p-3 ${isLandscape ? 'min-h-[140px]' : 'min-h-[200px]'}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={resolveSignUrl(tpl.url)}
+                        alt={tpl.name}
+                        className="max-h-[180px] w-full object-contain"
+                      />
+                      <button
+                        type="button"
+                        title="ลบ Template"
+                        className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-red-600 shadow-sm hover:bg-red-50 border border-red-100"
+                        onClick={() => void onDelete(tpl.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="border-t px-3 py-2.5">
+                      <p className="text-sm font-semibold leading-tight truncate">{tpl.name}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{templateDisplayLabel(tpl)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
