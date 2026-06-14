@@ -739,7 +739,7 @@ export function MediaView() {
               <p className="text-sm text-muted-foreground">{productEmptyMessage}</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {products.map((p) => {
                 const popResult = popResults[p.sku];
                 const isGenerating = generating === p.sku;
@@ -764,7 +764,7 @@ export function MediaView() {
                 return (
                   <div
                     key={p.sku}
-                    className={`flex flex-col rounded-xl border bg-background overflow-hidden transition-colors ${isExpanded ? 'bg-violet-50/30' : ''}`}
+                    className={`flex flex-col rounded-xl border bg-background overflow-hidden shadow-md hover:shadow-lg transition-shadow ${isExpanded ? 'ring-2 ring-violet-200 bg-violet-50/30' : ''}`}
                   >
                     {/* ── Product image ── */}
                     <div className="aspect-square w-full overflow-hidden bg-muted/50">
@@ -821,40 +821,39 @@ export function MediaView() {
                       </Button>
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-8 w-full gap-1 text-xs"
+                        className="h-8 w-full gap-1 text-xs bg-violet-600 text-white hover:bg-violet-700 border-0"
                         disabled={isVideoSubmitting || videoTask?.status === 'queued' || videoTask?.status === 'processing'}
                         onClick={() => void handleVideoSubmit(p.sku)}
                       >
                         {isVideoSubmitting || videoTask?.status === 'queued' || videoTask?.status === 'processing'
                           ? <Loader2 className="h-3 w-3 animate-spin" />
                           : videoTask?.status === 'done'
-                            ? <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            ? <CheckCircle2 className="h-3 w-3" />
                             : <Video className="h-3 w-3" />}
                         {videoButtonLabel}
                       </Button>
-                    </div>
-
-                    {/* ── Secondary icons ── */}
-                    <div className="flex justify-center gap-2 pb-2">
                       <Button
                         size="sm"
-                        variant={briefOpen || hasBrief ? 'secondary' : 'ghost'}
-                        className="h-7 w-7 p-0"
-                        title="Video Brief"
+                        variant={briefOpen || hasBrief ? 'secondary' : 'outline'}
+                        className={`h-8 w-full gap-1 text-[10px] leading-tight sm:text-xs ${
+                          briefOpen || hasBrief
+                            ? 'border-violet-300 bg-violet-50 text-violet-800'
+                            : 'border-violet-200 text-violet-700 hover:bg-violet-50'
+                        }`}
                         onClick={() => toggleBriefPanel(p.sku)}
                       >
-                        <Pencil className={`h-3.5 w-3.5 ${hasBrief ? 'text-violet-600' : ''}`} />
+                        <Pencil className={`h-3 w-3 shrink-0 ${hasBrief ? 'text-violet-600' : ''}`} />
+                        <span className="text-center">สร้าง Video แบบมี Brief</span>
                       </Button>
                       {popResult && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-7 w-7 p-0"
-                          title={isExpanded ? 'ย่อ POP' : 'ดู POP'}
+                          className="h-7 w-full gap-1 text-[10px] text-muted-foreground hover:text-foreground"
                           onClick={() => setExpandedSku(isExpanded ? null : p.sku)}
                         >
-                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                          {isExpanded ? 'ย่อ POP' : 'ดู POP'}
                         </Button>
                       )}
                     </div>
