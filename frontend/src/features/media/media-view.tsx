@@ -104,17 +104,6 @@ export function MediaView() {
   const [planLoading, setPlanLoading] = useState<string | null>(null);
   const [videoBriefs, setVideoBriefs] = useState<Record<string, string>>({});
   const [openBriefSkus, setOpenBriefSkus] = useState<Set<string>>(new Set());
-  const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(true);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const sync = () => {
-      if (mq.matches) setToolbarSettingsOpen(true);
-    };
-    if (!mq.matches) setToolbarSettingsOpen(false);
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
-  }, []);
 
   const toggleBriefPanel = useCallback((sku: string) => {
     setOpenBriefSkus((prev) => {
@@ -584,214 +573,42 @@ export function MediaView() {
       {tab === 'products' && (
         <div className="space-y-3">
 
-          {/* ─── Toolbar ─── */}
-          <div className="space-y-3">
-            {/* Search & filter — always visible */}
-            <div className="rounded-xl border bg-background shadow-sm p-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <div className="relative min-w-0 flex-1">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    placeholder="ค้นหา SKU / ชื่อสินค้า"
-                    className="h-9 pl-9 text-sm"
-                  />
-                </div>
-                <NativeSelect
-                  value={productFilter}
-                  className="h-9 w-full text-sm sm:w-[170px]"
-                  onChange={(e) => setProductFilter(e.target.value as MediaProductFilter)}
-                >
-                  <option value="new_today">เข้าใหม่วันนี้</option>
-                  <option value="new">สินค้าใหม่ 7 วัน</option>
-                  <option value="ready">พร้อมทำสื่อ</option>
-                  <option value="promo">มีโปรโมชั่น</option>
-                  <option value="all">ทั้งหมด</option>
-                </NativeSelect>
-                <span className="shrink-0 text-sm text-muted-foreground sm:pl-1">
-                  {products.length} สินค้า
-                </span>
+          {/* ─── Search ─── */}
+          <div className="rounded-xl border bg-background shadow-sm p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative min-w-0 flex-1">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="ค้นหา SKU / ชื่อสินค้า"
+                  className="h-9 pl-9 text-sm"
+                />
               </div>
+              <NativeSelect
+                value={productFilter}
+                className="h-9 w-full text-sm sm:w-[170px]"
+                onChange={(e) => setProductFilter(e.target.value as MediaProductFilter)}
+              >
+                <option value="new_today">เข้าใหม่วันนี้</option>
+                <option value="new">สินค้าใหม่ 7 วัน</option>
+                <option value="ready">พร้อมทำสื่อ</option>
+                <option value="promo">มีโปรโมชั่น</option>
+                <option value="all">ทั้งหมด</option>
+              </NativeSelect>
+              <span className="shrink-0 text-sm text-muted-foreground sm:pl-1">
+                {products.length} สินค้า
+              </span>
             </div>
-
-            {/* Mobile: toggle advanced settings */}
             <button
               type="button"
-              className="flex w-full items-center justify-between rounded-xl border bg-muted/40 px-3 py-2.5 text-sm font-medium lg:hidden"
-              onClick={() => setToolbarSettingsOpen((v) => !v)}
+              className="mt-2 flex items-center gap-1.5 text-xs text-violet-700 hover:text-violet-900"
+              onClick={() => setTab('settings')}
             >
-              <span className="flex items-center gap-2">
-                <Video className="h-4 w-4 text-violet-600" />
-                ตั้งค่า Video & Brand
-              </span>
-              {toolbarSettingsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              <Video className="h-3.5 w-3.5" />
+              ตั้งค่า Video & Brand →
             </button>
-
-            <div className={`space-y-3 ${toolbarSettingsOpen ? 'block' : 'hidden lg:block'}`}>
-                {/* Video settings */}
-                <div className="rounded-xl border bg-background shadow-sm p-3 space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Video className="h-4 w-4 text-violet-600 shrink-0" />
-                    <span className="text-sm font-semibold">ตั้งค่า Video</span>
-                    <span className="text-[11px] font-medium text-violet-700 px-2 py-0.5 rounded-full bg-violet-100">
-                      Mascot EN
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Provider</Label>
-                      <NativeSelect
-                        value={videoProvider}
-                        className="h-9 w-full text-sm"
-                        onChange={(e) => {
-                          const next = e.target.value as VideoProviderId;
-                          setVideoProvider(next);
-                          setVideoModel(VIDEO_MODELS[next][0]);
-                        }}
-                      >
-                        <option value="gemini">Gemini / Veo</option>
-                        <option value="kling">Kling AI</option>
-                        <option value="grok">Grok Imagine</option>
-                      </NativeSelect>
-                    </div>
-                    <div className="space-y-1 sm:col-span-2 lg:col-span-1">
-                      <Label className="text-xs text-muted-foreground">Model</Label>
-                      <NativeSelect
-                        value={videoModel}
-                        className="h-9 w-full text-sm"
-                        onChange={(e) => setVideoModel(e.target.value)}
-                      >
-                        {(VIDEO_MODELS[videoProvider] ?? []).map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </NativeSelect>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">ความยาว</Label>
-                      <NativeSelect
-                        value={String(videoDuration)}
-                        className="h-9 w-full text-sm"
-                        onChange={(e) => setVideoDuration(Number(e.target.value))}
-                      >
-                        {VIDEO_DURATION_OPTIONS.map((d) => (
-                          <option key={d} value={d}>{d} วินาที · 9:16</option>
-                        ))}
-                      </NativeSelect>
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer w-fit">
-                    <input
-                      type="checkbox"
-                      checked={videoUseCutout}
-                      onChange={(e) => setVideoUseCutout(e.target.checked)}
-                      className="rounded"
-                    />
-                    Extract product (ตัดพื้นหลังสินค้าก่อนสร้าง Video)
-                  </label>
-
-                  <div className="hidden lg:flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground pt-1 border-t">
-                    <span className="rounded bg-muted px-2 py-1">1 Extract product</span>
-                    <span>→</span>
-                    <span className="rounded bg-muted px-2 py-1">2 Mascot store scene</span>
-                    <span>→</span>
-                    <span className="rounded bg-muted px-2 py-1">3 Native EN script</span>
-                    <span>→</span>
-                    <span className="rounded bg-muted px-2 py-1">4 Video</span>
-                  </div>
-                </div>
-
-                {/* Brand assets */}
-                <div className="rounded-xl border bg-background shadow-sm p-3 space-y-3">
-                  <div>
-                    <p className="text-sm font-semibold">Brand สำหรับ POP Sticker</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      อัปโหลด Logo / Mascot — เลือก Mascot ที่จะเป็นตัวหลักใน Video
-                    </p>
-                  </div>
-
-                  <input
-                    ref={logoInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => { void handleBrandAssetUpload('logo', e.target.files?.[0] ?? null); e.target.value = ''; }}
-                  />
-                  <input
-                    ref={mascotInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => { void handleBrandAssetUpload('mascot', e.target.files?.[0] ?? null); e.target.value = ''; }}
-                  />
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-9 gap-1.5"
-                      disabled={brandUploading === 'logo'}
-                      onClick={() => logoInputRef.current?.click()}
-                    >
-                      {brandUploading === 'logo' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                      อัปโหลด Logo
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-9 gap-1.5"
-                      disabled={brandUploading === 'mascot'}
-                      onClick={() => mascotInputRef.current?.click()}
-                    >
-                      {brandUploading === 'mascot' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                      อัปโหลด Mascot
-                    </Button>
-                    <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer ml-auto sm:ml-0">
-                      <input
-                        type="checkbox"
-                        checked={includeBranded}
-                        disabled={brandAssets.length === 0}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          if (checked && selectedBrandAssets.size === 0 && brandAssets.length > 0) {
-                            setSelectedBrandAssets(new Set(brandAssets.filter((a) => a?.filename).map((a) => a.filename)));
-                          }
-                          setIncludeBranded(checked);
-                        }}
-                        className="rounded"
-                      />
-                      Branded +2
-                    </label>
-                  </div>
-
-                  {brandAssets.filter((a) => a?.filename && a?.url).length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {brandAssets.filter((a) => a?.filename && a?.url).map((asset) => {
-                        const selected = selectedBrandAssets.has(asset.filename);
-                        return (
-                          <button
-                            key={asset.filename}
-                            type="button"
-                            title={`${selected ? 'ยกเลิก' : 'เลือก'} ${asset.kind}`}
-                            onClick={() => toggleBrandAsset(asset.filename)}
-                            className={`relative h-10 w-10 rounded-full border-2 overflow-hidden transition-all ${selected ? 'border-violet-500 ring-2 ring-violet-200' : 'border-border opacity-60 hover:opacity-100'}`}
-                          >
-                            <img src={resolveMediaUrl(asset.url)} alt={asset.kind} className="h-full w-full object-cover bg-white" />
-                            {selected && (
-                              <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center">
-                                <CheckCircle2 className="h-4 w-4 text-violet-700" />
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+          </div>
 
           {/* ─── Product list ─── */}
           {productsLoading ? (
@@ -1365,18 +1182,21 @@ export function MediaView() {
           {/* Video AI */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Film className="h-4 w-4 text-primary" />
-                Video AI — Multi Provider
+              <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                <Video className="h-4 w-4 text-violet-600" />
+                ตั้งค่า Video
+                <span className="text-[11px] font-medium text-violet-700 px-2 py-0.5 rounded-full bg-violet-100">
+                  Mascot EN
+                </span>
                 {videoSettings?.video_configured && (
-                  <Badge variant="default" className="ml-auto text-xs">ตั้งค่าแล้ว</Badge>
+                  <Badge variant="default" className="ml-auto text-xs">API ตั้งค่าแล้ว</Badge>
                 )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {videoSettings?.video_configured ? (
                 <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
-                  <p className="font-medium text-green-600">ตั้งค่าแล้ว</p>
+                  <p className="font-medium text-green-600">API Key ตั้งค่าแล้ว</p>
                   <p className="text-muted-foreground text-xs mt-0.5">
                     Default: {videoSettings.video_provider_default} · {videoSettings.video_model_default}
                   </p>
@@ -1386,13 +1206,15 @@ export function MediaView() {
                 </div>
               ) : (
                 <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800">
-                  <p className="font-semibold">ตั้งค่า Video Provider:</p>
-                  <p>แนะนำ Grok Imagine — รองรับ 9:16, 15 วินาที และเสียง voiceover ภาษาไทย</p>
+                  <p className="font-semibold">ตั้งค่า Video Provider API Key ด้านล่าง</p>
+                  <p>แนะนำ Grok Imagine — รองรับ 9:16, 15 วินาที และเสียง voiceover ภาษาอังกฤษ</p>
                 </div>
               )}
-              <div className="grid gap-3 md:grid-cols-2">
+
+              <p className="text-xs font-medium text-muted-foreground">การสร้าง Video (ใช้ทุกครั้งที่กดสร้าง Video)</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-1.5">
-                  <Label>Default Provider</Label>
+                  <Label>Provider</Label>
                   <NativeSelect
                     value={videoProvider}
                     onChange={(e) => {
@@ -1406,15 +1228,48 @@ export function MediaView() {
                     <option value="grok">Grok Imagine</option>
                   </NativeSelect>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Default Model</Label>
+                <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+                  <Label>Model</Label>
                   <NativeSelect value={videoModel} onChange={(e) => setVideoModel(e.target.value)}>
                     {(VIDEO_MODELS[videoProvider] ?? []).map((model) => (
                       <option key={model} value={model}>{model}</option>
                     ))}
                   </NativeSelect>
                 </div>
+                <div className="space-y-1.5">
+                  <Label>ความยาวคลิป</Label>
+                  <NativeSelect
+                    value={String(videoDuration)}
+                    onChange={(e) => setVideoDuration(Number(e.target.value))}
+                  >
+                    {VIDEO_DURATION_OPTIONS.map((d) => (
+                      <option key={d} value={d}>{d} วินาที · 9:16</option>
+                    ))}
+                  </NativeSelect>
+                </div>
               </div>
+
+              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={videoUseCutout}
+                  onChange={(e) => setVideoUseCutout(e.target.checked)}
+                  className="rounded"
+                />
+                Extract product (ตัดพื้นหลังสินค้าก่อนสร้าง Video)
+              </label>
+
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground pt-1 border-t">
+                <span className="rounded bg-muted px-2 py-1">1 Extract product</span>
+                <span>→</span>
+                <span className="rounded bg-muted px-2 py-1">2 Mascot store scene</span>
+                <span>→</span>
+                <span className="rounded bg-muted px-2 py-1">3 Native EN script</span>
+                <span>→</span>
+                <span className="rounded bg-muted px-2 py-1">4 Video</span>
+              </div>
+
+              <p className="text-xs font-medium text-muted-foreground pt-2 border-t">API Keys (บันทึกลงเซิร์ฟเวอร์)</p>
               <div className="space-y-1.5">
                 <Label>Gemini API Key</Label>
                 <Input
@@ -1445,6 +1300,98 @@ export function MediaView() {
                   autoComplete="new-password"
                 />
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Brand POP */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Brand สำหรับ POP Sticker
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                อัปโหลด Logo / Mascot — เลือก Mascot ที่จะเป็นตัวหลักใน Video และใช้ใน POP แบบ Branded
+              </p>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => { void handleBrandAssetUpload('logo', e.target.files?.[0] ?? null); e.target.value = ''; }}
+              />
+              <input
+                ref={mascotInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => { void handleBrandAssetUpload('mascot', e.target.files?.[0] ?? null); e.target.value = ''; }}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={brandUploading === 'logo'}
+                  onClick={() => logoInputRef.current?.click()}
+                >
+                  {brandUploading === 'logo' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  อัปโหลด Logo
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={brandUploading === 'mascot'}
+                  onClick={() => mascotInputRef.current?.click()}
+                >
+                  {brandUploading === 'mascot' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  อัปโหลด Mascot
+                </Button>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeBranded}
+                    disabled={brandAssets.length === 0}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      if (checked && selectedBrandAssets.size === 0 && brandAssets.length > 0) {
+                        setSelectedBrandAssets(new Set(brandAssets.filter((a) => a?.filename).map((a) => a.filename)));
+                      }
+                      setIncludeBranded(checked);
+                    }}
+                    className="rounded"
+                  />
+                  Branded +2
+                </label>
+              </div>
+              {brandAssets.filter((a) => a?.filename && a?.url).length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {brandAssets.filter((a) => a?.filename && a?.url).map((asset) => {
+                    const selected = selectedBrandAssets.has(asset.filename);
+                    return (
+                      <button
+                        key={asset.filename}
+                        type="button"
+                        title={`${selected ? 'ยกเลิก' : 'เลือก'} ${asset.kind}`}
+                        onClick={() => toggleBrandAsset(asset.filename)}
+                        className={`relative h-12 w-12 rounded-full border-2 overflow-hidden transition-all ${selected ? 'border-violet-500 ring-2 ring-violet-200' : 'border-border opacity-60 hover:opacity-100'}`}
+                      >
+                        <img src={resolveMediaUrl(asset.url)} alt={asset.kind} className="h-full w-full object-cover bg-white" />
+                        {selected && (
+                          <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center">
+                            <CheckCircle2 className="h-4 w-4 text-violet-700" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">ยังไม่มี Brand — อัปโหลด Logo หรือ Mascot ด้านบน</p>
+              )}
             </CardContent>
           </Card>
 
