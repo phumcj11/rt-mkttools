@@ -25,6 +25,7 @@ import { RespondSignRequestDto } from './dto/respond-sign-request.dto';
 import { ReviewSignRequestDto } from './dto/review-sign-request.dto';
 import { UpdateSignDraftDto } from './dto/update-sign-draft.dto';
 import { UploadTemplateDto } from './dto/upload-template.dto';
+import { composeShelfMockup } from './sign-shelf-mockup';
 
 const SIGN_TYPE_LABELS: Record<string, string> = {
   price_tag: 'ป้ายราคา',
@@ -348,16 +349,19 @@ export class SignsService {
     fields: Record<string, unknown>,
     version: number,
   ): Promise<SignDraft> {
-    const filename = `sign-${request.requestNo}-draft-v${version}.png`;
-    const rendered = await this.writePng(request, fields, filename);
+    const flatFilename = `sign-${request.requestNo}-draft-v${version}-flat.png`;
+    const mockupFilename = `sign-${request.requestNo}-draft-v${version}.png`;
+    const flat = await this.writePng(request, fields, flatFilename);
+    const mockupPath = path.join(this.uploadDir, mockupFilename);
+    await composeShelfMockup(flat.localPath, request.signSize, mockupPath);
     return this.drafts.save(this.drafts.create({
       tenantId: request.tenantId,
       requestId: request.id,
       version,
       templateId: this.templateFor(request),
-      previewUrl: rendered.url,
-      previewPath: rendered.localPath,
-      editableFields: fields,
+      previewUrl: `/signs/serve/${mockupFilename}`,
+      previewPath: mockupPath,
+      editableFields: { ...fields, _flatPreviewUrl: flat.url },
       createdBy: userId,
     }));
   }

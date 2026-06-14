@@ -48,6 +48,7 @@ import {
 import { getProductCatalogDetail, listProductCatalog, type ProductCatalogItem } from '@/lib/products-api';
 import { showError, showSuccess } from '@/lib/sweetalert';
 import { useAuthStore } from '@/stores/auth-store';
+import { ShelfSceneMini, ShelfScenePreview } from '@/features/signs/shelf-mockup';
 
 type Tab = 'new' | 'mine' | 'review' | 'templates';
 
@@ -457,6 +458,9 @@ export function SignsView() {
                 </Field>
                 <Field label="ขนาดป้าย">
                   <SignSizePicker value={form.signSize} onChange={(s) => setForm({ ...form, signSize: s })} />
+                  <div className="mt-2">
+                    <ShelfScenePreview signSize={form.signSize} />
+                  </div>
                 </Field>
                 <Field label="หมายเหตุ">
                   <textarea className="min-h-[84px] w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -640,6 +644,15 @@ function RequestDetail({
   onExport: () => Promise<void>;
   onRespond: () => Promise<void>;
 }) {
+  const [showFlatSign, setShowFlatSign] = useState(false);
+  const flatPreviewUrl = detail?.latestDraft?.editableFields?._flatPreviewUrl;
+  const hasFlatPreview = typeof flatPreviewUrl === 'string' && flatPreviewUrl.length > 0;
+  const previewSrc = showFlatSign && hasFlatPreview
+    ? resolveSignUrl(flatPreviewUrl)
+    : detail?.latestDraft
+      ? resolveSignUrl(detail.latestDraft.previewUrl)
+      : '';
+
   if (!detail) {
     return (
       <Card className="min-h-[520px]">
@@ -676,16 +689,26 @@ function RequestDetail({
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base">Draft Preview</CardTitle>
+            {detail.latestDraft && (
+              <Badge variant="secondary" className="shrink-0">
+                {showFlatSign ? 'ป้ายเปล่า' : 'Mockup บนชั้นวาง'}
+              </Badge>
+            )}
           </CardHeader>
           <CardContent>
             {detail.latestDraft ? (
               <div className="space-y-3">
-                <div className="overflow-hidden rounded-xl border bg-white">
-                  <img src={resolveSignUrl(detail.latestDraft.previewUrl)} alt="Sign draft preview" className="w-full object-contain" />
+                <div className="overflow-hidden rounded-xl border bg-slate-100">
+                  <img src={previewSrc} alt="Sign draft preview" className="w-full object-contain" />
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {hasFlatPreview && (
+                    <Button variant="outline" size="sm" onClick={() => setShowFlatSign((v) => !v)}>
+                      {showFlatSign ? 'ดู Mockup บนชั้น' : 'ดูป้ายเปล่า'}
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={() => void onRegenerate()} disabled={submitting || !canReview}>
                     <Sparkles className="mr-2 h-4 w-4" />
                     สร้างใหม่
@@ -958,7 +981,7 @@ function SkuProductSearch({
 
 function SignSizePicker({ value, onChange }: { value: SignSize; onChange: (s: SignSize) => void }) {
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {SIGN_SIZES.map((s) => {
         const active = value === s.id;
         return (
@@ -966,18 +989,16 @@ function SignSizePicker({ value, onChange }: { value: SignSize; onChange: (s: Si
             key={s.id}
             type="button"
             onClick={() => onChange(s.id)}
-            className={`flex flex-col items-center rounded-lg border-2 px-1 py-2 transition
-              ${active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/40'}`}
+            className={`flex flex-col overflow-hidden rounded-lg border-2 transition
+              ${active ? 'border-primary bg-primary/5 ring-1 ring-primary/30' : 'border-border hover:border-primary/40 hover:bg-muted/40'}`}
           >
-            <div className="flex items-end justify-center" style={{ height: 60 }}>
-              <div
-                className={`rounded-sm border-2 transition
-                  ${active ? 'border-primary bg-primary/20' : 'border-muted-foreground/40 bg-muted/60'}`}
-                style={{ width: s.w, height: s.h }}
-              />
+            <div className="relative h-[72px] w-full bg-slate-50">
+              <ShelfSceneMini signSize={s.id} active={active} />
             </div>
-            <p className={`mt-1.5 text-[11px] font-semibold leading-tight ${active ? 'text-primary' : 'text-foreground'}`}>{s.label}</p>
-            <p className="text-[9px] text-muted-foreground leading-tight">{s.sub}</p>
+            <div className="px-1.5 py-1.5 text-center">
+              <p className={`text-[11px] font-semibold leading-tight ${active ? 'text-primary' : 'text-foreground'}`}>{s.label}</p>
+              <p className="text-[9px] text-muted-foreground leading-tight">{s.sub}</p>
+            </div>
           </button>
         );
       })}
