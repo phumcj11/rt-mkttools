@@ -860,14 +860,11 @@ function RequestDetail({
   onExport: () => Promise<void>;
   onRespond: () => Promise<void>;
 }) {
-  const [showFlatSign, setShowFlatSign] = useState(false);
   const flatPreviewUrl = detail?.latestDraft?.editableFields?._flatPreviewUrl;
   const hasFlatPreview = typeof flatPreviewUrl === 'string' && flatPreviewUrl.length > 0;
-  const previewSrc = showFlatSign && hasFlatPreview
-    ? resolveSignUrl(flatPreviewUrl)
-    : detail?.latestDraft
-      ? resolveSignUrl(detail.latestDraft.previewUrl)
-      : '';
+  const previewSrc = detail?.latestDraft
+    ? resolveSignUrl(hasFlatPreview ? flatPreviewUrl : detail.latestDraft.previewUrl)
+    : '';
 
   if (!detail) {
     return (
@@ -918,26 +915,16 @@ function RequestDetail({
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardHeader>
             <CardTitle className="text-base">Draft Preview</CardTitle>
-            {detail.latestDraft && (
-              <Badge variant="secondary" className="shrink-0">
-                {showFlatSign ? 'ป้ายเปล่า' : 'Mockup บนชั้นวาง'}
-              </Badge>
-            )}
           </CardHeader>
           <CardContent>
             {detail.latestDraft ? (
               <div className="space-y-3">
-                <div className="overflow-hidden rounded-xl border bg-slate-100">
-                  <img src={previewSrc} alt="Sign draft preview" className="w-full object-contain" />
+                <div className="overflow-hidden rounded-xl border bg-white">
+                  <img src={previewSrc} alt="Sign draft preview" className="mx-auto w-full max-h-[520px] object-contain" />
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {hasFlatPreview && (
-                    <Button variant="outline" size="sm" onClick={() => setShowFlatSign((v) => !v)}>
-                      {showFlatSign ? 'ดู Mockup บนชั้น' : 'ดูป้ายเปล่า'}
-                    </Button>
-                  )}
                   <Button variant="outline" size="sm" onClick={() => void onRegenerate()} disabled={submitting || !canReview}>
                     <Sparkles className="mr-2 h-4 w-4" />
                     สร้างใหม่
