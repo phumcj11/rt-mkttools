@@ -345,7 +345,7 @@ export class SignsService {
 
   private async findRequest(tenantId: number, id: number): Promise<SignRequest> {
     const request = await this.requests.findOne({ where: { tenantId, id } });
-    if (!request) throw new NotFoundException('Sign request not found');
+    if (!request) throw new NotFoundException('ไม่พบคำขอป้าย');
     return request;
   }
 

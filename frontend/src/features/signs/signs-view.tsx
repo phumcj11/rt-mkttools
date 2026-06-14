@@ -163,7 +163,7 @@ export function SignsView() {
     setSelected(detail);
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { skipDetail?: boolean }) => {
     setLoading(true);
     try {
       const [mine, reviewItems] = await Promise.all([
@@ -172,8 +172,12 @@ export function SignsView() {
       ]);
       setRequests(mine);
       setQueue(reviewItems);
-      if (selectedId) {
-        await openDetail(selectedId);
+      if (selectedId && !opts?.skipDetail) {
+        try {
+          await openDetail(selectedId);
+        } catch {
+          setSelected(null);
+        }
       }
     } finally {
       setLoading(false);
@@ -366,11 +370,14 @@ export function SignsView() {
     setSubmitting(true);
     try {
       await deleteSignRequest(id);
-      if (selected?.id === id) setSelected(null);
+      setSelected((prev) => (prev?.id === id ? null : prev));
+      setRequests((prev) => prev.filter((r) => r.id !== id));
+      setQueue((prev) => prev.filter((r) => r.id !== id));
       showSuccess('ลบแล้ว', 'ลบคำขอป้ายเรียบร้อย');
-      await refresh();
+      await refresh({ skipDetail: true });
     } catch (err) {
-      showError('ลบไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+      const msg = err instanceof Error ? err.message : 'กรุณาลองใหม่';
+      showError('ลบไม่สำเร็จ', msg.includes('not found') ? 'ไม่พบคำขอนี้ (อาจถูกลบไปแล้ว)' : msg);
     } finally {
       setSubmitting(false);
     }
