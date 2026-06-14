@@ -739,7 +739,7 @@ export function MediaView() {
               <p className="text-sm text-muted-foreground">{productEmptyMessage}</p>
             </div>
           ) : (
-            <div className="rounded-xl border divide-y overflow-hidden">
+            <div className="grid grid-cols-2 gap-3">
               {products.map((p) => {
                 const popResult = popResults[p.sku];
                 const isGenerating = generating === p.sku;
@@ -750,162 +750,170 @@ export function MediaView() {
                 const videoPlan = videoPlans[p.sku];
                 const briefOpen = openBriefSkus.has(p.sku);
                 const hasBrief = !!videoBriefs[p.sku]?.trim();
+                const popImageLabel = isGenerating
+                  ? 'กำลังสร้าง...'
+                  : popResult
+                    ? 'สร้างรูปใหม่'
+                    : 'สร้างรูป';
+                const videoButtonLabel = isVideoSubmitting
+                  || videoTask?.status === 'queued'
+                  || videoTask?.status === 'processing'
+                  ? 'กำลังสร้าง...'
+                  : 'สร้าง Video';
 
                 return (
-                  <div key={p.sku} className={`bg-background transition-colors ${isExpanded ? 'bg-violet-50/30' : ''}`}>
-                    {/* ── Main row ── */}
-                    <div className="flex items-center gap-3 px-4 py-3">
-                      {/* Thumbnail */}
-                      <div className="h-12 w-12 rounded-lg overflow-hidden bg-muted/50 shrink-0">
-                        {p.imageUrl ? (
-                          <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full items-center justify-center">
-                            <Image className="h-5 w-5 text-muted-foreground/40" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Name + meta */}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm leading-tight truncate">{p.name}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                          <span className="text-xs text-muted-foreground">฿{p.retailPrice}</span>
-                          {p.activePromotionCount ? (
-                            <span className="text-xs text-amber-600">{p.activePromotionCount} โปร</span>
-                          ) : null}
-                          {typeof p.effectiveGpPct === 'number' && p.effectiveGpPct > 0 ? (
-                            <span className="text-xs text-muted-foreground">GP {p.effectiveGpPct.toFixed(1)}%</span>
-                          ) : null}
-                          {popResult && (
-                            <span className="text-xs text-violet-600">
-                              ✓ {popResult.variations.filter((v) => v.imageUrl).length}/{popResult.variations.length} POP
-                            </span>
-                          )}
-                          {videoTask?.status === 'done' && (
-                            <span className="text-xs text-green-600">✓ Video</span>
-                          )}
-                          {(videoTask?.status === 'queued' || videoTask?.status === 'processing') && (
-                            <span className="text-xs text-blue-600 flex items-center gap-1">
-                              <Loader2 className="h-2.5 w-2.5 animate-spin" />Video...
-                            </span>
-                          )}
-                          {videoTask?.status === 'failed' && (
-                            <span className="text-xs text-red-500">✗ Video ล้มเหลว</span>
-                          )}
+                  <div
+                    key={p.sku}
+                    className={`flex flex-col rounded-xl border bg-background overflow-hidden transition-colors ${isExpanded ? 'bg-violet-50/30' : ''}`}
+                  >
+                    {/* ── Product image ── */}
+                    <div className="aspect-square w-full overflow-hidden bg-muted/50">
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt={p.name} className="h-full w-full object-contain" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center">
+                          <Image className="h-8 w-8 text-muted-foreground/40" />
                         </div>
-                      </div>
+                      )}
+                    </div>
 
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Brief toggle */}
-                        <Button
-                          size="sm"
-                          variant={briefOpen || hasBrief ? 'secondary' : 'ghost'}
-                          className="h-8 w-8 p-0"
-                          title="Video Brief"
-                          onClick={() => toggleBriefPanel(p.sku)}
-                        >
-                          <Pencil className={`h-3.5 w-3.5 ${hasBrief ? 'text-violet-600' : ''}`} />
-                        </Button>
-
-                        {/* POP */}
-                        <Button
-                          size="sm"
-                          variant={popResult ? 'outline' : 'default'}
-                          className="h-8 gap-1 text-xs px-3"
-                          disabled={isGenerating || !!generating}
-                          onClick={() => void handleGeneratePopStickers(p.sku)}
-                        >
-                          {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                          <span className="hidden sm:inline">{isGenerating ? 'สร้าง...' : popResult ? 'Regen' : 'POP'}</span>
-                        </Button>
-
-                        {/* Video */}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 gap-1 text-xs px-3"
-                          disabled={isVideoSubmitting || videoTask?.status === 'queued' || videoTask?.status === 'processing'}
-                          onClick={() => void handleVideoSubmit(p.sku)}
-                        >
-                          {isVideoSubmitting || videoTask?.status === 'queued' || videoTask?.status === 'processing'
-                            ? <Loader2 className="h-3 w-3 animate-spin" />
-                            : videoTask?.status === 'done'
-                              ? <CheckCircle2 className="h-3 w-3 text-green-500" />
-                              : <Video className="h-3 w-3" />}
-                          <span className="hidden sm:inline">Video</span>
-                        </Button>
-
-                        {/* Expand results */}
+                    {/* ── Name + meta ── */}
+                    <div className="px-2 pt-2">
+                      <p className="font-medium text-xs leading-snug line-clamp-2">{p.name}</p>
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-1">
+                        <span className="text-[10px] text-muted-foreground">฿{p.retailPrice}</span>
+                        {p.activePromotionCount ? (
+                          <span className="text-[10px] text-amber-600">{p.activePromotionCount} โปร</span>
+                        ) : null}
+                        {typeof p.effectiveGpPct === 'number' && p.effectiveGpPct > 0 ? (
+                          <span className="text-[10px] text-muted-foreground">GP {p.effectiveGpPct.toFixed(1)}%</span>
+                        ) : null}
                         {popResult && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 w-8 p-0"
-                            onClick={() => setExpandedSku(isExpanded ? null : p.sku)}
-                          >
-                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          </Button>
+                          <span className="text-[10px] text-violet-600">
+                            ✓ {popResult.variations.filter((v) => v.imageUrl).length}/{popResult.variations.length} POP
+                          </span>
+                        )}
+                        {videoTask?.status === 'done' && (
+                          <span className="text-[10px] text-green-600">✓ Video</span>
+                        )}
+                        {(videoTask?.status === 'queued' || videoTask?.status === 'processing') && (
+                          <span className="text-[10px] text-blue-600 flex items-center gap-0.5">
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />Video...
+                          </span>
+                        )}
+                        {videoTask?.status === 'failed' && (
+                          <span className="text-[10px] text-red-500">✗ Video ล้มเหลว</span>
                         )}
                       </div>
                     </div>
 
+                    {/* ── Action buttons ── */}
+                    <div className="flex flex-col gap-1.5 p-2">
+                      <Button
+                        size="sm"
+                        variant={popResult ? 'outline' : 'default'}
+                        className="h-8 w-full gap-1 text-xs"
+                        disabled={isGenerating || !!generating}
+                        onClick={() => void handleGeneratePopStickers(p.sku)}
+                      >
+                        {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                        {popImageLabel}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 w-full gap-1 text-xs"
+                        disabled={isVideoSubmitting || videoTask?.status === 'queued' || videoTask?.status === 'processing'}
+                        onClick={() => void handleVideoSubmit(p.sku)}
+                      >
+                        {isVideoSubmitting || videoTask?.status === 'queued' || videoTask?.status === 'processing'
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : videoTask?.status === 'done'
+                            ? <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            : <Video className="h-3 w-3" />}
+                        {videoButtonLabel}
+                      </Button>
+                    </div>
+
+                    {/* ── Secondary icons ── */}
+                    <div className="flex justify-center gap-2 pb-2">
+                      <Button
+                        size="sm"
+                        variant={briefOpen || hasBrief ? 'secondary' : 'ghost'}
+                        className="h-7 w-7 p-0"
+                        title="Video Brief"
+                        onClick={() => toggleBriefPanel(p.sku)}
+                      >
+                        <Pencil className={`h-3.5 w-3.5 ${hasBrief ? 'text-violet-600' : ''}`} />
+                      </Button>
+                      {popResult && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          title={isExpanded ? 'ย่อ POP' : 'ดู POP'}
+                          onClick={() => setExpandedSku(isExpanded ? null : p.sku)}
+                        >
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </Button>
+                      )}
+                    </div>
+
                     {/* ── Generating progress ── */}
                     {isGenerating && (
-                      <div className="mx-4 mb-3 rounded-lg bg-violet-50 border border-violet-100 px-3 py-2 text-xs text-violet-700 flex items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                        <span>กำลังสร้าง POP Sticker AI... (~1–2 นาที)</span>
+                      <div className="mx-2 mb-2 rounded-lg bg-violet-50 border border-violet-100 px-2 py-1.5 text-[10px] text-violet-700 flex items-center gap-1.5">
+                        <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                        <span>กำลังสร้าง POP... (~1–2 นาที)</span>
                       </div>
                     )}
 
                     {/* ── Video brief panel (collapsible) ── */}
                     {briefOpen && (
-                      <div className="mx-4 mb-3 rounded-lg border bg-muted/20 px-3 py-2.5 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-muted-foreground">Product Explainer (EN)</span>
-                          <div className="flex items-center gap-1.5">
+                      <div className="mx-2 mb-2 rounded-lg border bg-muted/20 px-2 py-2 space-y-2">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[10px] font-medium text-muted-foreground">Product Explainer (EN)</span>
+                          <div className="flex items-center gap-1">
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 text-[11px] gap-1"
+                              className="h-6 text-[10px] gap-0.5 px-1.5"
                               disabled={planLoading === p.sku}
                               onClick={() => void handleVideoPlan(p.sku)}
                             >
-                              {planLoading === p.sku ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
-                              ดูแผน AI
+                              {planLoading === p.sku ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Eye className="h-2.5 w-2.5" />}
+                              แผน
                             </Button>
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 text-[11px] gap-1"
+                              className="h-6 text-[10px] gap-0.5 px-1.5"
                               disabled={briefGenerating === p.sku}
                               onClick={() => void handleDraftVideoBrief(p)}
                             >
-                              {briefGenerating === p.sku ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                              AI Brief
+                              {briefGenerating === p.sku ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Sparkles className="h-2.5 w-2.5" />}
+                              Brief
                             </Button>
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className="h-6 w-6 p-0"
                               onClick={() => toggleBriefPanel(p.sku)}
                             >
-                              <X className="h-3.5 w-3.5" />
+                              <X className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>
                         <textarea
-                          className="min-h-[72px] w-full rounded-md border bg-background px-3 py-2 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-                          placeholder="Optional visual brief — mascot-led store commercial, product held by mascot"
+                          className="min-h-[60px] w-full rounded-md border bg-background px-2 py-1.5 text-[10px] resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                          placeholder="Optional visual brief — mascot-led store commercial"
                           value={videoBriefs[p.sku] ?? ''}
                           onChange={(e) => setVideoBriefs((prev) => ({ ...prev, [p.sku]: e.target.value }))}
                         />
                         {videoPlan && (
-                          <div className="rounded-md border bg-background px-3 py-2 text-[11px] space-y-2">
+                          <div className="rounded-md border bg-background px-2 py-1.5 text-[10px] space-y-1.5">
                             <p className="font-medium text-violet-700">
                               แผน AI ({videoPlan.locale.toUpperCase()}{videoPlan.hasMascot ? ' · Mascot' : ''})
                             </p>
@@ -913,7 +921,7 @@ export function MediaView() {
                               {videoPlan.steps.map((step) => (
                                 <span
                                   key={step.step}
-                                  className={`rounded px-1.5 py-0.5 ${
+                                  className={`rounded px-1 py-0.5 ${
                                     step.status === 'done' ? 'bg-green-100 text-green-800'
                                       : step.status === 'failed' ? 'bg-red-100 text-red-700'
                                         : 'bg-muted text-muted-foreground'
@@ -924,23 +932,23 @@ export function MediaView() {
                               ))}
                             </div>
                             {videoPlan.cutoutUrl && (
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5">
                                 <img
                                   src={resolveMediaUrl(videoPlan.cutoutUrl)}
                                   alt="cutout"
-                                  className="h-16 w-16 object-contain rounded border bg-white"
+                                  className="h-12 w-12 object-contain rounded border bg-white"
                                 />
-                                <span className="text-muted-foreground">Extracted product for mascot to hold</span>
+                                <span className="text-muted-foreground">Extracted product</span>
                               </div>
                             )}
                             <div>
                               <p className="font-medium">Benefits</p>
-                              <ul className="list-disc pl-4 text-muted-foreground">
+                              <ul className="list-disc pl-3 text-muted-foreground">
                                 {videoPlan.benefits.map((b) => <li key={b}>{b}</li>)}
                               </ul>
                             </div>
                             <div>
-                              <p className="font-medium">Script (EN voiceover)</p>
+                              <p className="font-medium">Script (EN)</p>
                               <p className="text-muted-foreground whitespace-pre-wrap">{videoPlan.script}</p>
                             </div>
                           </div>
@@ -950,21 +958,21 @@ export function MediaView() {
 
                     {/* ── Video status ── */}
                     {videoTask && (
-                      <div className={`mx-4 mb-3 rounded-lg px-3 py-2 text-xs border ${
+                      <div className={`mx-2 mb-2 rounded-lg px-2 py-1.5 text-[10px] border ${
                         videoTask.status === 'failed'
                           ? 'bg-red-50 border-red-200 text-red-700'
                           : videoTask.status === 'done'
                             ? 'bg-green-50 border-green-200 text-green-700'
                             : 'bg-blue-50 border-blue-200 text-blue-700'
                       }`}>
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">
                             Video {videoTask.status === 'queued' ? 'กำลังเข้าคิว' : videoTask.status === 'processing' ? 'กำลังประมวลผล' : videoTask.status === 'done' ? 'เสร็จแล้ว' : 'ล้มเหลว'}
                           </span>
                           <span className="tabular-nums">{videoProgress(videoTask)}%</span>
                         </div>
                         {(videoTask.status === 'queued' || videoTask.status === 'processing') && (
-                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
+                          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-blue-100">
                             <div
                               className="h-full rounded-full bg-blue-500 transition-all duration-700"
                               style={{ width: `${videoProgress(videoTask)}%` }}
@@ -973,37 +981,37 @@ export function MediaView() {
                         )}
                         {videoTask.error && <p className="mt-1 text-red-600">{videoTask.error}</p>}
                         {typeof videoTask.metadata?.promptSent === 'string' && (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-[11px] underline opacity-80">
-                              ดู Prompt ที่ส่งไป API ({String(videoTask.metadata?.mode ?? videoTask.provider)})
+                          <details className="mt-1.5">
+                            <summary className="cursor-pointer text-[10px] underline opacity-80">
+                              ดู Prompt ({String(videoTask.metadata?.mode ?? videoTask.provider)})
                             </summary>
-                            <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-black/5 p-2 text-[10px] text-foreground">
+                            <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-black/5 p-1.5 text-[9px] text-foreground">
                               {videoTask.metadata.promptSent}
                             </pre>
                             {typeof videoTask.metadata?.script === 'string' && (
-                              <p className="mt-1 text-[10px] opacity-80">
+                              <p className="mt-1 text-[9px] opacity-80">
                                 Script: {videoTask.metadata.script}
                               </p>
                             )}
                             {Array.isArray(videoTask.metadata?.benefits) && (
-                              <ul className="mt-1 list-disc pl-4 text-[10px] opacity-80">
+                              <ul className="mt-1 list-disc pl-3 text-[9px] opacity-80">
                                 {(videoTask.metadata.benefits as string[]).map((b) => <li key={b}>{b}</li>)}
                               </ul>
                             )}
                           </details>
                         )}
                         {videoPlayableUrl && videoTask.status === 'done' && (
-                          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start">
+                          <div className="mt-2 flex flex-col gap-1.5">
                             <video
                               key={videoPlayableUrl}
                               controls
                               preload="metadata"
                               playsInline
-                              className="w-full max-w-[220px] rounded-lg border bg-black aspect-[9/16] object-contain"
+                              className="w-full rounded-lg border bg-black aspect-[9/16] object-contain"
                               src={resolveMediaUrl(videoPlayableUrl)}
                             />
                             <a
-                              className="inline-flex text-xs underline self-start sm:mt-2"
+                              className="inline-flex text-[10px] underline self-start"
                               href={resolveMediaUrl(videoPlayableUrl)}
                               target="_blank"
                               rel="noreferrer"
@@ -1017,22 +1025,22 @@ export function MediaView() {
 
                     {/* ── POP results gallery ── */}
                     {isExpanded && popResult && (
-                      <div className="mx-4 mb-4 space-y-3">
-                        <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs space-y-1">
+                      <div className="mx-2 mb-3 space-y-2">
+                        <div className="rounded-lg bg-muted/40 px-2 py-1.5 text-[10px] space-y-0.5">
                           <p className="font-semibold">{popResult.copy.headline}</p>
                           <p className="text-muted-foreground">{popResult.copy.subheadline}</p>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {popResult.copy.benefits.map((b) => (
-                              <Badge key={b} variant="secondary" className="text-[10px]">✓ {b}</Badge>
+                              <Badge key={b} variant="secondary" className="text-[9px]">✓ {b}</Badge>
                             ))}
                             {popResult.copy.badges.map((b) => (
-                              <Badge key={b} variant="outline" className="text-[10px]">{b}</Badge>
+                              <Badge key={b} variant="outline" className="text-[9px]">{b}</Badge>
                             ))}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="grid grid-cols-2 gap-1.5">
                           {popResult.variations.map((v) => (
-                            <div key={v.styleId} className="space-y-1">
+                            <div key={v.styleId} className="space-y-0.5">
                               <div className="aspect-square rounded-lg overflow-hidden relative group" style={transparentPreviewBg}>
                                 {v.imageUrl ? (
                                   <>
@@ -1042,7 +1050,7 @@ export function MediaView() {
                                       className="h-full w-full object-contain"
                                     />
                                     {v.branded && (
-                                      <Badge className="absolute left-2 top-2 bg-violet-600 text-[10px] hover:bg-violet-600">
+                                      <Badge className="absolute left-1 top-1 bg-violet-600 text-[9px] hover:bg-violet-600 px-1 py-0">
                                         Branded
                                       </Badge>
                                     )}
@@ -1050,20 +1058,20 @@ export function MediaView() {
                                       <a
                                         href={resolveMediaUrl(v.imageUrl)}
                                         download={v.filename}
-                                        className="bg-white text-black rounded-full p-2"
+                                        className="bg-white text-black rounded-full p-1.5"
                                         onClick={(e) => e.stopPropagation()}
                                       >
-                                        <Download className="h-4 w-4" />
+                                        <Download className="h-3.5 w-3.5" />
                                       </a>
                                     </div>
                                   </>
                                 ) : (
-                                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                                  <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">
                                     สร้างไม่สำเร็จ
                                   </div>
                                 )}
                               </div>
-                              <p className="text-[10px] font-medium text-center truncate px-1">{v.styleName}</p>
+                              <p className="text-[9px] font-medium text-center truncate px-0.5">{v.styleName}</p>
                             </div>
                           ))}
                         </div>
