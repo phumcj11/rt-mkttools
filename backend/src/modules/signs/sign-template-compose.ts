@@ -34,7 +34,7 @@ export interface SignTemplateZones {
   };
 }
 
-/** Fractional layout zones per sign size — tuned for 100 Baht Shop–style templates. */
+/** Fractional layout zones per sign size — tuned for portrait standing templates. */
 const ZONES: Record<SignSize, SignTemplateZones> = {
   shelf_tag: {
     productImage: { left: 0.22, top: 0.08, width: 0.56, height: 0.80 },
@@ -66,6 +66,22 @@ const ZONES: Record<SignSize, SignTemplateZones> = {
     benefits: { x: 0.08, startY: 0.88, lineHeightRatio: 0.035, fontSizeRatio: 0.020, color: '#1f2937' },
   },
 };
+
+/** Landscape promo templates need separate zones; using portrait zones causes header collisions. */
+const LANDSCAPE_ZONES: SignTemplateZones = {
+  productImage: { left: 0.10, top: 0.42, width: 0.36, height: 0.40 },
+  productName: { x: 0.66, y: 0.30, anchor: 'middle', fontSizeRatio: 0.034, color: '#111827', fontWeight: 800, maxChars: 42 },
+  price: { x: 0.66, y: 0.55, anchor: 'middle', fontSizeRatio: 0.13, color: '#dc2626', fontWeight: 900 },
+  headline: { x: 0.66, y: 0.38, anchor: 'middle', fontSizeRatio: 0.040, color: '#ffffff', fontWeight: 900, maxChars: 34 },
+  promo: { x: 0.66, y: 0.70, anchor: 'middle', fontSizeRatio: 0.030, color: '#a75a2b', fontWeight: 800, maxChars: 28 },
+  benefits: { x: 0.54, startY: 0.76, lineHeightRatio: 0.055, fontSizeRatio: 0.026, color: '#1f2937' },
+};
+
+function zonesForCanvas(signSize: SignSize, w: number, h: number): SignTemplateZones {
+  const aspect = w / Math.max(1, h);
+  if (aspect > 1.15 && signSize !== 'shelf_tag') return LANDSCAPE_ZONES;
+  return ZONES[signSize] ?? ZONES.a6;
+}
 
 function textAnchor(anchor: TextZone['anchor']): string {
   if (anchor === 'middle') return 'middle';
@@ -148,7 +164,7 @@ export function renderZoneTextOverlay(
   escape: (s: string) => string,
   defaultHeadline: string,
 ): string {
-  const zones = ZONES[request.signSize] ?? ZONES.a6;
+  const zones = zonesForCanvas(request.signSize, w, h);
   const product = String(fields.productName ?? request.productName);
   const price = String(fields.price ?? (request.price != null ? `฿${request.price}` : ''));
   const headline = String(fields.headline ?? defaultHeadline);
@@ -220,7 +236,7 @@ export async function composeUploadedTemplate(
   const meta = await sharp(templatePath).metadata();
   const w = meta.width ?? 1200;
   const h = meta.height ?? 1400;
-  const zones = ZONES[request.signSize] ?? ZONES.a6;
+  const zones = zonesForCanvas(request.signSize, w, h);
 
   const format = getSignFormatByTypeSize(request.signType, request.signSize);
   const activeSlots = new Set<SignSlot>(format?.slots ?? ['productImage']);

@@ -14,6 +14,31 @@ export interface ImagePipelineResult {
   buffer: Buffer;
   enhanced: boolean;
   cutoutUsed: boolean;
+  localCropUsed: boolean;
+}
+
+async function cropLikelyProductCard(input: Buffer): Promise<Buffer> {
+  const meta = await sharp(input).metadata();
+  const w = meta.width ?? 0;
+  const h = meta.height ?? 0;
+  if (w < 240 || h < 240) return input;
+
+  // Product cache images can arrive as catalog cards with SKU/header text.
+  // Crop the lower-center product area before compositing to avoid printing catalog metadata.
+  const aspect = w / Math.max(1, h);
+  const isLikelyCard = aspect > 1.1 || w > h * 1.05;
+  if (!isLikelyCard) return input;
+
+  const cropW = Math.round(w * 0.42);
+  const cropH = Math.round(h * 0.56);
+  const left = Math.max(0, Math.round((w - cropW) / 2));
+  const top = Math.max(0, Math.round(h * 0.30));
+
+  return sharp(input)
+    .extract({ left, top, width: Math.min(cropW, w - left), height: Math.min(cropH, h - top) })
+    .trim({ background: '#ffffff', threshold: 18 })
+    .png()
+    .toBuffer();
 }
 
 /**
@@ -95,15 +120,23 @@ export async function runImagePipeline(
 ): Promise<ImagePipelineResult> {
   let buffer = rawBuffer;
   let cutoutUsed = false;
+  let localCropUsed = false;
+
+  try {
+    buffer = await cropLikelyProductCard(buffer);
+    localCropUsed = buffer !== rawBuffer;
+  } catch {
+    buffer = rawBuffer;
+  }
 
   // Step 2 — die-cut (optional)
   if (n8nWebhook?.startsWith('http')) {
     try {
-      buffer = await callN8nCutout(n8nWebhook, rawBuffer, sku);
+      buffer = await callN8nCutout(n8nWebhook, buffer, sku);
       cutoutUsed = true;
     } catch {
       // fallback to original — non-fatal
-      buffer = rawBuffer;
+      buffer = localCropUsed ? buffer : rawBuffer;
     }
   }
 
@@ -118,7 +151,7 @@ export async function runImagePipeline(
     }
   }
 
-  return { buffer, enhanced, cutoutUsed };
+  return { buffer, enhanced, cutoutUsed, localCropUsed };
 }
 
 /** Load product image from local file path (assets stored on disk) */
