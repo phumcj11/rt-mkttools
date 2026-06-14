@@ -435,13 +435,18 @@ export function saveVideoSettings(body: { video_provider_default?: VideoProvider
 export interface N8nSettings {
   n8n_configured: boolean;
   n8n_webhook_url_preview: string | null;
+  n8n_promo_webhook_url: string;
+  n8n_sign_cutout_webhook_url: string;
 }
 
 export function getN8nSettings() {
   return apiRequest<N8nSettings>('/settings/system/n8n');
 }
 
-export function saveN8nSettings(body: { n8n_promo_webhook_url: string }) {
+export function saveN8nSettings(body: {
+  n8n_promo_webhook_url?: string;
+  n8n_sign_cutout_webhook_url?: string;
+}) {
   return apiRequest<{ ok: boolean }>('/settings/system/n8n', { method: 'PATCH', body });
 }
 

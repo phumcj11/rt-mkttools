@@ -78,12 +78,15 @@ function truncate(text: string, max?: number): string {
   return `${text.slice(0, max - 1)}…`;
 }
 
+export type TextStyle = 'normal' | 'headline' | 'price' | 'cta';
+
 function textEl(
   zone: TextZone | undefined,
   value: string,
   w: number,
   h: number,
   escape: (s: string) => string,
+  style: TextStyle = 'normal',
 ): string {
   if (!zone || !value.trim()) return '';
   const x = Math.round(w * zone.x);
@@ -92,6 +95,48 @@ function textEl(
   const weight = zone.fontWeight ?? 700;
   const anchor = textAnchor(zone.anchor);
   const safe = escape(truncate(value.trim(), zone.maxChars));
+
+  if (style === 'headline') {
+    // White text with dark stroke for readability on any background
+    const stroke = Math.max(1, Math.round(fontSize * 0.045));
+    return [
+      `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial Black, Arial, sans-serif"`,
+      ` font-size="${fontSize}" font-weight="900" fill="#000000" opacity="0.25"`,
+      ` dx="2" dy="2">${safe}</text>`,
+      `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial Black, Arial, sans-serif"`,
+      ` font-size="${fontSize}" font-weight="900" stroke="#000000" stroke-width="${stroke}"`,
+      ` stroke-linejoin="round" fill="${zone.color}">${safe}</text>`,
+    ].join('');
+  }
+
+  if (style === 'price') {
+    // Extra bold, slight upscale, soft shadow
+    const shadow = Math.max(2, Math.round(fontSize * 0.05));
+    return [
+      `<text x="${x + shadow}" y="${y + shadow}" text-anchor="${anchor}"`,
+      ` font-family="Arial Black, Arial, sans-serif" font-size="${fontSize}" font-weight="900"`,
+      ` fill="rgba(0,0,0,0.20)">${safe}</text>`,
+      `<text x="${x}" y="${y}" text-anchor="${anchor}"`,
+      ` font-family="Arial Black, Arial, sans-serif" font-size="${fontSize}" font-weight="900"`,
+      ` fill="${zone.color}">${safe}</text>`,
+    ].join('');
+  }
+
+  if (style === 'cta') {
+    // Uppercase pill-badge style
+    const pad = Math.round(fontSize * 0.55);
+    const pillH = Math.round(fontSize * 1.4);
+    const pillW = Math.round(safe.length * fontSize * 0.65 + pad * 2);
+    const pillX = anchor === 'middle' ? x - Math.round(pillW / 2) : x;
+    const pillY = y - Math.round(pillH * 0.8);
+    return [
+      `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${Math.round(pillH * 0.35)}" fill="${zone.color}" opacity="0.92"/>`,
+      `<text x="${x}" y="${y}" text-anchor="${anchor}"`,
+      ` font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(fontSize * 0.82)}" font-weight="900"`,
+      ` fill="#ffffff" letter-spacing="2">${safe}</text>`,
+    ].join('');
+  }
+
   return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="${weight}" fill="${zone.color}">${safe}</text>`;
 }
 
@@ -128,10 +173,10 @@ export function renderZoneTextOverlay(
   const showPromo = activeSlots.has('promotion') && (request.signType === 'promotion' || Boolean(promo.trim()));
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-  ${activeSlots.has('productName') ? textEl(zones.productName, product, w, h, escape) : ''}
-  ${activeSlots.has('price') ? textEl(zones.price, price, w, h, escape) : ''}
-  ${activeSlots.has('headline') ? textEl(zones.headline, headline, w, h, escape) : ''}
-  ${showPromo ? textEl(zones.promo, promo, w, h, escape) : ''}
+  ${activeSlots.has('productName') ? textEl(zones.productName, product, w, h, escape, 'normal') : ''}
+  ${activeSlots.has('price') ? textEl(zones.price, price, w, h, escape, 'price') : ''}
+  ${activeSlots.has('headline') ? textEl(zones.headline, headline, w, h, escape, 'headline') : ''}
+  ${showPromo ? textEl(zones.promo, promo, w, h, escape, 'cta') : ''}
   ${benefitText}
 </svg>`;
 }

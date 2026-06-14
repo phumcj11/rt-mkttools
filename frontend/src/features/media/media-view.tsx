@@ -141,6 +141,7 @@ export function MediaView() {
   const [klingKey, setKlingKey] = useState('');
   const [grokKey, setGrokKey] = useState('');
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  const [n8nSignCutoutUrl, setN8nSignCutoutUrl] = useState('');
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
 
@@ -588,8 +589,11 @@ export function MediaView() {
         kling_api_key: klingKey.trim() || undefined,
         grok_api_key: grokKey.trim() || undefined,
       });
-      if (n8nWebhookUrl.trim()) {
-        await saveN8nSettings({ n8n_promo_webhook_url: n8nWebhookUrl.trim() });
+      if (n8nWebhookUrl.trim() || n8nSignCutoutUrl.trim()) {
+        await saveN8nSettings({
+          ...(n8nWebhookUrl.trim() ? { n8n_promo_webhook_url: n8nWebhookUrl.trim() } : {}),
+          ...(n8nSignCutoutUrl.trim() ? { n8n_sign_cutout_webhook_url: n8nSignCutoutUrl.trim() } : {}),
+        });
       }
       setSettingsMsg('บันทึกสำเร็จ');
       setDriveFolderId('');
@@ -598,6 +602,7 @@ export function MediaView() {
       setKlingKey('');
       setGrokKey('');
       setN8nWebhookUrl('');
+      setN8nSignCutoutUrl('');
       const [ds, vs, n8n] = await Promise.all([getDriveSettings(), getVideoSettings(), getN8nSettings()]);
       setDriveSettings(ds);
       setVideoSettings(vs);
@@ -1544,8 +1549,17 @@ export function MediaView() {
                   </p>
                 )}
                 <div className="space-y-1.5">
-                  <Label>Webhook URL</Label>
+                  <Label>Webhook URL — Promo Poster cutout</Label>
                   <Input placeholder="https://your-n8n.com/webhook/promo-cutout" value={n8nWebhookUrl} onChange={(e) => setN8nWebhookUrl(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Webhook URL — Sign AI Die-cut</Label>
+                  <p className="text-xs text-muted-foreground">ใช้ตัดพื้นหลังสินค้าก่อนวางบนป้าย (Sign Generator)</p>
+                  <Input
+                    placeholder="https://your-n8n.com/webhook/sign-cutout"
+                    value={n8nSignCutoutUrl || (n8nSettings?.n8n_sign_cutout_webhook_url ?? '')}
+                    onChange={(e) => setN8nSignCutoutUrl(e.target.value)}
+                  />
                 </div>
               </div>
             </details>

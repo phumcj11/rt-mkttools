@@ -28,6 +28,9 @@ import { UploadTemplateDto } from './dto/upload-template.dto';
 import { craftSignImagePrompt, gptImageSizeForSign } from './sign-gpt-image';
 import { composeUploadedTemplate } from './sign-template-compose';
 import { getSignFormatByTypeSize, listSignFormats } from './sign-format-catalog';
+import { runImagePipeline } from './sign-image-pipeline';
+import { runCopyPipeline } from './sign-copy-pipeline';
+import { SystemSettingsService } from '../system-settings/system-settings.service';
 
 const SIGN_TYPE_LABELS: Record<string, string> = {
   price_tag: 'ป้ายราคา',
@@ -84,6 +87,7 @@ export class SignsService {
     private readonly openai: OpenAiService,
     private readonly notifications: NotificationsService,
     private readonly drive: DriveService,
+    private readonly settings: SystemSettingsService,
   ) {
     fs.mkdirSync(this.uploadDir, { recursive: true });
   }
@@ -386,67 +390,108 @@ export class SignsService {
     }
   }
 
-  private async processAiAndDraft(request: SignRequest, userId: number | null): Promise<void> {
-    const ai = await this.generateAiResult(request);
+  /**
+   * Full sign generation pipeline — runs step-by-step:
+   *   Step 1 · Fetch product image (assets → catalog/ERP)
+   *   Step 2 · Die-cut via n8n (optional, falls back to raw image)
+   *   Step 3 · Enhance product image with drop shadow for 3-D depth
+   *   Step 4 · AI copywriting — headline / promo / CTA / benefits (structured JSON)
+   *   Step 5 · Persist AI result + build fields map
+   *   Step 6 · Composite onto template (product zone + text effects)
+   *   Step 7 · Save draft + transition to pending_review
+   */
+  private async processSignPipeline(request: SignRequest, userId: number | null): Promise<void> {
+    this.logger.log(`[SignPipeline] START ${request.requestNo}`);
+
+    // Steps 1–3 — image
+    const n8nWebhook = await this.settings.get('n8n_sign_cutout_webhook_url');
+    const rawBuffer = await this.resolveProductImageBuffer(request);
+    let productBuffer: Buffer | null = null;
+    if (rawBuffer) {
+      try {
+        const imgResult = await runImagePipeline(rawBuffer, request.sku ?? '', n8nWebhook, true);
+        productBuffer = imgResult.buffer;
+        this.logger.log(
+          `[SignPipeline] image ready: cutout=${imgResult.cutoutUsed} enhance=${imgResult.enhanced}`,
+        );
+      } catch (err) {
+        this.logger.warn(`[SignPipeline] image pipeline failed, using raw: ${String(err)}`);
+        productBuffer = rawBuffer;
+      }
+    }
+
+    // Step 4 — copy
+    const copy = await runCopyPipeline(request, {
+      complete: (system, user) => this.openai.complete(system, user),
+    });
+    this.logger.log(`[SignPipeline] copy source=${copy.source} model=${copy.model}`);
+
+    // Step 5 — persist AI result
+    const aiData: Partial<SignAiResult> = {
+      extractedProductName: request.productName,
+      extractedPrice: request.price != null ? String(request.price) : null,
+      extractedPromotion: copy.promotion || request.promotion,
+      headline: copy.headline,
+      benefits: copy.benefits,
+      rawText: copy.model,
+      model: copy.model,
+    };
     const savedAi = await this.aiResults.save(this.aiResults.create({
       tenantId: request.tenantId,
       requestId: request.id,
-      ...ai,
+      ...aiData,
     }));
-    const existing = await this.drafts.findOne({ where: { tenantId: request.tenantId, requestId: request.id }, order: { version: 'DESC' } });
-    await this.createDraft(request, userId, this.fieldsFromRequest(request, savedAi), (existing?.version ?? 0) + 1);
+
+    const fields = this.fieldsFromRequest(request, savedAi);
+    if (copy.ctaText) (fields as Record<string, unknown>)._ctaText = copy.ctaText;
+
+    const existing = await this.drafts.findOne({
+      where: { tenantId: request.tenantId, requestId: request.id },
+      order: { version: 'DESC' },
+    });
+
+    // Steps 6–7 — render + save draft (passing pre-processed productBuffer)
+    await this.createDraftWithBuffer(request, userId, fields, (existing?.version ?? 0) + 1, productBuffer);
     await this.transition(request, 'pending_review', 'AI สร้าง Draft แล้ว รอ Marketing ตรวจสอบ');
+    this.logger.log(`[SignPipeline] DONE ${request.requestNo}`);
   }
 
-  private async generateAiResult(request: SignRequest): Promise<Partial<SignAiResult>> {
-    const userBenefits = this.parseBenefitsText(request.benefits);
-    const fallback = {
-      extractedProductName: request.productName,
-      extractedPrice: request.price != null ? String(request.price) : null,
-      extractedPromotion: request.promotion,
-      headline: request.headline ?? this.defaultHeadline(request),
-      benefits: userBenefits.length > 0 ? userBenefits : this.defaultBenefits(request),
-      rawText: 'AI fallback generated from branch request fields.',
-      model: 'fallback',
+  /** @deprecated replaced by processSignPipeline */
+  private async processAiAndDraft(request: SignRequest, userId: number | null): Promise<void> {
+    return this.processSignPipeline(request, userId);
+  }
+
+  /** Create draft with a pre-processed product image buffer (used by pipeline). */
+  private async createDraftWithBuffer(
+    request: SignRequest,
+    userId: number | null,
+    fields: Record<string, unknown>,
+    version: number,
+    productBuffer: Buffer | null,
+  ): Promise<SignDraft> {
+    const flatFilename = `sign-${request.requestNo}-draft-v${version}.png`;
+    const flat = await this.writePngWithBuffer(request, fields, flatFilename, productBuffer);
+    const editableFields = {
+      ...fields,
+      _flatPreviewUrl: flat.url,
+      _renderSource: flat.renderSource,
+      _gptModel: flat.gptModel,
+      _gptPromptUsed: flat.gptPromptUsed,
+      _gptError: flat.gptError,
+      _matchedTemplateId: flat.matchedTemplateId,
+      _matchedTemplateName: flat.matchedTemplateName,
+      _formatId: flat.formatId,
     };
-
-    if (request.headline && userBenefits.length > 0) {
-      return { ...fallback, model: 'user_provided' };
-    }
-
-    try {
-      const result = await this.openai.complete(
-        'You are an AI sign designer for a Thai retail chain. Return compact JSON only.',
-        [
-          `Create data for a retail sign request.`,
-          `Product: ${request.productName}`,
-          `SKU: ${request.sku ?? '-'}`,
-          `Price: ${request.price ?? '-'}`,
-          `Promotion: ${request.promotion ?? '-'}`,
-          `Sign type: ${SIGN_TYPE_LABELS[request.signType]}`,
-          `Size: ${SIGN_SIZE_LABELS[request.signSize]}`,
-          `Notes: ${request.notes ?? '-'}`,
-          request.headline ? `Preferred headline (use exactly): ${request.headline}` : '',
-          userBenefits.length > 0 ? `Preferred benefits (use these): ${userBenefits.join('; ')}` : '',
-          'Return JSON with extractedProductName, extractedPrice, extractedPromotion, headline, benefits array, rawText.',
-        ].filter(Boolean).join('\n'),
-      );
-      const parsed = this.parseJsonObject(result.content);
-      return {
-        extractedProductName: this.asString(parsed.extractedProductName) || fallback.extractedProductName,
-        extractedPrice: this.asString(parsed.extractedPrice) || fallback.extractedPrice,
-        extractedPromotion: this.asString(parsed.extractedPromotion) || fallback.extractedPromotion,
-        headline: request.headline || this.asString(parsed.headline) || fallback.headline,
-        benefits: userBenefits.length > 0
-          ? userBenefits
-          : Array.isArray(parsed.benefits) ? parsed.benefits.map(String).slice(0, 4) : fallback.benefits,
-        rawText: this.asString(parsed.rawText) || result.content,
-        model: result.model,
-      };
-    } catch (err) {
-      this.logger.warn(`AI sign extraction failed: ${err instanceof Error ? err.message : String(err)}`);
-      return fallback;
-    }
+    return this.drafts.save(this.drafts.create({
+      tenantId: request.tenantId,
+      requestId: request.id,
+      version,
+      templateId: flat.matchedTemplateId ? `tpl_${flat.matchedTemplateId}` : this.templateFor(request),
+      previewUrl: flat.url,
+      previewPath: flat.localPath,
+      editableFields,
+      createdBy: userId,
+    }));
   }
 
   private async createDraft(
@@ -480,10 +525,31 @@ export class SignsService {
     }));
   }
 
+  /** Render PNG with an already-processed productBuffer (pipeline path). */
+  private async writePngWithBuffer(
+    request: SignRequest,
+    fields: Record<string, unknown>,
+    filename: string,
+    productBuffer: Buffer | null,
+  ): Promise<SignRenderResult> {
+    return this.writePngCore(request, fields, filename, productBuffer, true);
+  }
+
   private async writePng(
     request: SignRequest,
     fields: Record<string, unknown>,
     filename: string,
+  ): Promise<SignRenderResult> {
+    const productBuffer = await this.resolveProductImageBuffer(request);
+    return this.writePngCore(request, fields, filename, productBuffer, false);
+  }
+
+  private async writePngCore(
+    request: SignRequest,
+    fields: Record<string, unknown>,
+    filename: string,
+    productBuffer: Buffer | null,
+    skipGptImage: boolean,
   ): Promise<SignRenderResult> {
     const localPath = path.join(this.uploadDir, filename);
 
@@ -513,7 +579,7 @@ export class SignsService {
       const tplPath = path.join(this.uploadDir, uploadedTpl.filename);
       if (fs.existsSync(tplPath)) {
         let gptError: string | undefined;
-        const useGptImage = process.env.SIGN_USE_GPT_IMAGE === '1';
+        const useGptImage = !skipGptImage && process.env.SIGN_USE_GPT_IMAGE === '1';
 
         if (useGptImage) {
           const gptResult = await this.tryWriteGptTemplateImage(request, fields, tplPath, localPath);
@@ -531,7 +597,6 @@ export class SignsService {
           gptError = gptResult?.error;
         }
 
-        const productBuffer = await this.resolveProductImageBuffer(request);
         await composeUploadedTemplate(
           tplPath,
           localPath,

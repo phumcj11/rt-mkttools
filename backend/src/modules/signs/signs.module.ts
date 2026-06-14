@@ -14,6 +14,7 @@ import {
 import { AiModule } from '../ai/ai.module';
 import { MediaModule } from '../media/media.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { SystemSettingsModule } from '../system-settings/system-settings.module';
 import { SignsController } from './signs.controller';
 import { SignsService } from './signs.service';
 
@@ -26,6 +27,7 @@ import { SignsService } from './signs.service';
     AiModule,
     MediaModule,
     NotificationsModule,
+    SystemSettingsModule,
   ],
   controllers: [SignsController],
   providers: [SignsService],
