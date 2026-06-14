@@ -121,6 +121,36 @@ export function resolveSignUrl(path: string): string {
   return `${api}/signs/serve/${path.replace(/^\//, '')}`;
 }
 
+export function listSignFormats() {
+  return apiRequest<SignFormatDefinition[]>('/signs/formats');
+}
+
+export type SignSlot = 'productImage' | 'productName' | 'price' | 'headline' | 'promotion' | 'benefits';
+
+export type BranchInputField =
+  | 'branchName'
+  | 'requesterName'
+  | 'sku'
+  | 'productName'
+  | 'price'
+  | 'promotion'
+  | 'headline'
+  | 'benefits'
+  | 'notes'
+  | 'assets';
+
+export interface SignFormatDefinition {
+  id: string;
+  label: string;
+  signType: SignType;
+  signSize: SignSize;
+  orientation: 'portrait' | 'landscape';
+  slots: SignSlot[];
+  branchRequired: BranchInputField[];
+  branchOptional: BranchInputField[];
+  aiFillSlots: SignSlot[];
+}
+
 export function listSignRequests(status?: SignRequestStatus) {
   const query = status ? `?status=${encodeURIComponent(status)}` : '';
   return apiRequest<SignRequestSummary[]>(`/signs${query}`);

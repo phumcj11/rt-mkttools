@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { SignRequest, SignSize } from '../../database/entities';
+import { getSignFormatByTypeSize, SignSlot } from './sign-format-catalog';
 
 export interface RectZone {
   left: number;
@@ -111,7 +112,10 @@ export function renderZoneTextOverlay(
     ? fields.benefits.map((v) => String(v)).filter(Boolean).slice(0, 3)
     : [];
 
-  const benefitText = zones.benefits && benefits.length > 0 && request.signType === 'benefit_card'
+  const format = getSignFormatByTypeSize(request.signType, request.signSize);
+  const activeSlots = new Set<SignSlot>(format?.slots ?? ['productImage', 'productName', 'price', 'headline']);
+
+  const benefitText = zones.benefits && benefits.length > 0 && activeSlots.has('benefits')
     ? benefits.map((b, i) => {
         const bz = zones.benefits!;
         const x = Math.round(w * bz.x);
@@ -121,12 +125,12 @@ export function renderZoneTextOverlay(
       }).join('')
     : '';
 
-  const showPromo = request.signType === 'promotion' || Boolean(promo.trim());
+  const showPromo = activeSlots.has('promotion') && (request.signType === 'promotion' || Boolean(promo.trim()));
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-  ${textEl(zones.productName, product, w, h, escape)}
-  ${textEl(zones.price, price, w, h, escape)}
-  ${textEl(zones.headline, headline, w, h, escape)}
+  ${activeSlots.has('productName') ? textEl(zones.productName, product, w, h, escape) : ''}
+  ${activeSlots.has('price') ? textEl(zones.price, price, w, h, escape) : ''}
+  ${activeSlots.has('headline') ? textEl(zones.headline, headline, w, h, escape) : ''}
   ${showPromo ? textEl(zones.promo, promo, w, h, escape) : ''}
   ${benefitText}
 </svg>`;
@@ -173,9 +177,12 @@ export async function composeUploadedTemplate(
   const h = meta.height ?? 1400;
   const zones = ZONES[request.signSize] ?? ZONES.a6;
 
+  const format = getSignFormatByTypeSize(request.signType, request.signSize);
+  const activeSlots = new Set<SignSlot>(format?.slots ?? ['productImage']);
+
   const layers: sharp.OverlayOptions[] = [];
 
-  if (productBuffer) {
+  if (productBuffer && activeSlots.has('productImage')) {
     const placed = await compositeProductInZone(productBuffer, w, h, zones.productImage);
     layers.push(placed);
   }

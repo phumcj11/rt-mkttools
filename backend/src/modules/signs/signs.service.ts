@@ -27,6 +27,7 @@ import { UpdateSignDraftDto } from './dto/update-sign-draft.dto';
 import { UploadTemplateDto } from './dto/upload-template.dto';
 import { craftSignImagePrompt, gptImageSizeForSign } from './sign-gpt-image';
 import { composeUploadedTemplate } from './sign-template-compose';
+import { getSignFormatByTypeSize, listSignFormats } from './sign-format-catalog';
 
 const SIGN_TYPE_LABELS: Record<string, string> = {
   price_tag: 'ป้ายราคา',
@@ -60,6 +61,9 @@ interface SignRenderResult {
   gptModel?: string;
   gptPromptUsed?: string;
   gptError?: string;
+  matchedTemplateId?: number;
+  matchedTemplateName?: string;
+  formatId?: string;
 }
 
 @Injectable()
@@ -82,6 +86,10 @@ export class SignsService {
     private readonly drive: DriveService,
   ) {
     fs.mkdirSync(this.uploadDir, { recursive: true });
+  }
+
+  async listFormats() {
+    return listSignFormats();
   }
 
   async listTemplates(tenantId: number): Promise<SignTemplate[]> {
@@ -152,14 +160,6 @@ export class SignsService {
 
     let signType = dto.signType;
     let signSize = dto.signSize;
-    let templateId: number | null = dto.templateId ?? null;
-
-    if (templateId) {
-      const tpl = await this.templates.findOne({ where: { id: templateId, tenantId, isActive: true } });
-      if (!tpl) throw new BadRequestException('ไม่พบ Template ที่เลือก');
-      signType = tpl.signType ?? signType;
-      signSize = tpl.signSize ?? signSize;
-    }
 
     const request = await this.requests.save(this.requests.create({
       tenantId,
@@ -174,7 +174,7 @@ export class SignsService {
       promotion: dto.promotion?.trim() || catalog?.promotionText || null,
       signType,
       signSize,
-      templateId,
+      templateId: null,
       headline: dto.headline?.trim() || null,
       benefits: dto.benefits?.trim() || null,
       notes: dto.notes?.trim() || null,
@@ -313,12 +313,16 @@ export class SignsService {
 
     request.reviewerId = reviewerId;
     request.status = this.statusForDecision(dto.decision);
-    request.statusNote = dto.note?.trim() || null;
     request.approvedAt = dto.decision === 'approve' ? new Date() : request.approvedAt;
+    if (dto.decision === 'approve') {
+      request.statusNote = dto.note?.trim() || 'อนุมัติแล้ว — รอ Export ไฟล์';
+    } else {
+      request.statusNote = dto.note?.trim() || null;
+    }
     await this.requests.save(request);
 
     if (dto.decision === 'approve') {
-      await this.exportFinal(tenantId, id);
+      await this.notifyRequester(request, 'คำขอป้ายได้รับการอนุมัติ — รอ Marketing export ไฟล์');
     } else {
       await this.notifyRequester(request, dto.decision === 'reject' ? 'คำขอป้ายถูก Reject' : 'คำขอป้ายต้องการข้อมูลเพิ่ม');
     }
@@ -460,12 +464,15 @@ export class SignsService {
       _gptModel: flat.gptModel,
       _gptPromptUsed: flat.gptPromptUsed,
       _gptError: flat.gptError,
+      _matchedTemplateId: flat.matchedTemplateId,
+      _matchedTemplateName: flat.matchedTemplateName,
+      _formatId: flat.formatId,
     };
     return this.drafts.save(this.drafts.create({
       tenantId: request.tenantId,
       requestId: request.id,
       version,
-      templateId: this.templateFor(request),
+      templateId: flat.matchedTemplateId ? `tpl_${flat.matchedTemplateId}` : this.templateFor(request),
       previewUrl: flat.url,
       previewPath: flat.localPath,
       editableFields,
@@ -480,27 +487,27 @@ export class SignsService {
   ): Promise<SignRenderResult> {
     const localPath = path.join(this.uploadDir, filename);
 
-    // Look for uploaded template — prefer explicit choice, then type+size match
+    // Auto-match uploaded template by signType + signSize (branch never picks template)
     let uploadedTpl: SignTemplate | null = null;
+    const format = getSignFormatByTypeSize(request.signType, request.signSize);
     try {
-      if (request.templateId) {
-        uploadedTpl = await this.templates.findOne({
-          where: { id: request.templateId, tenantId: request.tenantId, isActive: true },
-        });
-      }
-      if (!uploadedTpl) {
-        uploadedTpl = await this.templates.findOne({
-          where: [
-            { tenantId: request.tenantId, signType: request.signType, signSize: request.signSize, isActive: true },
-            { tenantId: request.tenantId, signType: request.signType, signSize: IsNull(), isActive: true },
-            { tenantId: request.tenantId, signType: IsNull(), signSize: request.signSize, isActive: true },
-          ],
-          order: { createdAt: 'DESC' },
-        });
-      }
+      uploadedTpl = await this.templates.findOne({
+        where: [
+          { tenantId: request.tenantId, signType: request.signType, signSize: request.signSize, isActive: true },
+          { tenantId: request.tenantId, signType: request.signType, signSize: IsNull(), isActive: true },
+          { tenantId: request.tenantId, signType: IsNull(), signSize: request.signSize, isActive: true },
+        ],
+        order: { createdAt: 'DESC' },
+      });
     } catch (err) {
       this.logger.warn(`Template lookup skipped: ${err instanceof Error ? err.message : String(err)}`);
     }
+
+    const matchedMeta = {
+      matchedTemplateId: uploadedTpl?.id,
+      matchedTemplateName: uploadedTpl?.name,
+      formatId: format?.id,
+    };
 
     if (uploadedTpl) {
       const tplPath = path.join(this.uploadDir, uploadedTpl.filename);
@@ -518,6 +525,7 @@ export class SignsService {
               renderSource: 'gpt_image',
               gptModel: gptResult.model,
               gptPromptUsed: gptResult.prompt,
+              ...matchedMeta,
             };
           }
           gptError = gptResult?.error;
@@ -539,6 +547,7 @@ export class SignsService {
           localPath,
           renderSource: 'template_overlay',
           gptError,
+          ...matchedMeta,
         };
       }
     }
@@ -546,7 +555,7 @@ export class SignsService {
     // Fall back to built-in SVG template
     const svg = this.renderSvg(request, fields);
     await sharp(Buffer.from(svg)).png().toFile(localPath);
-    return { filename, url: `/signs/serve/${filename}`, localPath, renderSource: 'builtin_svg' };
+    return { filename, url: `/signs/serve/${filename}`, localPath, renderSource: 'builtin_svg', formatId: format?.id };
   }
 
   private async writePdf(

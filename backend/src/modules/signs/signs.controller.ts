@@ -34,6 +34,11 @@ export class SignsController {
     return this.signs.list(user.tenantId, status);
   }
 
+  @Get('formats')
+  listFormats() {
+    return this.signs.listFormats();
+  }
+
   @Get('templates')
   listTemplates(@CurrentUser() user: AuthUser) {
     return this.signs.listTemplates(user.tenantId);

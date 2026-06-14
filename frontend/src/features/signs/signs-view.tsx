@@ -30,6 +30,7 @@ import {
   listSignRequests,
   listSignReviewQueue,
   listSignTemplates,
+  listSignFormats,
   regenerateSignDraft,
   resolveSignUrl,
   respondSignRequest,
@@ -39,6 +40,7 @@ import {
   uploadSignTemplate,
   type CreateSignRequestDto,
   type SignAssetInput,
+  type SignFormatDefinition,
   type SignRequestDetail,
   type SignRequestStatus,
   type SignRequestSummary,
@@ -49,7 +51,6 @@ import {
 import { getProductCatalogDetail, listProductCatalog, type ProductCatalogItem } from '@/lib/products-api';
 import { confirmDelete, showError, showSuccess } from '@/lib/sweetalert';
 import { useAuthStore } from '@/stores/auth-store';
-import { ShelfSceneMini, ShelfScenePreview } from '@/features/signs/shelf-mockup';
 
 type Tab = 'new' | 'mine' | 'review' | 'templates';
 
@@ -71,10 +72,6 @@ function formatSignLabel(signType: SignType, signSize: SignSize): string {
   const content = CONTENT_TYPES.find((t) => t.id === signType)?.label ?? signType;
   const size = STANDING_SIZES.find((s) => s.id === signSize)?.label ?? signSize.toUpperCase();
   return `${content} · ขนาด${size}`;
-}
-
-function isShelfEdge(signSize: SignSize): boolean {
-  return signSize === 'shelf_tag';
 }
 
 /** สำหรับ template panel ที่ยังใช้ enum เดิม */
@@ -110,6 +107,15 @@ const STATUS_CLASS: Record<SignRequestStatus, string> = {
   exported: 'bg-violet-100 text-violet-700',
 };
 
+const SLOT_LABELS: Record<string, string> = {
+  productImage: 'รูปสินค้า',
+  productName: 'ชื่อสินค้า',
+  price: 'ราคา',
+  headline: 'หัวข้อ',
+  promotion: 'โปรโมชั่น',
+  benefits: 'จุดเด่น',
+};
+
 const initialForm: CreateSignRequestDto = {
   branchName: '',
   requesterName: '',
@@ -119,7 +125,6 @@ const initialForm: CreateSignRequestDto = {
   promotion: '',
   signType: 'price_tag',
   signSize: 'a6',
-  templateId: undefined,
   headline: '',
   benefits: '',
   notes: '',
@@ -145,6 +150,8 @@ export function SignsView() {
   const [reviewNote, setReviewNote] = useState('');
   const [responseNote, setResponseNote] = useState('');
   const [editFields, setEditFields] = useState({ headline: '', promotion: '' });
+  const [signFormats, setSignFormats] = useState<SignFormatDefinition[]>([]);
+  const [formatId, setFormatId] = useState('price_tag_a6');
   const [signTemplates, setSignTemplates] = useState<SignTemplateRecord[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [selectedCatalog, setSelectedCatalog] = useState<ProductCatalogItem | null>(null);
@@ -152,6 +159,11 @@ export function SignsView() {
   const [skuSearching, setSkuSearching] = useState(false);
   const [skuDropdownOpen, setSkuDropdownOpen] = useState(false);
   const skuDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const selectedFormat = useMemo(
+    () => signFormats.find((f) => f.id === formatId) ?? signFormats[0] ?? null,
+    [signFormats, formatId],
+  );
 
   const currentList = tab === 'review' ? queue : requests;
   const selectedId = selected?.id;
@@ -190,7 +202,17 @@ export function SignsView() {
 
   useEffect(() => {
     void loadTemplates();
+    void listSignFormats().then(setSignFormats).catch(() => setSignFormats([]));
   }, []);
+
+  function selectFormat(format: SignFormatDefinition) {
+    setFormatId(format.id);
+    setForm((prev) => ({
+      ...prev,
+      signType: format.signType,
+      signSize: format.signSize,
+    }));
+  }
 
   useEffect(() => {
     if (!selectedDraftFields) return;
@@ -269,18 +291,32 @@ export function SignsView() {
   }
 
   async function handleSubmit() {
-    if (!form.branchName || !form.requesterName || !form.productName) {
-      showError('ข้อมูลไม่ครบ', 'กรุณากรอกสาขา ผู้ขอ และชื่อสินค้า');
+    if (!form.branchName || !form.requesterName) {
+      showError('ข้อมูลไม่ครบ', 'กรุณากรอกสาขาและชื่อผู้ขอ');
       return;
     }
-    if (signTemplates.length > 0 && !form.templateId) {
-      showError('ยังไม่ได้เลือก Template', 'กรุณาเลือกแบบป้ายจาก Template ด้านล่าง');
+    if (!selectedFormat) {
+      showError('ข้อมูลไม่ครบ', 'กรุณาเลือกรูปแบบป้าย');
+      return;
+    }
+    if (selectedFormat.branchRequired.includes('productName') && !form.productName?.trim()) {
+      showError('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อสินค้า');
+      return;
+    }
+    if (selectedFormat.branchRequired.includes('price') && (form.price == null || Number(form.price) <= 0)) {
+      showError('ข้อมูลไม่ครบ', 'กรุณากรอกราคาขาย');
+      return;
+    }
+    if (selectedFormat.branchRequired.includes('promotion') && !form.promotion?.trim()) {
+      showError('ข้อมูลไม่ครบ', 'กรุณากรอกข้อความโปรโมชั่น');
       return;
     }
     setSubmitting(true);
     try {
       const detail = await createSignRequest({
         ...form,
+        signType: selectedFormat.signType,
+        signSize: selectedFormat.signSize,
         price: form.price ? Number(form.price) : undefined,
         headline: form.headline?.trim() || undefined,
         benefits: form.benefits?.trim() || undefined,
@@ -288,6 +324,7 @@ export function SignsView() {
       });
       setSelected(detail);
       setForm(initialForm);
+      setFormatId('price_tag_a6');
       setAssetInputs([]);
       setSelectedCatalog(null);
       setSkuSuggestions([]);
@@ -311,7 +348,11 @@ export function SignsView() {
       });
       setSelected(detail);
       setReviewNote('');
-      showSuccess('อัปเดตสถานะแล้ว', STATUS_LABELS[detail.status]);
+      if (decision === 'approve') {
+        showSuccess('อนุมัติแล้ว', 'กด Export เพื่อส่งไฟล์ให้สาขา');
+      } else {
+        showSuccess('อัปเดตสถานะแล้ว', STATUS_LABELS[detail.status]);
+      }
       await refresh();
     } catch (err) {
       showError('ตัดสินใจไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
@@ -427,15 +468,6 @@ export function SignsView() {
     }
   }
 
-  function selectTemplate(tpl: SignTemplateRecord) {
-    setForm((prev) => ({
-      ...prev,
-      templateId: tpl.id,
-      signType: tpl.signType ?? prev.signType,
-      signSize: tpl.signSize ?? prev.signSize,
-    }));
-  }
-
   async function handleTemplateUpload(
     file: File,
     meta?: { name?: string; signType?: SignType; signSize?: SignSize },
@@ -498,7 +530,7 @@ export function SignsView() {
         {canReview && <TabButton active={tab === 'review'} onClick={() => setTab('review')}>Approval Queue</TabButton>}
         {canReview && (
           <TabButton active={tab === 'templates'} onClick={() => { setTab('templates'); void loadTemplates(); }}>
-            Templates
+            ตั้งค่า Template
           </TabButton>
         )}
       </div>
@@ -557,103 +589,45 @@ export function SignsView() {
                   <Field label="ชื่อสินค้า">
                     <Input value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} placeholder="ชื่อสินค้าที่ต้องการทำป้าย" />
                   </Field>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="ราคาขาย (บาท)">
-                      <Input type="number" value={form.price ?? ''} onChange={(e) => setForm({ ...form, price: e.target.value ? Number(e.target.value) : undefined })} placeholder="0" />
-                    </Field>
-                    <Field label="โปรโมชั่น">
+                  <Field label="ราคาขาย (บาท)">
+                    <Input type="number" value={form.price ?? ''} onChange={(e) => setForm({ ...form, price: e.target.value ? Number(e.target.value) : undefined })} placeholder="0" />
+                  </Field>
+                  {selectedFormat?.branchRequired.includes('promotion') || selectedFormat?.branchOptional.includes('promotion') ? (
+                    <Field label={`โปรโมชั่น${selectedFormat?.branchRequired.includes('promotion') ? ' *' : ''}`}>
                       <Input value={form.promotion ?? ''} onChange={(e) => setForm({ ...form, promotion: e.target.value })} placeholder="เช่น ซื้อ 2 ลด 10%" />
                     </Field>
-                  </div>
+                  ) : null}
                 </div>
 
-                {/* — Template picker — */}
                 <div className="rounded-lg bg-muted/30 p-3 space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">เลือกแบบป้าย (Template)</p>
-                  <TemplatePicker
-                    templates={signTemplates}
-                    loading={templatesLoading}
-                    selectedId={form.templateId ?? null}
-                    onSelect={selectTemplate}
-                  />
-                  {form.templateId && (
-                    <ShelfScenePreview signSize={form.signSize} />
-                  )}
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">รูปแบบป้าย</p>
+                  <p className="text-[11px] text-muted-foreground -mt-1">เลือกประเภทและขนาด — ระบบจับคู่ Template จากหลังบ้านอัตโนมัติ</p>
+                  <FormatPicker formats={signFormats} selectedId={formatId} onSelect={selectFormat} />
                 </div>
 
-                {/* — Sign copy (user-provided values) — */}
-                <div className="rounded-lg bg-muted/30 p-3 space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ข้อความบนป้าย</p>
-                  <p className="text-[11px] text-muted-foreground -mt-1">กรอกค่าที่ต้องการใส่บนป้าย — ถ้าไม่กรอก AI จะช่วยสร้างให้</p>
-                  <Field label="หัวข้อ / Headline">
-                    <Input
-                      value={form.headline ?? ''}
-                      onChange={(e) => setForm({ ...form, headline: e.target.value })}
-                      placeholder="เช่น คุณภาพดี ราคาพิเศษ"
-                    />
-                  </Field>
-                  <Field label="จุดเด่น (ทีละบรรทัด)">
-                    <textarea
-                      className="min-h-[72px] w-full rounded-md border bg-background px-3 py-2 text-sm resize-none"
-                      value={form.benefits ?? ''}
-                      onChange={(e) => setForm({ ...form, benefits: e.target.value })}
-                      placeholder={'ช่วยบำรุงร่างกาย\nมีสารต้านอนุมูลอิสระ\nเหมาะสำหรับทุกวัย'}
-                    />
-                  </Field>
-                </div>
-
-                {/* Fallback when no templates uploaded */}
-                {signTemplates.length === 0 && !templatesLoading && (
+                {(selectedFormat?.branchOptional.includes('headline') || selectedFormat?.branchOptional.includes('benefits')) && (
                   <div className="rounded-lg bg-muted/30 p-3 space-y-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">รูปแบบป้าย (สำรอง)</p>
-                    <p className="text-xs text-muted-foreground">ยังไม่มี Template — Marketing ต้องอัปโหลดก่อน หรือเลือกรูปแบบพื้นฐานด้านล่าง</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setForm((prev) => ({
-                          ...prev,
-                          signSize: prev.signSize === 'shelf_tag' ? 'a6' : prev.signSize,
-                          signType: prev.signType === 'shelf_tag' ? 'price_tag' : prev.signType,
-                        }))}
-                        className={`rounded-lg border-2 px-3 py-2.5 text-left transition
-                          ${!isShelfEdge(form.signSize) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
-                      >
-                        <p className={`text-xs font-semibold ${!isShelfEdge(form.signSize) ? 'text-primary' : ''}`}>ป้ายยืนบนชั้น</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">แนวตั้ง · A5 / A6 / A7</p>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, signSize: 'shelf_tag', signType: 'shelf_tag' }))}
-                        className={`rounded-lg border-2 px-3 py-2.5 text-left transition
-                          ${isShelfEdge(form.signSize) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
-                      >
-                        <p className={`text-xs font-semibold ${isShelfEdge(form.signSize) ? 'text-primary' : ''}`}>ป้ายติดขอบชั้น</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">แนวนอน · 8×5 ซม.</p>
-                      </button>
-                    </div>
-                    {!isShelfEdge(form.signSize) && (
-                      <>
-                        <Field label="เนื้อหาป้าย">
-                          <div className="grid grid-cols-3 gap-2">
-                            {CONTENT_TYPES.map((t) => (
-                              <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => setForm((prev) => ({ ...prev, signType: t.id }))}
-                                className={`rounded-lg border-2 px-2 py-2 text-left transition
-                                  ${form.signType === t.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
-                              >
-                                <p className={`text-[11px] font-semibold ${form.signType === t.id ? 'text-primary' : ''}`}>{t.label}</p>
-                              </button>
-                            ))}
-                          </div>
-                        </Field>
-                        <Field label="ขนาด">
-                          <SignSizePicker value={form.signSize} onChange={(s) => setForm({ ...form, signSize: s })} />
-                        </Field>
-                      </>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ข้อความบนป้าย (ไม่บังคับ)</p>
+                    <p className="text-[11px] text-muted-foreground -mt-1">ถ้าไม่กรอก AI จะช่วยสร้างให้</p>
+                    {selectedFormat.branchOptional.includes('headline') && (
+                      <Field label="หัวข้อ / Headline">
+                        <Input
+                          value={form.headline ?? ''}
+                          onChange={(e) => setForm({ ...form, headline: e.target.value })}
+                          placeholder="เช่น คุณภาพดี ราคาพิเศษ"
+                        />
+                      </Field>
                     )}
-                    <ShelfScenePreview signSize={form.signSize} />
+                    {selectedFormat.branchOptional.includes('benefits') && (
+                      <Field label="จุดเด่น (ทีละบรรทัด)">
+                        <textarea
+                          className="min-h-[72px] w-full rounded-md border bg-background px-3 py-2 text-sm resize-none"
+                          value={form.benefits ?? ''}
+                          onChange={(e) => setForm({ ...form, benefits: e.target.value })}
+                          placeholder={'ช่วยบำรุงร่างกาย\nมีสารต้านอนุมูลอิสระ\nเหมาะสำหรับทุกวัย'}
+                        />
+                      </Field>
+                    )}
                   </div>
                 )}
 
@@ -747,6 +721,7 @@ export function SignsView() {
 
       {tab === 'templates' && canReview && (
         <TemplatesPanel
+          formats={signFormats}
           templates={signTemplates}
           loading={templatesLoading}
           onUpload={handleTemplateUpload}
@@ -882,6 +857,9 @@ function RequestDetail({
   const gptError = typeof detail?.latestDraft?.editableFields?._gptError === 'string'
     ? detail.latestDraft.editableFields._gptError
     : null;
+  const matchedTemplateName = typeof detail?.latestDraft?.editableFields?._matchedTemplateName === 'string'
+    ? detail.latestDraft.editableFields._matchedTemplateName
+    : null;
   const hasFlatPreview = typeof flatPreviewUrl === 'string' && flatPreviewUrl.length > 0;
   const previewSrc = detail?.latestDraft
     ? resolveSignUrl(hasFlatPreview ? flatPreviewUrl : detail.latestDraft.previewUrl)
@@ -928,8 +906,18 @@ function RequestDetail({
             <Info label="SKU" value={detail.sku || '-'} />
             <Info label="ราคา" value={detail.price != null ? `฿${detail.price}` : '-'} />
             <Info label="รูปแบบป้าย" value={formatSignLabel(detail.signType, detail.signSize)} />
+            {canReview && matchedTemplateName && (
+              <Info label="Template ที่ใช้" value={matchedTemplateName} />
+            )}
           </div>
-          {detail.statusNote && <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{detail.statusNote}</p>}
+          {detail.status === 'approved' && (
+            <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+              {canReview ? 'อนุมัติแล้ว — กด Export ไฟล์เพื่อส่งให้สาขา' : 'อนุมัติแล้ว — รอ Marketing export ไฟล์'}
+            </p>
+          )}
+          {detail.statusNote && detail.status !== 'approved' && (
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{detail.statusNote}</p>
+          )}
           {detail.notes && <p className="text-sm whitespace-pre-wrap">{detail.notes}</p>}
         </CardContent>
       </Card>
@@ -960,18 +948,18 @@ function RequestDetail({
                     <Sparkles className="mr-2 h-4 w-4" />
                     สร้างใหม่
                   </Button>
-                  {detail.exports.map((file) => (
+                  {detail.status === 'approved' && canReview && (
+                    <Button size="sm" className="bg-violet-600 hover:bg-violet-700" onClick={() => void onExport()} disabled={submitting}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Export ไฟล์
+                    </Button>
+                  )}
+                  {detail.status === 'exported' && detail.exports.map((file) => (
                     <a key={file.id} href={resolveSignUrl(file.url)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-md border px-3 text-sm hover:bg-muted">
                       <Download className="mr-2 h-4 w-4" />
                       {file.format.toUpperCase()}
                     </a>
                   ))}
-                  {detail.status === 'approved' && canReview && (
-                    <Button size="sm" onClick={() => void onExport()} disabled={submitting}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Export
-                    </Button>
-                  )}
                 </div>
               </div>
             ) : (
@@ -1244,106 +1232,61 @@ function SkuProductSearch({
   );
 }
 
-function TemplatePicker({
-  templates,
-  loading,
+function FormatPicker({
+  formats,
   selectedId,
   onSelect,
 }: {
-  templates: SignTemplateRecord[];
-  loading: boolean;
-  selectedId: number | null;
-  onSelect: (tpl: SignTemplateRecord) => void;
+  formats: SignFormatDefinition[];
+  selectedId: string;
+  onSelect: (format: SignFormatDefinition) => void;
 }) {
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        กำลังโหลด Template...
-      </div>
-    );
+  if (formats.length === 0) {
+    return <p className="text-sm text-muted-foreground py-2">กำลังโหลดรูปแบบป้าย...</p>;
   }
 
-  if (templates.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed bg-background px-4 py-6 text-center">
-        <FileImage className="mx-auto h-8 w-8 text-muted-foreground/50" />
-        <p className="mt-2 text-sm font-medium text-muted-foreground">ยังไม่มี Template</p>
-        <p className="mt-1 text-xs text-muted-foreground">ให้ Marketing อัปโหลด Template ในแท็บ Templates</p>
-      </div>
-    );
-  }
+  const shelf = formats.filter((f) => f.id === 'shelf_edge');
+  const standing = formats.filter((f) => f.id !== 'shelf_edge');
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-      {templates.map((tpl) => {
-        const active = selectedId === tpl.id;
-        const typeLabel = tpl.signType
-          ? SIGN_TYPES.find((t) => t.id === tpl.signType)?.label
-          : null;
-        const sizeLabel = tpl.signSize
-          ? SIGN_SIZES.find((s) => s.id === tpl.signSize)?.label
-          : null;
-        return (
-          <button
-            key={tpl.id}
-            type="button"
-            onClick={() => onSelect(tpl)}
-            className={`group flex flex-col overflow-hidden rounded-xl border-2 text-left transition
-              ${active ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-primary/50'}`}
-          >
-            <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={resolveSignUrl(tpl.url)}
-                alt={tpl.name}
-                className="h-full w-full object-cover object-center transition group-hover:scale-[1.02]"
-              />
-              {active && (
-                <div className="absolute inset-0 flex items-center justify-center bg-primary/10">
-                  <CheckCircle2 className="h-7 w-7 text-primary drop-shadow" />
-                </div>
-              )}
-            </div>
-            <div className="px-2 py-2">
-              <p className={`text-xs font-semibold leading-tight truncate ${active ? 'text-primary' : ''}`}>{tpl.name}</p>
-              {(typeLabel || sizeLabel) && (
-                <p className="mt-0.5 text-[10px] text-muted-foreground truncate">
-                  {[typeLabel, sizeLabel].filter(Boolean).join(' · ')}
-                </p>
-              )}
-            </div>
-          </button>
-        );
-      })}
+    <div className="space-y-3">
+      {shelf.length > 0 && (
+        <div className="grid grid-cols-1 gap-2">
+          {shelf.map((format) => (
+            <FormatOption key={format.id} format={format} active={selectedId === format.id} onSelect={onSelect} />
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {standing.map((format) => (
+          <FormatOption key={format.id} format={format} active={selectedId === format.id} onSelect={onSelect} />
+        ))}
+      </div>
     </div>
   );
 }
 
-function SignSizePicker({ value, onChange }: { value: SignSize; onChange: (s: SignSize) => void }) {
+function FormatOption({
+  format,
+  active,
+  onSelect,
+}: {
+  format: SignFormatDefinition;
+  active: boolean;
+  onSelect: (format: SignFormatDefinition) => void;
+}) {
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {STANDING_SIZES.map((s) => {
-        const active = value === s.id;
-        return (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => onChange(s.id)}
-            className={`flex flex-col overflow-hidden rounded-lg border-2 transition
-              ${active ? 'border-primary bg-primary/5 ring-1 ring-primary/30' : 'border-border hover:border-primary/40 hover:bg-muted/40'}`}
-          >
-            <div className="relative h-[72px] w-full bg-slate-50">
-              <ShelfSceneMini signSize={s.id} active={active} />
-            </div>
-            <div className="px-1.5 py-1.5 text-center">
-              <p className={`text-[11px] font-semibold leading-tight ${active ? 'text-primary' : 'text-foreground'}`}>{s.label}</p>
-              <p className="text-[9px] text-muted-foreground leading-tight">{s.sub}</p>
-            </div>
-          </button>
-        );
-      })}
-    </div>
+    <button
+      type="button"
+      onClick={() => onSelect(format)}
+      className={`rounded-lg border-2 px-3 py-2.5 text-left transition
+        ${active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
+    >
+      <p className={`text-xs font-semibold ${active ? 'text-primary' : ''}`}>{format.label}</p>
+      <p className="text-[10px] text-muted-foreground mt-0.5">
+        {format.slots.map((s) => SLOT_LABELS[s] ?? s).join(' · ')}
+      </p>
+    </button>
   );
 }
 
@@ -1357,37 +1300,38 @@ function templateDisplayLabel(tpl: SignTemplateRecord): string {
 }
 
 function TemplatesPanel({
+  formats,
   templates,
   loading,
   onUpload,
   onDelete,
 }: {
+  formats: SignFormatDefinition[];
   templates: SignTemplateRecord[];
   loading: boolean;
   onUpload: (file: File, meta?: { name?: string; signType?: SignType; signSize?: SignSize }) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }) {
   const [uploadName, setUploadName] = useState('');
-  const [uploadFormat, setUploadFormat] = useState<'shelf_edge' | 'standing'>('shelf_edge');
-  const [uploadType, setUploadType] = useState<SignType>('price_tag');
-  const [uploadSize, setUploadSize] = useState<SignSize>('a6');
+  const [uploadFormatId, setUploadFormatId] = useState('shelf_edge');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedUploadFormat = formats.find((f) => f.id === uploadFormatId) ?? formats[0] ?? null;
 
   async function submitUpload() {
     if (!uploadFile) {
       fileInputRef.current?.click();
       return;
     }
+    if (!selectedUploadFormat) return;
     setUploading(true);
     try {
-      const signSize: SignSize = uploadFormat === 'shelf_edge' ? 'shelf_tag' : uploadSize;
-      const signType: SignType = uploadFormat === 'shelf_edge' ? 'shelf_tag' : uploadType;
       await onUpload(uploadFile, {
         name: uploadName.trim() || uploadFile.name.replace(/\.[^.]+$/, ''),
-        signType,
-        signSize,
+        signType: selectedUploadFormat.signType,
+        signSize: selectedUploadFormat.signSize,
       });
       setUploadFile(null);
       setUploadName('');
@@ -1416,60 +1360,32 @@ function TemplatesPanel({
                 placeholder="เช่น ป้ายติดชั้น 100 Baht Shop"
               />
             </Field>
-            <Field label="รูปแบบป้าย">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setUploadFormat('shelf_edge')}
-                  className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition
-                    ${uploadFormat === 'shelf_edge' ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:border-primary/40'}`}
-                >
-                  ติดขอบชั้น
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUploadFormat('standing')}
-                  className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition
-                    ${uploadFormat === 'standing' ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:border-primary/40'}`}
-                >
-                  ยืนบนชั้น
-                </button>
-              </div>
+            <Field label="รูปแบบป้าย (Format)">
+              <select
+                className="flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={uploadFormatId}
+                onChange={(e) => setUploadFormatId(e.target.value)}
+              >
+                {formats.map((f) => (
+                  <option key={f.id} value={f.id}>{f.label}</option>
+                ))}
+              </select>
             </Field>
           </div>
 
-          {uploadFormat === 'standing' && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="เนื้อหา">
-                <div className="flex flex-wrap gap-1.5">
-                  {CONTENT_TYPES.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setUploadType(t.id)}
-                      className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition
-                        ${uploadType === t.id ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:border-primary/40'}`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-              <Field label="ขนาด">
-                <div className="flex flex-wrap gap-1.5">
-                  {STANDING_SIZES.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => setUploadSize(s.id)}
-                      className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition
-                        ${uploadSize === s.id ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:border-primary/40'}`}
-                    >
-                      {s.label} ({s.sub.split('·')[0].trim()})
-                    </button>
-                  ))}
-                </div>
-              </Field>
+          {selectedUploadFormat && (
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+              <p className="text-xs font-semibold text-muted-foreground mb-1.5">Template ต้องรองรับบนป้าย:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {selectedUploadFormat.slots.map((slot) => (
+                  <Badge key={slot} variant="secondary" className="text-[10px] font-normal">
+                    {SLOT_LABELS[slot] ?? slot}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2">
+                สาขาเลือก format นี้ → ระบบ match template นี้อัตโนมัติ (โลโก้/barcode อยู่ใน PNG แล้ว)
+              </p>
             </div>
           )}
 
