@@ -409,10 +409,10 @@ export class SignsService {
     let productBuffer: Buffer | null = null;
     if (rawBuffer) {
       try {
-        const imgResult = await runImagePipeline(rawBuffer, request.sku ?? '', n8nWebhook, true);
+        const imgResult = await runImagePipeline(rawBuffer, request.sku ?? '', n8nWebhook, true, this.openai);
         productBuffer = imgResult.buffer;
         this.logger.log(
-          `[SignPipeline] image ready: cutout=${imgResult.cutoutUsed} enhance=${imgResult.enhanced}`,
+          `[SignPipeline] image ready: n8nCutout=${imgResult.cutoutUsed} aiCutout=${imgResult.aiCutoutUsed} localCrop=${imgResult.localCropUsed} enhance=${imgResult.enhanced}`,
         );
       } catch (err) {
         this.logger.warn(`[SignPipeline] image pipeline failed, using raw: ${String(err)}`);

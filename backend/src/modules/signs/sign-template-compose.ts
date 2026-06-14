@@ -69,7 +69,7 @@ const ZONES: Record<SignSize, SignTemplateZones> = {
 
 /** Landscape promo templates need separate zones; using portrait zones causes header collisions. */
 const LANDSCAPE_ZONES: SignTemplateZones = {
-  productImage: { left: 0.10, top: 0.42, width: 0.36, height: 0.40 },
+  productImage: { left: 0.06, top: 0.36, width: 0.46, height: 0.50 },
   productName: { x: 0.66, y: 0.30, anchor: 'middle', fontSizeRatio: 0.034, color: '#111827', fontWeight: 800, maxChars: 42 },
   price: { x: 0.66, y: 0.55, anchor: 'middle', fontSizeRatio: 0.13, color: '#dc2626', fontWeight: 900 },
   headline: { x: 0.66, y: 0.38, anchor: 'middle', fontSizeRatio: 0.040, color: '#ffffff', fontWeight: 900, maxChars: 34 },
@@ -207,7 +207,7 @@ async function compositeProductInZone(
   const zoneH = Math.round(h * zone.height);
   const zoneLeft = Math.round(w * zone.left);
   const zoneTop = Math.round(h * zone.top);
-  const padding = Math.max(4, Math.round(Math.min(zoneW, zoneH) * 0.03));
+  const padding = Math.max(2, Math.round(Math.min(zoneW, zoneH) * 0.015));
   const innerW = Math.max(1, zoneW - padding * 2);
   const innerH = Math.max(1, zoneH - padding * 2);
 

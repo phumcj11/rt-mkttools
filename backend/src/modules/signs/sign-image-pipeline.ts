@@ -15,6 +15,17 @@ export interface ImagePipelineResult {
   enhanced: boolean;
   cutoutUsed: boolean;
   localCropUsed: boolean;
+  aiCutoutUsed: boolean;
+  aiCutoutModel?: string;
+}
+
+export interface AiProductCutoutService {
+  editGptImage(
+    prompt: string,
+    imageBuffer: Buffer,
+    mimeType: string,
+    options?: { size?: '1024x1024' | '1024x1536' | '1536x1024' },
+  ): Promise<{ buffer: Buffer; model: string }>;
 }
 
 async function cropLikelyProductCard(input: Buffer): Promise<Buffer> {
@@ -39,6 +50,33 @@ async function cropLikelyProductCard(input: Buffer): Promise<Buffer> {
     .trim({ background: '#ffffff', threshold: 18 })
     .png()
     .toBuffer();
+}
+
+function productCutoutPrompt(): string {
+  return [
+    'Extract ONLY the real physical product package from this image.',
+    'Remove all catalog-card text, SKU labels, UI text, prices, decorations, and background.',
+    'Preserve the actual product packaging proportions and readable package design.',
+    'Do not add any new text. Do not redraw or redesign the packaging.',
+    'Return a clean transparent PNG cutout of the product only, centered, with minimal padding.',
+    'The result will be placed onto a retail sign template by another renderer.',
+  ].join(' ');
+}
+
+async function trimProductCanvas(input: Buffer): Promise<Buffer> {
+  return sharp(input)
+    .trim({ background: '#ffffff', threshold: 24 })
+    .png()
+    .toBuffer();
+}
+
+async function extractProductWithAi(input: Buffer, ai: AiProductCutoutService): Promise<{ buffer: Buffer; model: string }> {
+  const png = await sharp(input).png().toBuffer();
+  const result = await ai.editGptImage(productCutoutPrompt(), png, 'image/png', { size: '1024x1024' });
+  return {
+    buffer: await trimProductCanvas(result.buffer),
+    model: result.model,
+  };
 }
 
 /**
@@ -117,10 +155,13 @@ export async function runImagePipeline(
   sku: string,
   n8nWebhook: string | null | undefined,
   enhance = true,
+  aiCutout?: AiProductCutoutService,
 ): Promise<ImagePipelineResult> {
   let buffer = rawBuffer;
   let cutoutUsed = false;
   let localCropUsed = false;
+  let aiCutoutUsed = false;
+  let aiCutoutModel: string | undefined;
 
   try {
     buffer = await cropLikelyProductCard(buffer);
@@ -140,6 +181,19 @@ export async function runImagePipeline(
     }
   }
 
+  // Step 2b — AI product-only extraction (preferred when n8n is unavailable).
+  // It removes catalog text/SKU around the product without letting AI touch the sign template.
+  if (!cutoutUsed && aiCutout) {
+    try {
+      const aiResult = await extractProductWithAi(buffer, aiCutout);
+      buffer = aiResult.buffer;
+      aiCutoutUsed = true;
+      aiCutoutModel = aiResult.model;
+    } catch {
+      // fallback to local crop — non-fatal
+    }
+  }
+
   // Step 3 — enhancement
   let enhanced = false;
   if (enhance) {
@@ -151,7 +205,7 @@ export async function runImagePipeline(
     }
   }
 
-  return { buffer, enhanced, cutoutUsed, localCropUsed };
+  return { buffer, enhanced, cutoutUsed, localCropUsed, aiCutoutUsed, aiCutoutModel };
 }
 
 /** Load product image from local file path (assets stored on disk) */
