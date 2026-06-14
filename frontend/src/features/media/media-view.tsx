@@ -30,7 +30,6 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { generateContent } from '@/lib/ai-api';
 import { confirmDelete, showError, showInfo, showSuccess } from '@/lib/sweetalert';
 import {
-  generatePopStickers,
   getDriveSettings,
   getN8nSettings,
   getVideoSettings,
@@ -65,6 +64,17 @@ import {
   type VideoProviderId,
 } from '@/lib/media-api';
 import { PromoTab } from './promo-tab';
+import {
+  buildPopResultFromFiles,
+  countPopFilesForTask,
+  hasPendingPopGeneration,
+  loadPopSession,
+  popExpectedCount,
+  popProgress,
+  runPopGeneration,
+  savePopSession,
+  type PopGeneratingTask,
+} from './pop-session';
 
 type Tab = 'products' | 'promotion' | 'files' | 'settings';
 
@@ -83,8 +93,10 @@ export function MediaView() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [productSearch, setProductSearch] = useState('');
   const [productFilter, setProductFilter] = useState<MediaProductFilter>('ready');
-  const [generating, setGenerating] = useState<string | null>(null);
+  const [popGenerating, setPopGenerating] = useState<PopGeneratingTask | null>(null);
   const [popResults, setPopResults] = useState<Record<string, PopStickerResult>>({});
+  const [popSessionReady, setPopSessionReady] = useState(false);
+  const [, setPopProgressTick] = useState(0);
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
   const [brandAssets, setBrandAssets] = useState<BrandAsset[]>([]);
   const [selectedBrandAssets, setSelectedBrandAssets] = useState<Set<string>>(new Set());
@@ -143,6 +155,28 @@ export function MediaView() {
     listBrandAssets()
       .then((assets) => setBrandAssets(Array.isArray(assets) ? assets : []))
       .catch(() => undefined);
+
+    const session = loadPopSession();
+    setPopResults(session.results);
+    const task = session.generating;
+    if (task && Date.now() - task.startedAt < 15 * 60 * 1000) {
+      setPopGenerating(task);
+      setExpandedSku(task.sku);
+      if (hasPendingPopGeneration(task.sku)) {
+        void runPopGeneration(task.sku, task.options)
+          .then((res) => {
+            setPopResults((prev) => ({ ...prev, [task.sku]: res }));
+            setPopGenerating(null);
+            setExpandedSku(task.sku);
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : 'สร้าง POP Sticker ไม่สำเร็จ';
+            showError('สร้าง POP ไม่สำเร็จ', `${task.sku}: ${msg}`);
+            setPopGenerating(null);
+          });
+      }
+    }
+    setPopSessionReady(true);
   }, []);
 
   useEffect(() => {
@@ -164,6 +198,47 @@ export function MediaView() {
       return new Set(brandAssets.filter((a) => a?.filename).map((a) => a.filename));
     });
   }, [brandAssets]);
+
+  useEffect(() => {
+    if (!popSessionReady) return;
+    savePopSession({ results: popResults, generating: popGenerating });
+  }, [popResults, popGenerating, popSessionReady]);
+
+  useEffect(() => {
+    if (!popGenerating) return;
+    const timer = window.setInterval(() => setPopProgressTick((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [popGenerating]);
+
+  useEffect(() => {
+    if (!popGenerating) return;
+
+    const poll = async () => {
+      const files = await listMediaFiles().catch(() => [] as MediaFile[]);
+      const found = countPopFilesForTask(files, popGenerating);
+      setPopGenerating((prev) => (prev ? { ...prev, filesFound: found } : null));
+
+      if (hasPendingPopGeneration(popGenerating.sku)) return;
+      if (found < popGenerating.expectedCount) return;
+
+      const recovered = buildPopResultFromFiles(
+        popGenerating.sku,
+        popGenerating.productName,
+        files,
+        popGenerating.startedAt,
+        popResults[popGenerating.sku],
+      );
+      if (recovered) {
+        setPopResults((prev) => ({ ...prev, [popGenerating.sku]: recovered }));
+        setPopGenerating(null);
+        setExpandedSku(popGenerating.sku);
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => void poll(), 5000);
+    return () => window.clearInterval(timer);
+  }, [popGenerating, popResults]);
 
   useEffect(() => {
     if (tab === 'files') {
@@ -215,21 +290,30 @@ export function MediaView() {
     return () => window.clearInterval(timer);
   }, [videoTasks]);
 
-  const handleGeneratePopStickers = async (sku: string) => {
-    setGenerating(sku);
+  const handleGeneratePopStickers = async (sku: string, productName: string) => {
+    const options = {
+      includeBranded,
+      brandAssetFilenames: Array.from(selectedBrandAssets),
+      brandedCount: 2,
+    };
+    const task: PopGeneratingTask = {
+      sku,
+      productName,
+      startedAt: Date.now(),
+      expectedCount: popExpectedCount(options),
+      options,
+      filesFound: 0,
+    };
+    setPopGenerating(task);
     setExpandedSku(sku);
     try {
-      const res = await generatePopStickers(sku, {
-        includeBranded,
-        brandAssetFilenames: Array.from(selectedBrandAssets),
-        brandedCount: 2,
-      });
+      const res = await runPopGeneration(sku, options);
       setPopResults((prev) => ({ ...prev, [sku]: res }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'สร้าง POP Sticker ไม่สำเร็จ';
       showError('สร้าง POP ไม่สำเร็จ', `${sku}: ${msg}`);
     } finally {
-      setGenerating(null);
+      setPopGenerating((prev) => (prev?.sku === sku ? null : prev));
     }
   };
 
@@ -630,7 +714,8 @@ export function MediaView() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {products.map((p) => {
                 const popResult = popResults[p.sku];
-                const isGenerating = generating === p.sku;
+                const popTask = popGenerating?.sku === p.sku ? popGenerating : null;
+                const isGenerating = !!popTask;
                 const isExpanded = expandedSku === p.sku;
                 const isVideoSubmitting = videoSubmitting === p.sku;
                 const videoTask = videoTasks[p.sku];
@@ -639,7 +724,7 @@ export function MediaView() {
                 const briefOpen = openBriefSkus.has(p.sku);
                 const hasBrief = !!videoBriefs[p.sku]?.trim();
                 const popImageLabel = isGenerating
-                  ? 'กำลังสร้าง...'
+                  ? `กำลังสร้าง... ${popTask ? popProgress(popTask) : 0}%`
                   : popResult
                     ? 'สร้างรูปใหม่'
                     : 'สร้างรูป';
@@ -701,8 +786,8 @@ export function MediaView() {
                         size="sm"
                         variant={popResult ? 'outline' : 'default'}
                         className="h-8 w-full gap-1 text-xs"
-                        disabled={isGenerating || !!generating}
-                        onClick={() => void handleGeneratePopStickers(p.sku)}
+                        disabled={isGenerating || !!popGenerating}
+                        onClick={() => void handleGeneratePopStickers(p.sku, p.name)}
                       >
                         {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
                         {popImageLabel}
@@ -747,10 +832,22 @@ export function MediaView() {
                     </div>
 
                     {/* ── Generating progress ── */}
-                    {isGenerating && (
-                      <div className="mx-2 mb-2 rounded-lg bg-violet-50 border border-violet-100 px-2 py-1.5 text-[10px] text-violet-700 flex items-center gap-1.5">
-                        <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                        <span>กำลังสร้าง POP... (~1–2 นาที)</span>
+                    {isGenerating && popTask && (
+                      <div className="mx-2 mb-2 rounded-lg bg-violet-50 border border-violet-100 px-2 py-1.5 text-[10px] text-violet-700">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                            กำลังสร้าง POP
+                            {popTask.filesFound > 0 ? ` (${popTask.filesFound}/${popTask.expectedCount})` : ''}
+                          </span>
+                          <span className="tabular-nums">{popProgress(popTask)}%</span>
+                        </div>
+                        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-violet-100">
+                          <div
+                            className="h-full rounded-full bg-violet-500 transition-all duration-700"
+                            style={{ width: `${popProgress(popTask)}%` }}
+                          />
+                        </div>
                       </div>
                     )}
 
