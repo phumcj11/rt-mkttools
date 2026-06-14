@@ -1,183 +1,217 @@
 import { SignSize } from '../../database/entities';
 import sharp from 'sharp';
 
-const CANVAS_W = 1400;
-const CANVAS_H = 1000;
+// Scene canvas: 1600 wide × 900 tall (16:9 ish)
+const W = 1600;
+const H = 900;
+
+// Key vertical reference points
+const HEADER_H = 0;       // no header bar – keep it clean
+const SHELF_TOP_Y = 580;  // top surface of the shelf
+const SHELF_FRONT_Y = 610;// front face of shelf board
+const SHELF_BOTTOM_Y = 650;
+const FLOOR_Y = 650;
+
+// Horizontal "gap" zone in the middle where the sign stands (products on each side)
+const GAP_START = 480;
+const GAP_END = 1120;
+const GAP_CENTER = (GAP_START + GAP_END) / 2;  // 800
+
+const PRODUCTS_LEFT = [
+  { x: 30, w: 100, h: 170, color: '#4ade80' },
+  { x: 145, w: 85, h: 190, color: '#60a5fa' },
+  { x: 244, w: 92, h: 160, color: '#f472b6' },
+  { x: 350, w: 108, h: 180, color: '#fbbf24' },
+];
+
+const PRODUCTS_RIGHT = [
+  { x: 1130, w: 108, h: 175, color: '#34d399' },
+  { x: 1252, w: 90, h: 160, color: '#a78bfa' },
+  { x: 1356, w: 100, h: 182, color: '#fb923c' },
+  { x: 1470, w: 80, h: 165, color: '#f43f5e' },
+];
+
+function renderProduct(x: number, w: number, h: number, color: string): string {
+  const y = SHELF_TOP_Y;
+  return `
+    <rect x="${x}" y="${y - h}" width="${w}" height="${h}" rx="8" fill="${color}" opacity="0.82"/>
+    <rect x="${x + 6}" y="${y - h + 8}" width="${w - 12}" height="${h * 0.55}" rx="5" fill="#ffffff" opacity="0.22"/>
+    <rect x="${x + 10}" y="${y - h * 0.35}" width="${w - 20}" height="4" rx="2" fill="#ffffff" opacity="0.35"/>
+    <rect x="${x + 10}" y="${y - h * 0.35 + 10}" width="${w - 34}" height="4" rx="2" fill="#ffffff" opacity="0.22"/>
+  `;
+}
+
+export function renderShelfSceneSvg(signSize: SignSize): string {
+  const isShelfTag = signSize === 'shelf_tag';
+
+  const productBlocks = [
+    ...PRODUCTS_LEFT.map((p) => renderProduct(p.x, p.w, p.h, p.color)),
+    ...PRODUCTS_RIGHT.map((p) => renderProduct(p.x, p.w, p.h, p.color)),
+  ].join('');
+
+  // Sign placeholder region (where the composited sign will sit)
+  const signZoneX = GAP_START + 20;
+  const signZoneW = GAP_END - GAP_START - 40;
+  const signZoneTop = isShelfTag ? SHELF_TOP_Y - 140 : 80;
+  const signZoneH = isShelfTag ? 140 : SHELF_TOP_Y - 80 - 10;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#eef2f7"/>
+      <stop offset="72%" stop-color="#dce4ee"/>
+      <stop offset="100%" stop-color="#c8d4e0"/>
+    </linearGradient>
+    <linearGradient id="shelfSurface" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="40%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="shelfFace" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="floorGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c0ccd8"/>
+      <stop offset="100%" stop-color="#8fa0b2"/>
+    </linearGradient>
+    <radialGradient id="ceilingLight" cx="50%" cy="0%" r="70%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="dropShadow">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.30"/>
+    </filter>
+  </defs>
+
+  <!-- background wall -->
+  <rect width="${W}" height="${H}" fill="url(#bgGrad)"/>
+  <rect width="${W}" height="${H}" fill="url(#ceilingLight)"/>
+
+  <!-- back wall panel (lighter area) -->
+  <rect x="20" y="20" width="${W - 40}" height="${SHELF_TOP_Y - 20}" rx="4" fill="#ffffff" opacity="0.28"/>
+
+  <!-- products left + right -->
+  ${productBlocks}
+
+  <!-- shelf top surface -->
+  <rect x="0" y="${SHELF_TOP_Y}" width="${W}" height="18" fill="url(#shelfSurface)"/>
+  <!-- shelf front face -->
+  <rect x="0" y="${SHELF_FRONT_Y}" width="${W}" height="${SHELF_BOTTOM_Y - SHELF_FRONT_Y}" fill="url(#shelfFace)"/>
+  <!-- shelf bottom edge -->
+  <rect x="0" y="${SHELF_BOTTOM_Y - 4}" width="${W}" height="6" fill="#334155" opacity="0.55"/>
+
+  <!-- price rail strip -->
+  <rect x="0" y="${SHELF_FRONT_Y}" width="${W}" height="8" fill="#e8ecf0" opacity="0.75"/>
+
+  <!-- floor -->
+  <rect x="0" y="${FLOOR_Y}" width="${W}" height="${H - FLOOR_Y}" fill="url(#floorGrad)"/>
+  <!-- floor reflection -->
+  <ellipse cx="${W / 2}" cy="${FLOOR_Y + 30}" rx="${W * 0.38}" ry="22" fill="#0f172a" opacity="0.07"/>
+
+  <!-- sign zone placeholder (subtle) -->
+  <rect x="${signZoneX}" y="${signZoneTop}" width="${signZoneW}" height="${signZoneH}" rx="12"
+    fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.10" stroke-dasharray="10 7"/>
+
+  <!-- store label (bottom right) -->
+  <text x="${W - 28}" y="${H - 20}" text-anchor="end" font-family="Arial, sans-serif" font-size="18" fill="#64748b" opacity="0.55">Mockup Preview</text>
+</svg>`;
+}
+
+// ── Placement ──────────────────────────────────────────────────────────────────
 
 interface Placement {
   width: number;
   height: number;
   left: number;
   top: number;
-  rotate?: number;
 }
 
-export function shelfMockupPlacement(
-  signSize: SignSize,
-  signW: number,
-  signH: number,
-): Placement {
+function calcPlacement(signSize: SignSize, signW: number, signH: number): Placement {
   const isShelfTag = signSize === 'shelf_tag';
-  const maxW = isShelfTag ? CANVAS_W * 0.62 : CANVAS_W * 0.38;
-  const maxH = isShelfTag ? CANVAS_H * 0.22 : CANVAS_H * 0.72;
+  const gapW = GAP_END - GAP_START;
+
+  let maxW: number;
+  let maxH: number;
+
+  if (isShelfTag) {
+    // shelf tag sits in the gap on the price rail — use full gap width
+    maxW = gapW - 40;
+    maxH = 160; // real shelf tags are short
+  } else {
+    // portrait sign stands tall above the shelf
+    maxW = gapW - 80;
+    maxH = SHELF_TOP_Y - 60;  // from near top to shelf surface
+  }
+
   const scale = Math.min(maxW / signW, maxH / signH);
   const width = Math.round(signW * scale);
   const height = Math.round(signH * scale);
 
+  let left: number;
+  let top: number;
+
   if (isShelfTag) {
-    return {
-      width,
-      height,
-      left: Math.round(CANVAS_W * 0.19),
-      top: Math.round(CANVAS_H * 0.52),
-    };
+    left = Math.round(GAP_CENTER - width / 2);
+    top = SHELF_TOP_Y - height;  // sits flush on the shelf surface
+  } else {
+    left = Math.round(GAP_CENTER - width / 2);
+    top = Math.max(60, SHELF_TOP_Y - height - 10);  // floating above shelf
   }
 
-  const sizeTop: Record<string, number> = {
-    a5: 0.14,
-    a6: 0.18,
-    a7: 0.24,
-    shelf_tag: 0.52,
-  };
-  return {
-    width,
-    height,
-    left: Math.round(CANVAS_W * 0.56 - width / 2),
-    top: Math.round(CANVAS_H * (sizeTop[signSize] ?? 0.2)),
-    rotate: signSize === 'a5' ? -1.5 : signSize === 'a6' ? -0.8 : 0,
-  };
+  return { width, height, left, top };
 }
 
-export function renderShelfSceneSvg(signSize: SignSize): string {
-  const isShelfTag = signSize === 'shelf_tag';
-  const w = CANVAS_W;
-  const h = CANVAS_H;
+// ── Shadow ────────────────────────────────────────────────────────────────────
 
-  const products = [
-    { x: 48, y: 520, pw: 110, ph: 140, color: '#4ade80', label: 'SKU' },
-    { x: 168, y: 505, pw: 95, ph: 155, color: '#60a5fa', label: '' },
-    { x: 278, y: 530, pw: 88, ph: 130, color: '#f472b6', label: '' },
-    { x: 380, y: 515, pw: 102, ph: 145, color: '#fbbf24', label: '' },
-    { x: 920, y: 510, pw: 115, ph: 150, color: '#34d399', label: '' },
-    { x: 1048, y: 525, pw: 90, ph: 135, color: '#a78bfa', label: '' },
-    { x: 1155, y: 508, pw: 100, ph: 152, color: '#fb923c', label: '' },
-  ];
-
-  const productBlocks = products.map((p) => `
-    <rect x="${p.x}" y="${p.y - p.ph}" width="${p.pw}" height="${p.ph}" rx="6" fill="${p.color}" opacity="0.85"/>
-    <rect x="${p.x + 8}" y="${p.y - p.ph + 10}" width="${p.pw - 16}" height="${p.ph - 28}" rx="4" fill="#ffffff" opacity="0.25"/>
-  `).join('');
-
-  const shelfY = isShelfTag ? 580 : 660;
-  const shelfFront = isShelfTag ? 620 : 700;
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-  <defs>
-    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#e8eef4"/>
-      <stop offset="55%" stop-color="#d5dee8"/>
-      <stop offset="100%" stop-color="#c2ccd8"/>
-    </linearGradient>
-    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#b8c4d0"/>
-      <stop offset="100%" stop-color="#9aa8b8"/>
-    </linearGradient>
-    <linearGradient id="shelfTop" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f8fafc"/>
-      <stop offset="100%" stop-color="#cbd5e1"/>
-    </linearGradient>
-    <linearGradient id="shelfFrontGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#94a3b8"/>
-      <stop offset="100%" stop-color="#64748b"/>
-    </linearGradient>
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.25"/>
-    </filter>
-    <radialGradient id="spotlight" cx="50%" cy="20%" r="65%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-
-  <!-- wall -->
-  <rect width="${w}" height="${h}" fill="url(#wall)"/>
-  <rect width="${w}" height="${h}" fill="url(#spotlight)"/>
-
-  <!-- store header strip -->
-  <rect x="0" y="0" width="${w}" height="72" fill="#1e293b"/>
-  <text x="48" y="46" font-family="Arial Black, Arial, sans-serif" font-size="28" font-weight="900" fill="#f8fafc" letter-spacing="3">100 BAHT SHOP</text>
-  <text x="${w - 48}" y="46" text-anchor="end" font-family="Arial, sans-serif" font-size="18" fill="#94a3b8">Retail Shelf Mockup</text>
-
-  <!-- back panel -->
-  <rect x="24" y="96" width="${w - 48}" height="${shelfY - 96}" rx="12" fill="#ffffff" opacity="0.35"/>
-
-  ${productBlocks}
-
-  <!-- shelf surface -->
-  <rect x="24" y="${shelfY}" width="${w - 48}" height="14" rx="3" fill="url(#shelfTop)"/>
-  <rect x="24" y="${shelfFront}" width="${w - 48}" height="36" rx="2" fill="url(#shelfFrontGrad)"/>
-  <rect x="24" y="${shelfFront + 34}" width="${w - 48}" height="8" fill="#475569" opacity="0.5"/>
-
-  <!-- price rail for shelf tags -->
-  ${isShelfTag ? `<rect x="24" y="${shelfY - 6}" width="${w - 48}" height="10" fill="#e2e8f0" opacity="0.9"/>` : ''}
-
-  <!-- floor -->
-  <rect x="0" y="${shelfFront + 42}" width="${w}" height="${h - shelfFront - 42}" fill="url(#floor)"/>
-  <ellipse cx="${w / 2}" cy="${shelfFront + 50}" rx="${w * 0.42}" ry="18" fill="#0f172a" opacity="0.08"/>
-
-  <!-- sign placement hint zone (subtle) -->
-  <rect x="${isShelfTag ? w * 0.15 : w * 0.48}" y="${isShelfTag ? h * 0.48 : h * 0.12}"
-    width="${isShelfTag ? w * 0.55 : w * 0.42}" height="${isShelfTag ? h * 0.18 : h * 0.78}"
-    rx="16" fill="#ffffff" opacity="0.06" stroke="#ffffff" stroke-opacity="0.12" stroke-dasharray="8 6"/>
-
-  <!-- ambient label -->
-  <text x="${w - 36}" y="${h - 24}" text-anchor="end" font-family="Arial, sans-serif" font-size="14" fill="#64748b" opacity="0.7">Mockup Preview</text>
-</svg>`;
-}
-
-async function shadowBuffer(width: number, height: number): Promise<Buffer> {
-  const svg = `<svg width="${width + 40}" height="${height + 40}">
-    <ellipse cx="${(width + 40) / 2}" cy="${height + 28}" rx="${width * 0.42}" ry="14" fill="black" opacity="0.22"/>
+async function makeShadow(w: number, h: number, isShelfTag: boolean): Promise<Buffer> {
+  if (isShelfTag) {
+    // thin ellipse under/behind shelf tag
+    const sw = w + 60;
+    const sh = 30;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sw}" height="${sh}">
+      <ellipse cx="${sw / 2}" cy="18" rx="${w * 0.46}" ry="10" fill="#0f172a" opacity="0.25"/>
+    </svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+  }
+  // drop shadow behind standing sign
+  const sw = w + 80;
+  const sh = h + 40;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sw}" height="${sh}">
+    <rect x="20" y="20" width="${w}" height="${h}" rx="16" fill="#0f172a" opacity="0.22"/>
   </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
+
+// ── Main compose ──────────────────────────────────────────────────────────────
 
 export async function composeShelfMockup(
   flatSignPath: string,
   signSize: SignSize,
   outputPath: string,
 ): Promise<void> {
-  const sceneSvg = renderShelfSceneSvg(signSize);
-  const bgBuffer = await sharp(Buffer.from(sceneSvg)).png().toBuffer();
+  const isShelfTag = signSize === 'shelf_tag';
 
-  const signMeta = await sharp(flatSignPath).metadata();
-  const signW = signMeta.width ?? 800;
-  const signH = signMeta.height ?? 600;
-  const placement = shelfMockupPlacement(signSize, signW, signH);
+  const bgBuffer = await sharp(Buffer.from(renderShelfSceneSvg(signSize))).png().toBuffer();
 
-  let signPipeline = sharp(flatSignPath).resize(placement.width, placement.height, { fit: 'fill' });
-  if (placement.rotate) {
-    signPipeline = signPipeline.rotate(placement.rotate, { background: { r: 0, g: 0, b: 0, alpha: 0 } });
-  }
-  const signBuffer = await signPipeline.png().toBuffer();
-  const resizedMeta = await sharp(signBuffer).metadata();
-  const rw = resizedMeta.width ?? placement.width;
-  const rh = resizedMeta.height ?? placement.height;
+  const meta = await sharp(flatSignPath).metadata();
+  const signW = meta.width ?? 800;
+  const signH = meta.height ?? 600;
+  const pl = calcPlacement(signSize, signW, signH);
 
-  const shadow = await shadowBuffer(rw, rh);
-  const left = placement.left + Math.round((placement.width - rw) / 2);
-  const top = placement.top + Math.round((placement.height - rh) / 2);
-
-  await sharp(bgBuffer)
-    .composite([
-      { input: shadow, top: top + 8, left: left - 10, blend: 'over' },
-      { input: signBuffer, top, left, blend: 'over' },
-    ])
+  const signBuffer = await sharp(flatSignPath)
+    .resize(pl.width, pl.height, { fit: 'fill' })
     .png()
-    .toFile(outputPath);
-}
+    .toBuffer();
 
-export function shelfMockupPreviewDataUrl(signSize: SignSize): string {
-  const svg = renderShelfSceneSvg(signSize);
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  const shadow = await makeShadow(pl.width, pl.height, isShelfTag);
+  const shadowLeft = pl.left - 10;
+  const shadowTop = isShelfTag ? pl.top + pl.height - 10 : pl.top + 10;
+
+  const composites: sharp.OverlayOptions[] = [
+    { input: shadow, left: Math.max(0, shadowLeft), top: Math.max(0, shadowTop), blend: 'multiply' },
+    { input: signBuffer, left: Math.max(0, pl.left), top: Math.max(0, pl.top), blend: 'over' },
+  ];
+
+  await sharp(bgBuffer).composite(composites).png().toFile(outputPath);
 }

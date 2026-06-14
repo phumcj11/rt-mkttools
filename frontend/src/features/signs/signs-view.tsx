@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { NativeSelect } from '@/components/ui/native-select';
 import {
   createSignRequest,
   deleteSignRequest,
@@ -452,90 +451,138 @@ export function SignsView() {
         <div className="space-y-4">
           {tab === 'new' ? (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Request Portal</CardTitle>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Send className="h-4 w-4 text-muted-foreground" />
+                  ขอป้ายใหม่
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <Field label="สาขา"><Input value={form.branchName} onChange={(e) => setForm({ ...form, branchName: e.target.value })} placeholder="เช่น CL / PTN / JJ" /></Field>
-                <Field label="ชื่อผู้ขอ"><Input value={form.requesterName} onChange={(e) => setForm({ ...form, requesterName: e.target.value })} placeholder={user?.fullName ?? 'ชื่อผู้ขอ'} /></Field>
-                <SkuProductSearch
-                  sku={form.sku ?? ''}
-                  searching={skuSearching}
-                  suggestions={skuSuggestions}
-                  open={skuDropdownOpen}
-                  selected={selectedCatalog}
-                  onSkuChange={(sku) => {
-                    setForm((prev) => ({ ...prev, sku }));
-                    if (selectedCatalog && selectedCatalog.sku !== sku.replace(/\s+/g, '').toUpperCase()) {
-                      setSelectedCatalog(null);
-                    }
-                    setSkuDropdownOpen(true);
-                  }}
-                  onSelect={(item) => void selectCatalogProduct(item)}
-                  onClear={() => {
-                    setSelectedCatalog(null);
-                    setForm((prev) => ({ ...prev, sku: '', productName: '', price: undefined, promotion: '' }));
-                  }}
-                  onApplyPromo={(promo) => setForm((prev) => ({
-                    ...prev,
-                    price: promo.promoPrice,
-                    promotion: `${promo.name} ฿${Math.round(promo.promoPrice)}${promo.conditions ? ` · ${promo.conditions}` : ''}`,
-                  }))}
-                />
-                <Field label="ชื่อสินค้า"><Input value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} /></Field>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="ราคาขาย">
-                    <Input type="number" value={form.price ?? ''} onChange={(e) => setForm({ ...form, price: e.target.value ? Number(e.target.value) : undefined })} />
-                  </Field>
-                  <Field label="โปรโมชั่น"><Input value={form.promotion ?? ''} onChange={(e) => setForm({ ...form, promotion: e.target.value })} /></Field>
-                </div>
-                <Field label="ประเภทป้าย">
-                  <NativeSelect value={form.signType} onChange={(e) => setForm({ ...form, signType: e.target.value as SignType })}>
-                    {SIGN_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label} — {t.hint}</option>)}
-                  </NativeSelect>
-                </Field>
-                <Field label="ขนาดป้าย">
-                  <SignSizePicker value={form.signSize} onChange={(s) => setForm({ ...form, signSize: s })} />
-                  <div className="mt-2">
-                    <ShelfScenePreview signSize={form.signSize} />
+              <CardContent className="space-y-4">
+                {/* — Who is requesting — */}
+                <div className="rounded-lg bg-muted/30 p-3 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ผู้ขอ</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="สาขา">
+                      <Input value={form.branchName} onChange={(e) => setForm({ ...form, branchName: e.target.value })} placeholder="เช่น CL / PTN / JJ" />
+                    </Field>
+                    <Field label="ชื่อผู้ขอ">
+                      <Input value={form.requesterName} onChange={(e) => setForm({ ...form, requesterName: e.target.value })} placeholder={user?.fullName ?? 'ชื่อผู้ขอ'} />
+                    </Field>
                   </div>
-                </Field>
-                <Field label="หมายเหตุ">
-                  <textarea className="min-h-[84px] w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-                </Field>
-                <AssetPicker assets={assetInputs} onFiles={handleFiles} onClear={() => setAssetInputs([])} />
-                <Button className="w-full gap-2" onClick={() => void handleSubmit()} disabled={submitting}>
+                </div>
+
+                {/* — Product — */}
+                <div className="rounded-lg bg-muted/30 p-3 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">สินค้า</p>
+                  <SkuProductSearch
+                    sku={form.sku ?? ''}
+                    searching={skuSearching}
+                    suggestions={skuSuggestions}
+                    open={skuDropdownOpen}
+                    selected={selectedCatalog}
+                    onSkuChange={(sku) => {
+                      setForm((prev) => ({ ...prev, sku }));
+                      if (selectedCatalog && selectedCatalog.sku !== sku.replace(/\s+/g, '').toUpperCase()) {
+                        setSelectedCatalog(null);
+                      }
+                      setSkuDropdownOpen(true);
+                    }}
+                    onSelect={(item) => void selectCatalogProduct(item)}
+                    onClear={() => {
+                      setSelectedCatalog(null);
+                      setForm((prev) => ({ ...prev, sku: '', productName: '', price: undefined, promotion: '' }));
+                    }}
+                    onApplyPromo={(promo) => setForm((prev) => ({
+                      ...prev,
+                      price: promo.promoPrice,
+                      promotion: `${promo.name} ฿${Math.round(promo.promoPrice)}${promo.conditions ? ` · ${promo.conditions}` : ''}`,
+                    }))}
+                  />
+                  <Field label="ชื่อสินค้า">
+                    <Input value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} placeholder="ชื่อสินค้าที่ต้องการทำป้าย" />
+                  </Field>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="ราคาขาย (บาท)">
+                      <Input type="number" value={form.price ?? ''} onChange={(e) => setForm({ ...form, price: e.target.value ? Number(e.target.value) : undefined })} placeholder="0" />
+                    </Field>
+                    <Field label="โปรโมชั่น">
+                      <Input value={form.promotion ?? ''} onChange={(e) => setForm({ ...form, promotion: e.target.value })} placeholder="เช่น ซื้อ 2 ลด 10%" />
+                    </Field>
+                  </div>
+                </div>
+
+                {/* — Sign spec — */}
+                <div className="rounded-lg bg-muted/30 p-3 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ประเภทและขนาดป้าย</p>
+                  <Field label="ประเภทป้าย">
+                    <div className="grid grid-cols-2 gap-2">
+                      {SIGN_TYPES.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, signType: t.id }))}
+                          className={`rounded-lg border-2 px-3 py-2 text-left transition
+                            ${form.signType === t.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
+                        >
+                          <p className={`text-xs font-semibold ${form.signType === t.id ? 'text-primary' : ''}`}>{t.label}</p>
+                          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{t.hint}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                  <Field label="ขนาดป้าย">
+                    <SignSizePicker value={form.signSize} onChange={(s) => setForm({ ...form, signSize: s })} />
+                    <div className="mt-2">
+                      <ShelfScenePreview signSize={form.signSize} />
+                    </div>
+                  </Field>
+                </div>
+
+                {/* — Extra — */}
+                <div className="rounded-lg bg-muted/30 p-3 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">รายละเอียดเพิ่มเติม</p>
+                  <Field label="หมายเหตุ / จุดขาย">
+                    <textarea
+                      className="min-h-[72px] w-full rounded-md border bg-background px-3 py-2 text-sm resize-none"
+                      value={form.notes ?? ''}
+                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      placeholder="จุดเด่นสินค้า, ข้อความพิเศษ, หรือข้อมูลเพิ่มเติมสำหรับ AI"
+                    />
+                  </Field>
+                  <AssetPicker assets={assetInputs} onFiles={handleFiles} onClear={() => setAssetInputs([])} />
+                </div>
+
+                <Button className="w-full gap-2 h-11 text-sm font-semibold" onClick={() => void handleSubmit()} disabled={submitting}>
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  ส่งคำขอและสร้าง Draft
+                  ส่งคำขอ — AI จะสร้าง Draft ให้ทันที
                 </Button>
               </CardContent>
             </Card>
           ) : (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">{tab === 'review' ? 'Marketing Approval Queue' : 'คำขอป้าย'}</CardTitle>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{tab === 'review' ? 'Approval Queue' : 'คำขอของฉัน'}</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-1.5 p-3">
                 {currentList.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">ยังไม่มีรายการ</p>
                 ) : currentList.map((item) => (
                   <div
                     key={item.id}
-                    className={`flex items-stretch gap-1 rounded-lg border transition ${selected?.id === item.id ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}
+                    className={`flex items-stretch gap-0.5 rounded-xl border transition ${selected?.id === item.id ? 'border-primary bg-primary/5' : 'border-transparent bg-muted/30 hover:bg-muted/60'}`}
                   >
                     <button
                       type="button"
                       onClick={() => void openDetail(item.id)}
-                      className="min-w-0 flex-1 p-3 text-left"
+                      className="min-w-0 flex-1 px-3 py-2.5 text-left"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold">{item.productName}</p>
-                          <p className="text-xs text-muted-foreground">{item.requestNo} • {item.branchName}</p>
-                        </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold truncate">{item.productName}</p>
                         <StatusBadge status={item.status} />
                       </div>
-                      <p className="mt-2 text-xs text-muted-foreground">{SIGN_TYPES.find((t) => t.id === item.signType)?.label} • {SIGN_SIZES.find((s) => s.id === item.signSize)?.label}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {item.branchName} · {SIGN_TYPES.find((t) => t.id === item.signType)?.label} · {SIGN_SIZES.find((s) => s.id === item.signSize)?.label}
+                      </p>
                     </button>
                     {canDeleteRequest(item) && (
                       <button
@@ -543,9 +590,9 @@ export function SignsView() {
                         title="ลบคำขอ"
                         disabled={submitting}
                         onClick={() => void handleDelete(item.id, item.productName)}
-                        className="flex shrink-0 items-center px-2 text-muted-foreground hover:text-red-600"
+                        className="flex shrink-0 items-center px-2.5 text-muted-foreground/60 hover:text-red-600 transition-colors"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
                   </div>
