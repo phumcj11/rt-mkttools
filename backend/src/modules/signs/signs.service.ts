@@ -137,6 +137,17 @@ export class SignsService {
       if (imageAsset) assets.unshift(imageAsset);
     }
 
+    let signType = dto.signType;
+    let signSize = dto.signSize;
+    let templateId: number | null = dto.templateId ?? null;
+
+    if (templateId) {
+      const tpl = await this.templates.findOne({ where: { id: templateId, tenantId, isActive: true } });
+      if (!tpl) throw new BadRequestException('ไม่พบ Template ที่เลือก');
+      signType = tpl.signType ?? signType;
+      signSize = tpl.signSize ?? signSize;
+    }
+
     const request = await this.requests.save(this.requests.create({
       tenantId,
       requesterId,
@@ -148,8 +159,11 @@ export class SignsService {
       productName: catalog?.name ?? dto.productName.trim(),
       price: dto.price ?? catalog?.retailPrice ?? null,
       promotion: dto.promotion?.trim() || catalog?.promotionText || null,
-      signType: dto.signType,
-      signSize: dto.signSize,
+      signType,
+      signSize,
+      templateId,
+      headline: dto.headline?.trim() || null,
+      benefits: dto.benefits?.trim() || null,
       notes: dto.notes?.trim() || null,
       status: 'submitted',
       statusNote: null,
@@ -368,15 +382,20 @@ export class SignsService {
   }
 
   private async generateAiResult(request: SignRequest): Promise<Partial<SignAiResult>> {
+    const userBenefits = this.parseBenefitsText(request.benefits);
     const fallback = {
       extractedProductName: request.productName,
       extractedPrice: request.price != null ? String(request.price) : null,
       extractedPromotion: request.promotion,
-      headline: this.defaultHeadline(request),
-      benefits: this.defaultBenefits(request),
+      headline: request.headline ?? this.defaultHeadline(request),
+      benefits: userBenefits.length > 0 ? userBenefits : this.defaultBenefits(request),
       rawText: 'AI fallback generated from branch request fields.',
       model: 'fallback',
     };
+
+    if (request.headline && userBenefits.length > 0) {
+      return { ...fallback, model: 'user_provided' };
+    }
 
     try {
       const result = await this.openai.complete(
@@ -390,16 +409,20 @@ export class SignsService {
           `Sign type: ${SIGN_TYPE_LABELS[request.signType]}`,
           `Size: ${SIGN_SIZE_LABELS[request.signSize]}`,
           `Notes: ${request.notes ?? '-'}`,
+          request.headline ? `Preferred headline (use exactly): ${request.headline}` : '',
+          userBenefits.length > 0 ? `Preferred benefits (use these): ${userBenefits.join('; ')}` : '',
           'Return JSON with extractedProductName, extractedPrice, extractedPromotion, headline, benefits array, rawText.',
-        ].join('\n'),
+        ].filter(Boolean).join('\n'),
       );
       const parsed = this.parseJsonObject(result.content);
       return {
         extractedProductName: this.asString(parsed.extractedProductName) || fallback.extractedProductName,
         extractedPrice: this.asString(parsed.extractedPrice) || fallback.extractedPrice,
         extractedPromotion: this.asString(parsed.extractedPromotion) || fallback.extractedPromotion,
-        headline: this.asString(parsed.headline) || fallback.headline,
-        benefits: Array.isArray(parsed.benefits) ? parsed.benefits.map(String).slice(0, 4) : fallback.benefits,
+        headline: request.headline || this.asString(parsed.headline) || fallback.headline,
+        benefits: userBenefits.length > 0
+          ? userBenefits
+          : Array.isArray(parsed.benefits) ? parsed.benefits.map(String).slice(0, 4) : fallback.benefits,
         rawText: this.asString(parsed.rawText) || result.content,
         model: result.model,
       };
@@ -439,17 +462,24 @@ export class SignsService {
   ): Promise<{ filename: string; url: string; localPath: string }> {
     const localPath = path.join(this.uploadDir, filename);
 
-    // Look for an uploaded template that matches type+size (exact match preferred)
+    // Look for uploaded template — prefer explicit choice, then type+size match
     let uploadedTpl: SignTemplate | null = null;
     try {
-      uploadedTpl = await this.templates.findOne({
-        where: [
-          { tenantId: request.tenantId, signType: request.signType, signSize: request.signSize, isActive: true },
-          { tenantId: request.tenantId, signType: request.signType, signSize: IsNull(), isActive: true },
-          { tenantId: request.tenantId, signType: IsNull(), signSize: request.signSize, isActive: true },
-        ],
-        order: { createdAt: 'DESC' },
-      });
+      if (request.templateId) {
+        uploadedTpl = await this.templates.findOne({
+          where: { id: request.templateId, tenantId: request.tenantId, isActive: true },
+        });
+      }
+      if (!uploadedTpl) {
+        uploadedTpl = await this.templates.findOne({
+          where: [
+            { tenantId: request.tenantId, signType: request.signType, signSize: request.signSize, isActive: true },
+            { tenantId: request.tenantId, signType: request.signType, signSize: IsNull(), isActive: true },
+            { tenantId: request.tenantId, signType: IsNull(), signSize: request.signSize, isActive: true },
+          ],
+          order: { createdAt: 'DESC' },
+        });
+      }
     } catch (err) {
       this.logger.warn(`Template lookup skipped: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -547,12 +577,13 @@ export class SignsService {
   }
 
   private fieldsFromRequest(request: SignRequest, ai: SignAiResult): Record<string, unknown> {
+    const userBenefits = this.parseBenefitsText(request.benefits);
     return {
-      headline: ai.headline ?? this.defaultHeadline(request),
+      headline: request.headline ?? ai.headline ?? this.defaultHeadline(request),
       productName: ai.extractedProductName ?? request.productName,
       price: request.price != null ? `฿${Number(request.price).toFixed(0)}` : ai.extractedPrice ?? '',
       promotion: ai.extractedPromotion ?? request.promotion ?? '',
-      benefits: ai.benefits ?? this.defaultBenefits(request),
+      benefits: userBenefits.length > 0 ? userBenefits : ai.benefits ?? this.defaultBenefits(request),
       branchName: request.branchName,
       signTypeLabel: SIGN_TYPE_LABELS[request.signType],
       signSizeLabel: SIGN_SIZE_LABELS[request.signSize],
@@ -560,7 +591,12 @@ export class SignsService {
   }
 
   private templateFor(request: SignRequest): string {
-    return `${request.signType}_${request.signSize}`;
+    return request.templateId ? `tpl_${request.templateId}` : `${request.signType}_${request.signSize}`;
+  }
+
+  private parseBenefitsText(raw: string | null | undefined): string[] {
+    if (!raw?.trim()) return [];
+    return raw.split(/\n|,|•/).map((v) => v.trim()).filter(Boolean).slice(0, 4);
   }
 
   private defaultHeadline(request: SignRequest): string {

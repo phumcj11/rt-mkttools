@@ -53,6 +53,19 @@ export class CreateSignRequestDto {
   signSize: SignSize;
 
   @IsOptional()
+  @IsNumber()
+  templateId?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  headline?: string;
+
+  @IsOptional()
+  @IsString()
+  benefits?: string;
+
+  @IsOptional()
   @IsString()
   notes?: string;
 

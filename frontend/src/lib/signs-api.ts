@@ -107,6 +107,9 @@ export interface CreateSignRequestDto {
   promotion?: string;
   signType: SignType;
   signSize: SignSize;
+  templateId?: number;
+  headline?: string;
+  benefits?: string;
   notes?: string;
   assets?: SignAssetInput[];
 }

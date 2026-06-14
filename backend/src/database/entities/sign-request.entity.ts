@@ -62,6 +62,15 @@ export class SignRequest {
   @Column({ name: 'sign_size', type: 'enum', enum: ['a5', 'a6', 'a7', 'shelf_tag'] })
   signSize: SignSize;
 
+  @Column({ name: 'template_id', type: 'bigint', unsigned: true, nullable: true })
+  templateId: number | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  headline: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  benefits: string | null;
+
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 

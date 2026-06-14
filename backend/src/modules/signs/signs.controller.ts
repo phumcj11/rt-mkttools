@@ -35,7 +35,6 @@ export class SignsController {
   }
 
   @Get('templates')
-  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   listTemplates(@CurrentUser() user: AuthUser) {
     return this.signs.listTemplates(user.tenantId);
   }

@@ -119,6 +119,9 @@ const initialForm: CreateSignRequestDto = {
   promotion: '',
   signType: 'price_tag',
   signSize: 'a6',
+  templateId: undefined,
+  headline: '',
+  benefits: '',
   notes: '',
   assets: [],
 };
@@ -180,6 +183,10 @@ export function SignsView() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    void loadTemplates();
+  }, []);
 
   useEffect(() => {
     if (!selectedDraftFields) return;
@@ -262,11 +269,17 @@ export function SignsView() {
       showError('ข้อมูลไม่ครบ', 'กรุณากรอกสาขา ผู้ขอ และชื่อสินค้า');
       return;
     }
+    if (signTemplates.length > 0 && !form.templateId) {
+      showError('ยังไม่ได้เลือก Template', 'กรุณาเลือกแบบป้ายจาก Template ด้านล่าง');
+      return;
+    }
     setSubmitting(true);
     try {
       const detail = await createSignRequest({
         ...form,
         price: form.price ? Number(form.price) : undefined,
+        headline: form.headline?.trim() || undefined,
+        benefits: form.benefits?.trim() || undefined,
         assets: assetInputs,
       });
       setSelected(detail);
@@ -396,7 +409,6 @@ export function SignsView() {
   }
 
   async function loadTemplates() {
-    if (!canReview) return;
     setTemplatesLoading(true);
     try {
       const list = await listSignTemplates();
@@ -406,6 +418,15 @@ export function SignsView() {
     } finally {
       setTemplatesLoading(false);
     }
+  }
+
+  function selectTemplate(tpl: SignTemplateRecord) {
+    setForm((prev) => ({
+      ...prev,
+      templateId: tpl.id,
+      signType: tpl.signType ?? prev.signType,
+      signSize: tpl.signSize ?? prev.signSize,
+    }));
   }
 
   async function handleTemplateUpload(e: ChangeEvent<HTMLInputElement>, tplSignType?: SignType, tplSignSize?: SignSize) {
@@ -534,73 +555,95 @@ export function SignsView() {
                   </div>
                 </div>
 
-                {/* — Sign spec — */}
+                {/* — Template picker — */}
                 <div className="rounded-lg bg-muted/30 p-3 space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">รูปแบบป้าย</p>
-
-                  {/* Step 1: ยืน vs ติดชั้น */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setForm((prev) => ({
-                        ...prev,
-                        signSize: prev.signSize === 'shelf_tag' ? 'a6' : prev.signSize,
-                        signType: prev.signType === 'shelf_tag' ? 'price_tag' : prev.signType,
-                      }))}
-                      className={`rounded-lg border-2 px-3 py-2.5 text-left transition
-                        ${!isShelfEdge(form.signSize) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
-                    >
-                      <p className={`text-xs font-semibold ${!isShelfEdge(form.signSize) ? 'text-primary' : ''}`}>ป้ายยืนบนชั้น</p>
-                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">แนวตั้ง · A5 / A6 / A7</p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setForm((prev) => ({
-                        ...prev,
-                        signSize: 'shelf_tag',
-                        signType: 'shelf_tag',
-                      }))}
-                      className={`rounded-lg border-2 px-3 py-2.5 text-left transition
-                        ${isShelfEdge(form.signSize) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
-                    >
-                      <p className={`text-xs font-semibold ${isShelfEdge(form.signSize) ? 'text-primary' : ''}`}>ป้ายติดขอบชั้น</p>
-                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">แนวนอน · 8×5 ซม.</p>
-                    </button>
-                  </div>
-
-                  {/* Step 2a: เนื้อหา (เฉพาะป้ายยืน) */}
-                  {!isShelfEdge(form.signSize) && (
-                    <Field label="เนื้อหาป้าย">
-                      <div className="grid grid-cols-3 gap-2">
-                        {CONTENT_TYPES.map((t) => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => setForm((prev) => ({ ...prev, signType: t.id }))}
-                            className={`rounded-lg border-2 px-2 py-2 text-left transition
-                              ${form.signType === t.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
-                          >
-                            <p className={`text-[11px] font-semibold leading-tight ${form.signType === t.id ? 'text-primary' : ''}`}>{t.label}</p>
-                            <p className="text-[9px] text-muted-foreground leading-tight mt-0.5">{t.hint}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </Field>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">เลือกแบบป้าย (Template)</p>
+                  <TemplatePicker
+                    templates={signTemplates}
+                    loading={templatesLoading}
+                    selectedId={form.templateId ?? null}
+                    onSelect={selectTemplate}
+                  />
+                  {form.templateId && (
+                    <ShelfScenePreview signSize={form.signSize} />
                   )}
-
-                  {/* Step 2b: ขนาด (เฉพาะป้ายยืน) */}
-                  {!isShelfEdge(form.signSize) ? (
-                    <Field label="ขนาด">
-                      <SignSizePicker value={form.signSize} onChange={(s) => setForm({ ...form, signSize: s })} />
-                    </Field>
-                  ) : (
-                    <p className="text-xs text-muted-foreground rounded-md bg-background border px-3 py-2">
-                      ป้ายติดขอบชั้นมีขนาดมาตรฐาน 8×5 ซม. — วางแนวนอนหน้าสินค้าบนชั้น
-                    </p>
-                  )}
-
-                  <ShelfScenePreview signSize={form.signSize} />
                 </div>
+
+                {/* — Sign copy (user-provided values) — */}
+                <div className="rounded-lg bg-muted/30 p-3 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ข้อความบนป้าย</p>
+                  <p className="text-[11px] text-muted-foreground -mt-1">กรอกค่าที่ต้องการใส่บนป้าย — ถ้าไม่กรอก AI จะช่วยสร้างให้</p>
+                  <Field label="หัวข้อ / Headline">
+                    <Input
+                      value={form.headline ?? ''}
+                      onChange={(e) => setForm({ ...form, headline: e.target.value })}
+                      placeholder="เช่น คุณภาพดี ราคาพิเศษ"
+                    />
+                  </Field>
+                  <Field label="จุดเด่น (ทีละบรรทัด)">
+                    <textarea
+                      className="min-h-[72px] w-full rounded-md border bg-background px-3 py-2 text-sm resize-none"
+                      value={form.benefits ?? ''}
+                      onChange={(e) => setForm({ ...form, benefits: e.target.value })}
+                      placeholder={'ช่วยบำรุงร่างกาย\nมีสารต้านอนุมูลอิสระ\nเหมาะสำหรับทุกวัย'}
+                    />
+                  </Field>
+                </div>
+
+                {/* Fallback when no templates uploaded */}
+                {signTemplates.length === 0 && !templatesLoading && (
+                  <div className="rounded-lg bg-muted/30 p-3 space-y-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">รูปแบบป้าย (สำรอง)</p>
+                    <p className="text-xs text-muted-foreground">ยังไม่มี Template — Marketing ต้องอัปโหลดก่อน หรือเลือกรูปแบบพื้นฐานด้านล่าง</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({
+                          ...prev,
+                          signSize: prev.signSize === 'shelf_tag' ? 'a6' : prev.signSize,
+                          signType: prev.signType === 'shelf_tag' ? 'price_tag' : prev.signType,
+                        }))}
+                        className={`rounded-lg border-2 px-3 py-2.5 text-left transition
+                          ${!isShelfEdge(form.signSize) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
+                      >
+                        <p className={`text-xs font-semibold ${!isShelfEdge(form.signSize) ? 'text-primary' : ''}`}>ป้ายยืนบนชั้น</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">แนวตั้ง · A5 / A6 / A7</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, signSize: 'shelf_tag', signType: 'shelf_tag' }))}
+                        className={`rounded-lg border-2 px-3 py-2.5 text-left transition
+                          ${isShelfEdge(form.signSize) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
+                      >
+                        <p className={`text-xs font-semibold ${isShelfEdge(form.signSize) ? 'text-primary' : ''}`}>ป้ายติดขอบชั้น</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">แนวนอน · 8×5 ซม.</p>
+                      </button>
+                    </div>
+                    {!isShelfEdge(form.signSize) && (
+                      <>
+                        <Field label="เนื้อหาป้าย">
+                          <div className="grid grid-cols-3 gap-2">
+                            {CONTENT_TYPES.map((t) => (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => setForm((prev) => ({ ...prev, signType: t.id }))}
+                                className={`rounded-lg border-2 px-2 py-2 text-left transition
+                                  ${form.signType === t.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
+                              >
+                                <p className={`text-[11px] font-semibold ${form.signType === t.id ? 'text-primary' : ''}`}>{t.label}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </Field>
+                        <Field label="ขนาด">
+                          <SignSizePicker value={form.signSize} onChange={(s) => setForm({ ...form, signSize: s })} />
+                        </Field>
+                      </>
+                    )}
+                    <ShelfScenePreview signSize={form.signSize} />
+                  </div>
+                )}
 
                 {/* — Extra — */}
                 <div className="rounded-lg bg-muted/30 p-3 space-y-3">
@@ -1169,6 +1212,82 @@ function SkuProductSearch({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function TemplatePicker({
+  templates,
+  loading,
+  selectedId,
+  onSelect,
+}: {
+  templates: SignTemplateRecord[];
+  loading: boolean;
+  selectedId: number | null;
+  onSelect: (tpl: SignTemplateRecord) => void;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        กำลังโหลด Template...
+      </div>
+    );
+  }
+
+  if (templates.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed bg-background px-4 py-6 text-center">
+        <FileImage className="mx-auto h-8 w-8 text-muted-foreground/50" />
+        <p className="mt-2 text-sm font-medium text-muted-foreground">ยังไม่มี Template</p>
+        <p className="mt-1 text-xs text-muted-foreground">ให้ Marketing อัปโหลด Template ในแท็บ Templates</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {templates.map((tpl) => {
+        const active = selectedId === tpl.id;
+        const typeLabel = tpl.signType
+          ? SIGN_TYPES.find((t) => t.id === tpl.signType)?.label
+          : null;
+        const sizeLabel = tpl.signSize
+          ? SIGN_SIZES.find((s) => s.id === tpl.signSize)?.label
+          : null;
+        return (
+          <button
+            key={tpl.id}
+            type="button"
+            onClick={() => onSelect(tpl)}
+            className={`group flex flex-col overflow-hidden rounded-xl border-2 text-left transition
+              ${active ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-primary/50'}`}
+          >
+            <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolveSignUrl(tpl.url)}
+                alt={tpl.name}
+                className="h-full w-full object-cover object-center transition group-hover:scale-[1.02]"
+              />
+              {active && (
+                <div className="absolute inset-0 flex items-center justify-center bg-primary/10">
+                  <CheckCircle2 className="h-7 w-7 text-primary drop-shadow" />
+                </div>
+              )}
+            </div>
+            <div className="px-2 py-2">
+              <p className={`text-xs font-semibold leading-tight truncate ${active ? 'text-primary' : ''}`}>{tpl.name}</p>
+              {(typeLabel || sizeLabel) && (
+                <p className="mt-0.5 text-[10px] text-muted-foreground truncate">
+                  {[typeLabel, sizeLabel].filter(Boolean).join(' · ')}
+                </p>
+              )}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
