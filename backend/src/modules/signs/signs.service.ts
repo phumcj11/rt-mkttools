@@ -29,16 +29,16 @@ import { composeShelfMockup } from './sign-shelf-mockup';
 
 const SIGN_TYPE_LABELS: Record<string, string> = {
   price_tag: 'ป้ายราคา',
-  promotion: 'ป้ายโปรโมชั่น',
+  promotion: 'ป้ายโปร',
   benefit_card: 'ป้ายสรรพคุณ',
-  shelf_tag: 'Shelf Tag',
+  shelf_tag: 'ป้ายติดชั้น',
 };
 
 const SIGN_SIZE_LABELS: Record<string, string> = {
-  a5: 'A5',
-  a6: 'A6',
-  a7: 'A7',
-  shelf_tag: 'Shelf Tag',
+  a5: 'A5 (ใหญ่)',
+  a6: 'A6 (กลาง)',
+  a7: 'A7 (เล็ก)',
+  shelf_tag: 'ติดขอบชั้น 8×5 ซม.',
 };
 
 export interface SignDetail extends SignRequest {

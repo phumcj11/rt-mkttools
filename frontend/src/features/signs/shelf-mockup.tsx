@@ -110,7 +110,7 @@ function SceneBase({ vw, vh, activeSign, signSize }: {
           fontWeight={700}
           fill="#fff"
         >
-          {signSize === 'shelf_tag' ? 'TAG' : '฿'}
+          {signSize === 'shelf_tag' ? 'ป้าย' : '฿'}
         </text>
       )}
     </>

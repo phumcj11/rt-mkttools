@@ -53,18 +53,41 @@ import { ShelfSceneMini, ShelfScenePreview } from '@/features/signs/shelf-mockup
 
 type Tab = 'new' | 'mine' | 'review' | 'templates';
 
-const SIGN_TYPES: { id: SignType; label: string; hint: string }[] = [
+const CONTENT_TYPES: { id: SignType; label: string; hint: string }[] = [
   { id: 'price_tag', label: 'ป้ายราคา', hint: 'เน้นราคาใหญ่ อ่านง่าย' },
-  { id: 'promotion', label: 'ป้ายโปรโมชั่น', hint: 'โปรลดราคา / ซื้อครบ / ของแถม' },
+  { id: 'promotion', label: 'ป้ายโปร', hint: 'ลดราคา / ซื้อครบ / ของแถม' },
   { id: 'benefit_card', label: 'ป้ายสรรพคุณ', hint: 'เล่าจุดเด่นสินค้า' },
-  { id: 'shelf_tag', label: 'Shelf Tag', hint: 'ป้ายเล็กติดชั้นวาง' },
+];
+
+const STANDING_SIZES: { id: SignSize; label: string; sub: string }[] = [
+  { id: 'a5', label: 'ใหญ่', sub: 'A5 · 14.8×21 ซม.' },
+  { id: 'a6', label: 'กลาง', sub: 'A6 · 10.5×14.8 ซม.' },
+  { id: 'a7', label: 'เล็ก', sub: 'A7 · 7.4×10.5 ซม.' },
+];
+
+/** ใช้แสดงใน list / detail — ไม่ซ้ำคำ */
+function formatSignLabel(signType: SignType, signSize: SignSize): string {
+  if (signSize === 'shelf_tag') return 'ป้ายติดขอบชั้น';
+  const content = CONTENT_TYPES.find((t) => t.id === signType)?.label ?? signType;
+  const size = STANDING_SIZES.find((s) => s.id === signSize)?.label ?? signSize.toUpperCase();
+  return `${content} · ขนาด${size}`;
+}
+
+function isShelfEdge(signSize: SignSize): boolean {
+  return signSize === 'shelf_tag';
+}
+
+/** สำหรับ template panel ที่ยังใช้ enum เดิม */
+const SIGN_TYPES: { id: SignType; label: string; hint: string }[] = [
+  ...CONTENT_TYPES,
+  { id: 'shelf_tag', label: 'ป้ายติดชั้น', hint: 'ป้ายแนวนอนติดขอบชั้น' },
 ];
 
 const SIGN_SIZES: { id: SignSize; label: string; sub: string; w: number; h: number }[] = [
   { id: 'a5', label: 'A5', sub: '14.8 × 21 cm', w: 38, h: 54 },
   { id: 'a6', label: 'A6', sub: '10.5 × 14.8 cm', w: 32, h: 45 },
   { id: 'a7', label: 'A7', sub: '7.4 × 10.5 cm', w: 26, h: 37 },
-  { id: 'shelf_tag', label: 'Shelf Tag', sub: '8 × 5 cm', w: 52, h: 32 },
+  { id: 'shelf_tag', label: 'ติดชั้น', sub: '8 × 5 cm', w: 52, h: 32 },
 ];
 
 const STATUS_LABELS: Record<SignRequestStatus, string> = {
@@ -513,29 +536,70 @@ export function SignsView() {
 
                 {/* — Sign spec — */}
                 <div className="rounded-lg bg-muted/30 p-3 space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ประเภทและขนาดป้าย</p>
-                  <Field label="ประเภทป้าย">
-                    <div className="grid grid-cols-2 gap-2">
-                      {SIGN_TYPES.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => setForm((prev) => ({ ...prev, signType: t.id }))}
-                          className={`rounded-lg border-2 px-3 py-2 text-left transition
-                            ${form.signType === t.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
-                        >
-                          <p className={`text-xs font-semibold ${form.signType === t.id ? 'text-primary' : ''}`}>{t.label}</p>
-                          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{t.hint}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </Field>
-                  <Field label="ขนาดป้าย">
-                    <SignSizePicker value={form.signSize} onChange={(s) => setForm({ ...form, signSize: s })} />
-                    <div className="mt-2">
-                      <ShelfScenePreview signSize={form.signSize} />
-                    </div>
-                  </Field>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">รูปแบบป้าย</p>
+
+                  {/* Step 1: ยืน vs ติดชั้น */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({
+                        ...prev,
+                        signSize: prev.signSize === 'shelf_tag' ? 'a6' : prev.signSize,
+                        signType: prev.signType === 'shelf_tag' ? 'price_tag' : prev.signType,
+                      }))}
+                      className={`rounded-lg border-2 px-3 py-2.5 text-left transition
+                        ${!isShelfEdge(form.signSize) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
+                    >
+                      <p className={`text-xs font-semibold ${!isShelfEdge(form.signSize) ? 'text-primary' : ''}`}>ป้ายยืนบนชั้น</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">แนวตั้ง · A5 / A6 / A7</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({
+                        ...prev,
+                        signSize: 'shelf_tag',
+                        signType: 'shelf_tag',
+                      }))}
+                      className={`rounded-lg border-2 px-3 py-2.5 text-left transition
+                        ${isShelfEdge(form.signSize) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
+                    >
+                      <p className={`text-xs font-semibold ${isShelfEdge(form.signSize) ? 'text-primary' : ''}`}>ป้ายติดขอบชั้น</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">แนวนอน · 8×5 ซม.</p>
+                    </button>
+                  </div>
+
+                  {/* Step 2a: เนื้อหา (เฉพาะป้ายยืน) */}
+                  {!isShelfEdge(form.signSize) && (
+                    <Field label="เนื้อหาป้าย">
+                      <div className="grid grid-cols-3 gap-2">
+                        {CONTENT_TYPES.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setForm((prev) => ({ ...prev, signType: t.id }))}
+                            className={`rounded-lg border-2 px-2 py-2 text-left transition
+                              ${form.signType === t.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
+                          >
+                            <p className={`text-[11px] font-semibold leading-tight ${form.signType === t.id ? 'text-primary' : ''}`}>{t.label}</p>
+                            <p className="text-[9px] text-muted-foreground leading-tight mt-0.5">{t.hint}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </Field>
+                  )}
+
+                  {/* Step 2b: ขนาด (เฉพาะป้ายยืน) */}
+                  {!isShelfEdge(form.signSize) ? (
+                    <Field label="ขนาด">
+                      <SignSizePicker value={form.signSize} onChange={(s) => setForm({ ...form, signSize: s })} />
+                    </Field>
+                  ) : (
+                    <p className="text-xs text-muted-foreground rounded-md bg-background border px-3 py-2">
+                      ป้ายติดขอบชั้นมีขนาดมาตรฐาน 8×5 ซม. — วางแนวนอนหน้าสินค้าบนชั้น
+                    </p>
+                  )}
+
+                  <ShelfScenePreview signSize={form.signSize} />
                 </div>
 
                 {/* — Extra — */}
@@ -581,7 +645,7 @@ export function SignsView() {
                         <StatusBadge status={item.status} />
                       </div>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {item.branchName} · {SIGN_TYPES.find((t) => t.id === item.signType)?.label} · {SIGN_SIZES.find((s) => s.id === item.signSize)?.label}
+                        {item.branchName} · {formatSignLabel(item.signType, item.signSize)}
                       </p>
                     </button>
                     {canDeleteRequest(item) && (
@@ -802,8 +866,7 @@ function RequestDetail({
           <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <Info label="SKU" value={detail.sku || '-'} />
             <Info label="ราคา" value={detail.price != null ? `฿${detail.price}` : '-'} />
-            <Info label="ประเภท" value={SIGN_TYPES.find((t) => t.id === detail.signType)?.label ?? detail.signType} />
-            <Info label="ขนาด" value={SIGN_SIZES.find((s) => s.id === detail.signSize)?.label ?? detail.signSize} />
+            <Info label="รูปแบบป้าย" value={formatSignLabel(detail.signType, detail.signSize)} />
           </div>
           {detail.statusNote && <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{detail.statusNote}</p>}
           {detail.notes && <p className="text-sm whitespace-pre-wrap">{detail.notes}</p>}
@@ -1112,8 +1175,8 @@ function SkuProductSearch({
 
 function SignSizePicker({ value, onChange }: { value: SignSize; onChange: (s: SignSize) => void }) {
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {SIGN_SIZES.map((s) => {
+    <div className="grid grid-cols-3 gap-2">
+      {STANDING_SIZES.map((s) => {
         const active = value === s.id;
         return (
           <button
