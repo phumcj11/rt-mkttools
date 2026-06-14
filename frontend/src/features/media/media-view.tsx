@@ -132,6 +132,13 @@ export function MediaView() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
 
+  const settingsStatusItems = [
+    { label: 'Video API', ok: !!videoSettings?.video_configured },
+    { label: 'Brand', ok: brandAssets.some((a) => a?.filename && a?.url) },
+    { label: 'Google Drive', ok: !!driveSettings?.drive_configured },
+    { label: 'n8n Cutout', ok: !!n8nSettings?.n8n_configured },
+  ];
+
   useEffect(() => {
     listBrandAssets()
       .then((assets) => setBrandAssets(Array.isArray(assets) ? assets : []))
@@ -1128,325 +1135,331 @@ export function MediaView() {
 
       {/* Settings Tab */}
       {tab === 'settings' && (
-        <div className="space-y-4 max-w-2xl">
-          {/* Google Drive */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CloudUpload className="h-4 w-4 text-primary" />
-                Google Drive — Service Account
-                {driveSettings?.drive_configured && (
-                  <Badge variant="default" className="ml-auto text-xs">เชื่อมต่อแล้ว</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {driveSettings?.drive_configured ? (
-                <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
-                  <p className="font-medium text-green-600">ตั้งค่าแล้ว</p>
-                  <p className="text-muted-foreground text-xs mt-0.5">
-                    Folder ID: {driveSettings.drive_folder_id_preview}
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 space-y-1">
-                  <p className="font-semibold">วิธีตั้งค่า (ใช้เวลา ~10 นาที):</p>
-                  <ol className="list-decimal ml-4 space-y-0.5">
-                    <li>Google Cloud Console → IAM → Service Accounts → สร้างใหม่</li>
-                    <li>Download JSON key</li>
-                    <li>เปิด Google Drive → สร้าง Folder → Share ให้ service account email</li>
-                    <li>คัดลอก Folder ID จาก URL (ส่วนหลัง /folders/)</li>
-                  </ol>
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label>Google Drive Folder ID</Label>
-                <Input
-                  placeholder="เช่น 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
-                  value={driveFolderId}
-                  onChange={(e) => setDriveFolderId(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Service Account JSON (วางทั้งไฟล์)</Label>
-                <textarea
-                  className="flex min-h-[100px] w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
-                  placeholder={'{\n  "type": "service_account",\n  "client_email": "...",\n  "private_key": "..."\n}'}
-                  value={driveServiceAccount}
-                  onChange={(e) => setDriveServiceAccount(e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Video AI */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                <Video className="h-4 w-4 text-violet-600" />
-                ตั้งค่า Video
-                <span className="text-[11px] font-medium text-violet-700 px-2 py-0.5 rounded-full bg-violet-100">
-                  Mascot EN
-                </span>
-                {videoSettings?.video_configured && (
-                  <Badge variant="default" className="ml-auto text-xs">API ตั้งค่าแล้ว</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {videoSettings?.video_configured ? (
-                <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
-                  <p className="font-medium text-green-600">API Key ตั้งค่าแล้ว</p>
-                  <p className="text-muted-foreground text-xs mt-0.5">
-                    Default: {videoSettings.video_provider_default} · {videoSettings.video_model_default}
-                  </p>
-                  <p className="text-muted-foreground text-xs mt-0.5">
-                    Gemini: {videoSettings.gemini_key_preview ?? '-'} · Kling: {videoSettings.kling_key_preview ?? '-'} · Grok: {videoSettings.grok_key_preview ?? '-'}
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800">
-                  <p className="font-semibold">ตั้งค่า Video Provider API Key ด้านล่าง</p>
-                  <p>แนะนำ Grok Imagine — รองรับ 9:16, 15 วินาที และเสียง voiceover ภาษาอังกฤษ</p>
-                </div>
-              )}
-
-              <p className="text-xs font-medium text-muted-foreground">การสร้าง Video (ใช้ทุกครั้งที่กดสร้าง Video)</p>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-1.5">
-                  <Label>Provider</Label>
-                  <NativeSelect
-                    value={videoProvider}
-                    onChange={(e) => {
-                      const next = e.target.value as VideoProviderId;
-                      setVideoProvider(next);
-                      setVideoModel(VIDEO_MODELS[next][0]);
-                    }}
-                  >
-                    <option value="gemini">Gemini / Veo</option>
-                    <option value="kling">Kling AI</option>
-                    <option value="grok">Grok Imagine</option>
-                  </NativeSelect>
-                </div>
-                <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
-                  <Label>Model</Label>
-                  <NativeSelect value={videoModel} onChange={(e) => setVideoModel(e.target.value)}>
-                    {(VIDEO_MODELS[videoProvider] ?? []).map((model) => (
-                      <option key={model} value={model}>{model}</option>
-                    ))}
-                  </NativeSelect>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>ความยาวคลิป</Label>
-                  <NativeSelect
-                    value={String(videoDuration)}
-                    onChange={(e) => setVideoDuration(Number(e.target.value))}
-                  >
-                    {VIDEO_DURATION_OPTIONS.map((d) => (
-                      <option key={d} value={d}>{d} วินาที · 9:16</option>
-                    ))}
-                  </NativeSelect>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer w-fit">
-                <input
-                  type="checkbox"
-                  checked={videoUseCutout}
-                  onChange={(e) => setVideoUseCutout(e.target.checked)}
-                  className="rounded"
-                />
-                Extract product (ตัดพื้นหลังสินค้าก่อนสร้าง Video)
-              </label>
-
-              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground pt-1 border-t">
-                <span className="rounded bg-muted px-2 py-1">1 Extract product</span>
-                <span>→</span>
-                <span className="rounded bg-muted px-2 py-1">2 Mascot store scene</span>
-                <span>→</span>
-                <span className="rounded bg-muted px-2 py-1">3 Native EN script</span>
-                <span>→</span>
-                <span className="rounded bg-muted px-2 py-1">4 Video</span>
-              </div>
-
-              <p className="text-xs font-medium text-muted-foreground pt-2 border-t">API Keys (บันทึกลงเซิร์ฟเวอร์)</p>
-              <div className="space-y-1.5">
-                <Label>Gemini API Key</Label>
-                <Input
-                  type="password"
-                  placeholder="AIza..."
-                  value={geminiKey}
-                  onChange={(e) => setGeminiKey(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Kling AI API Key</Label>
-                <Input
-                  type="password"
-                  placeholder="kling-..."
-                  value={klingKey}
-                  onChange={(e) => setKlingKey(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Grok / xAI API Key</Label>
-                <Input
-                  type="password"
-                  placeholder="xai-..."
-                  value={grokKey}
-                  onChange={(e) => setGrokKey(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Brand POP */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Brand สำหรับ POP Sticker
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                อัปโหลด Logo / Mascot — เลือก Mascot ที่จะเป็นตัวหลักใน Video และใช้ใน POP แบบ Branded
+        <div className="space-y-6 max-w-4xl">
+          {/* Header */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">ตั้งค่า Product Media AI</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                ตั้งครั้งเดียว — ใช้ทุกครั้งที่สร้าง POP Sticker หรือ Video
               </p>
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={(e) => { void handleBrandAssetUpload('logo', e.target.files?.[0] ?? null); e.target.value = ''; }}
-              />
-              <input
-                ref={mascotInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={(e) => { void handleBrandAssetUpload('mascot', e.target.files?.[0] ?? null); e.target.value = ''; }}
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  disabled={brandUploading === 'logo'}
-                  onClick={() => logoInputRef.current?.click()}
-                >
-                  {brandUploading === 'logo' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                  อัปโหลด Logo
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  disabled={brandUploading === 'mascot'}
-                  onClick={() => mascotInputRef.current?.click()}
-                >
-                  {brandUploading === 'mascot' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                  อัปโหลด Mascot
-                </Button>
-                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={includeBranded}
-                    disabled={brandAssets.length === 0}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      if (checked && selectedBrandAssets.size === 0 && brandAssets.length > 0) {
-                        setSelectedBrandAssets(new Set(brandAssets.filter((a) => a?.filename).map((a) => a.filename)));
-                      }
-                      setIncludeBranded(checked);
-                    }}
-                    className="rounded"
-                  />
-                  Branded +2
-                </label>
-              </div>
-              {brandAssets.filter((a) => a?.filename && a?.url).length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {brandAssets.filter((a) => a?.filename && a?.url).map((asset) => {
-                    const selected = selectedBrandAssets.has(asset.filename);
-                    return (
-                      <button
-                        key={asset.filename}
-                        type="button"
-                        title={`${selected ? 'ยกเลิก' : 'เลือก'} ${asset.kind}`}
-                        onClick={() => toggleBrandAsset(asset.filename)}
-                        className={`relative h-12 w-12 rounded-full border-2 overflow-hidden transition-all ${selected ? 'border-violet-500 ring-2 ring-violet-200' : 'border-border opacity-60 hover:opacity-100'}`}
-                      >
-                        <img src={resolveMediaUrl(asset.url)} alt={asset.kind} className="h-full w-full object-cover bg-white" />
-                        {selected && (
-                          <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center">
-                            <CheckCircle2 className="h-4 w-4 text-violet-700" />
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">ยังไม่มี Brand — อัปโหลด Logo หรือ Mascot ด้านบน</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* n8n Composite */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <RefreshCw className="h-4 w-4 text-primary" />
-                n8n — Cutout Webhook (ไดคัทสินค้า)
-                {n8nSettings?.n8n_configured && (
-                  <Badge variant="default" className="ml-auto text-xs">เชื่อมต่อแล้ว</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {n8nSettings?.n8n_configured ? (
-                <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
-                  <p className="font-medium text-green-600">ตั้งค่าแล้ว</p>
-                  <p className="text-muted-foreground text-xs mt-0.5">URL: {n8nSettings.n8n_webhook_url_preview}</p>
-                </div>
-              ) : (
-                <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800 space-y-1">
-                  <p className="font-semibold">วิธีตั้งค่า n8n Cutout:</p>
-                  <ol className="list-decimal ml-4 space-y-0.5">
-                    <li>Import workflow จากไฟล์ <span className="font-mono">backend/assets/n8n/promo-cutout-workflow.json</span></li>
-                    <li>ติดตั้ง rembg บน server: <span className="font-mono">pip install rembg[cli]</span></li>
-                    <li>Activate workflow ใน n8n → copy Webhook URL</li>
-                    <li>วาง URL ด้านล่าง</li>
-                  </ol>
-                  <p className="text-muted-foreground mt-1">ถ้าไม่ตั้งค่า ระบบจะใช้รูปสินค้าโดยตรงโดยไม่ไดคัท</p>
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label>n8n Webhook URL</Label>
-                <Input
-                  placeholder="https://your-n8n.com/webhook/promo-cutout"
-                  value={n8nWebhookUrl}
-                  onChange={(e) => setN8nWebhookUrl(e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+            <Button
+              className="shrink-0 w-full sm:w-auto"
+              disabled={settingsSaving}
+              onClick={() => void handleSaveSettings()}
+            >
+              {settingsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              บันทึกการตั้งค่า
+            </Button>
+          </div>
 
           {settingsMsg && (
-            <p className={`text-sm ${settingsMsg.includes('สำเร็จ') ? 'text-green-600' : 'text-destructive'}`}>
+            <p className={`text-sm rounded-lg px-3 py-2 ${settingsMsg.includes('สำเร็จ') ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-destructive border border-red-200'}`}>
               {settingsMsg}
             </p>
           )}
-          <Button
-            disabled={settingsSaving}
-            onClick={() => void handleSaveSettings()}
-          >
-            {settingsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            บันทึกการตั้งค่า
-          </Button>
+
+          {/* Status overview */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {settingsStatusItems.map(({ label, ok }) => (
+              <div
+                key={label}
+                className={`rounded-lg border px-3 py-2 text-center ${ok ? 'bg-green-50 border-green-200' : 'bg-muted/30 border-border'}`}
+              >
+                <p className={`text-xs font-medium ${ok ? 'text-green-700' : 'text-muted-foreground'}`}>
+                  {ok ? '✓' : '○'} {label}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{ok ? 'พร้อม' : 'ยังไม่ตั้ง'}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* ── 1. Daily use: Video + Brand ── */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">การสร้างสื่อ (ใช้บ่อย)</h3>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {/* Video preferences */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                    <Video className="h-4 w-4 text-violet-600" />
+                    ตั้งค่า Video
+                    <span className="text-[11px] font-medium text-violet-700 px-2 py-0.5 rounded-full bg-violet-100">
+                      Mascot EN · 9:16
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label>AI Provider</Label>
+                    <NativeSelect
+                      value={videoProvider}
+                      onChange={(e) => {
+                        const next = e.target.value as VideoProviderId;
+                        setVideoProvider(next);
+                        setVideoModel(VIDEO_MODELS[next][0]);
+                      }}
+                    >
+                      <option value="gemini">Gemini / Veo</option>
+                      <option value="kling">Kling AI</option>
+                      <option value="grok">Grok Imagine (แนะนำ)</option>
+                    </NativeSelect>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Model</Label>
+                    <NativeSelect value={videoModel} onChange={(e) => setVideoModel(e.target.value)}>
+                      {(VIDEO_MODELS[videoProvider] ?? []).map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>ความยาวคลิป</Label>
+                    <NativeSelect
+                      value={String(videoDuration)}
+                      onChange={(e) => setVideoDuration(Number(e.target.value))}
+                    >
+                      {VIDEO_DURATION_OPTIONS.map((d) => (
+                        <option key={d} value={d}>{d} วินาที</option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                  <label className="flex items-start gap-2 text-sm cursor-pointer rounded-lg border bg-muted/20 px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={videoUseCutout}
+                      onChange={(e) => setVideoUseCutout(e.target.checked)}
+                      className="rounded mt-0.5"
+                    />
+                    <span>
+                      <span className="font-medium">Extract product</span>
+                      <span className="block text-xs text-muted-foreground mt-0.5">ตัดพื้นหลังสินค้าก่อนสร้าง Video</span>
+                    </span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1 text-[10px] text-muted-foreground">
+                    <span className="rounded bg-muted px-2 py-1 text-center">1 Extract</span>
+                    <span className="rounded bg-muted px-2 py-1 text-center">2 Mascot scene</span>
+                    <span className="rounded bg-muted px-2 py-1 text-center">3 EN script</span>
+                    <span className="rounded bg-muted px-2 py-1 text-center">4 Video</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Brand POP */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Brand POP Sticker
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    อัปโหลด Logo / Mascot — เลือก Mascot เป็นตัวหลักใน Video และ POP แบบ Branded
+                  </p>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => { void handleBrandAssetUpload('logo', e.target.files?.[0] ?? null); e.target.value = ''; }}
+                  />
+                  <input
+                    ref={mascotInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => { void handleBrandAssetUpload('mascot', e.target.files?.[0] ?? null); e.target.value = ''; }}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      className="h-10 gap-1.5"
+                      disabled={brandUploading === 'logo'}
+                      onClick={() => logoInputRef.current?.click()}
+                    >
+                      {brandUploading === 'logo' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      Logo
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-10 gap-1.5"
+                      disabled={brandUploading === 'mascot'}
+                      onClick={() => mascotInputRef.current?.click()}
+                    >
+                      {brandUploading === 'mascot' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      Mascot
+                    </Button>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeBranded}
+                      disabled={brandAssets.length === 0}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        if (checked && selectedBrandAssets.size === 0 && brandAssets.length > 0) {
+                          setSelectedBrandAssets(new Set(brandAssets.filter((a) => a?.filename).map((a) => a.filename)));
+                        }
+                        setIncludeBranded(checked);
+                      }}
+                      className="rounded"
+                    />
+                    สร้าง POP แบบ Branded (+2 แบบ)
+                  </label>
+                  {brandAssets.filter((a) => a?.filename && a?.url).length > 0 ? (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">แตะเพื่อเลือก/ยกเลิก</p>
+                      <div className="flex flex-wrap gap-2">
+                        {brandAssets.filter((a) => a?.filename && a?.url).map((asset) => {
+                          const selected = selectedBrandAssets.has(asset.filename);
+                          return (
+                            <button
+                              key={asset.filename}
+                              type="button"
+                              title={`${selected ? 'ยกเลิก' : 'เลือก'} ${asset.kind}`}
+                              onClick={() => toggleBrandAsset(asset.filename)}
+                              className={`relative h-14 w-14 rounded-xl border-2 overflow-hidden transition-all ${selected ? 'border-violet-500 ring-2 ring-violet-200' : 'border-border opacity-70 hover:opacity-100'}`}
+                            >
+                              <img src={resolveMediaUrl(asset.url)} alt={asset.kind} className="h-full w-full object-cover bg-white" />
+                              {selected && (
+                                <div className="absolute inset-0 bg-violet-500/20 flex items-center justify-center">
+                                  <CheckCircle2 className="h-5 w-5 text-violet-700" />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                      ยังไม่มี Brand — อัปโหลด Logo หรือ Mascot
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* ── 2. API Keys (collapsible) ── */}
+          <details className="group rounded-xl border bg-background shadow-sm overflow-hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 bg-muted/30 px-4 py-3 font-medium text-sm hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-2">
+                <Film className="h-4 w-4 text-primary" />
+                API Keys — Video AI
+                {videoSettings?.video_configured && (
+                  <Badge variant="secondary" className="text-[10px]">ตั้งค่าแล้ว</Badge>
+                )}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="space-y-3 border-t px-4 py-4">
+              {videoSettings?.video_configured ? (
+                <div className="rounded-md bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-800">
+                  Gemini: {videoSettings.gemini_key_preview ?? '-'} · Kling: {videoSettings.kling_key_preview ?? '-'} · Grok: {videoSettings.grok_key_preview ?? '-'}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  ใส่ API Key ของ provider ที่ใช้ — แนะนำ Grok Imagine สำหรับ Mascot store commercial
+                </p>
+              )}
+              <div className="grid gap-3 sm:grid-cols-1">
+                <div className="space-y-1.5">
+                  <Label>Gemini API Key</Label>
+                  <Input type="password" placeholder="AIza..." value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} autoComplete="new-password" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Kling AI API Key</Label>
+                  <Input type="password" placeholder="kling-..." value={klingKey} onChange={(e) => setKlingKey(e.target.value)} autoComplete="new-password" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Grok / xAI API Key</Label>
+                  <Input type="password" placeholder="xai-..." value={grokKey} onChange={(e) => setGrokKey(e.target.value)} autoComplete="new-password" />
+                </div>
+              </div>
+            </div>
+          </details>
+
+          {/* ── 3. Integrations (collapsible) ── */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted-foreground">เชื่อมต่อระบบ (ขั้นสูง)</h3>
+
+            <details className="group rounded-xl border bg-background shadow-sm overflow-hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 bg-muted/30 px-4 py-3 font-medium text-sm hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2">
+                  <CloudUpload className="h-4 w-4 text-primary" />
+                  Google Drive
+                  {driveSettings?.drive_configured && (
+                    <Badge variant="secondary" className="text-[10px]">เชื่อมต่อแล้ว</Badge>
+                  )}
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-3 border-t px-4 py-4">
+                {driveSettings?.drive_configured ? (
+                  <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                    Folder ID: {driveSettings.drive_folder_id_preview}
+                  </p>
+                ) : (
+                  <ol className="list-decimal ml-4 text-xs text-muted-foreground space-y-1">
+                    <li>สร้าง Service Account ใน Google Cloud Console</li>
+                    <li>Download JSON key · Share Drive folder ให้ service account</li>
+                    <li>คัดลอก Folder ID จาก URL</li>
+                  </ol>
+                )}
+                <div className="space-y-1.5">
+                  <Label>Folder ID</Label>
+                  <Input placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" value={driveFolderId} onChange={(e) => setDriveFolderId(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Service Account JSON</Label>
+                  <textarea
+                    className="flex min-h-[80px] w-full rounded-md border bg-background px-3 py-2 text-xs font-mono"
+                    placeholder='{"type":"service_account",...}'
+                    value={driveServiceAccount}
+                    onChange={(e) => setDriveServiceAccount(e.target.value)}
+                  />
+                </div>
+              </div>
+            </details>
+
+            <details className="group rounded-xl border bg-background shadow-sm overflow-hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 bg-muted/30 px-4 py-3 font-medium text-sm hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 text-primary" />
+                  n8n — ไดคัทสินค้า
+                  {n8nSettings?.n8n_configured && (
+                    <Badge variant="secondary" className="text-[10px]">เชื่อมต่อแล้ว</Badge>
+                  )}
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-3 border-t px-4 py-4">
+                {n8nSettings?.n8n_configured ? (
+                  <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                    {n8nSettings.n8n_webhook_url_preview}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    ถ้าไม่ตั้งค่า ระบบใช้ AI cutout แทน — ตั้ง n8n ได้ถ้าต้องการ rembg บน server
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  <Label>Webhook URL</Label>
+                  <Input placeholder="https://your-n8n.com/webhook/promo-cutout" value={n8nWebhookUrl} onChange={(e) => setN8nWebhookUrl(e.target.value)} />
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div className="flex justify-end pb-4">
+            <Button disabled={settingsSaving} onClick={() => void handleSaveSettings()}>
+              {settingsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              บันทึกการตั้งค่า
+            </Button>
+          </div>
         </div>
       )}
 
