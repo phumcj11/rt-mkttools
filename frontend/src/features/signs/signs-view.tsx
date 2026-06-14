@@ -1,0 +1,686 @@
+'use client';
+
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  CheckCircle2,
+  Download,
+  FileImage,
+  Loader2,
+  MessageSquareWarning,
+  RefreshCw,
+  Send,
+  Sparkles,
+  Upload,
+  XCircle,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
+import {
+  createSignRequest,
+  exportSignRequest,
+  getSignRequest,
+  listSignRequests,
+  listSignReviewQueue,
+  regenerateSignDraft,
+  resolveSignUrl,
+  respondSignRequest,
+  reviewSignRequest,
+  updateSignDraft,
+  type CreateSignRequestDto,
+  type SignAssetInput,
+  type SignRequestDetail,
+  type SignRequestStatus,
+  type SignRequestSummary,
+  type SignSize,
+  type SignType,
+} from '@/lib/signs-api';
+import { showError, showSuccess } from '@/lib/sweetalert';
+import { useAuthStore } from '@/stores/auth-store';
+
+type Tab = 'new' | 'mine' | 'review';
+
+const SIGN_TYPES: { id: SignType; label: string; hint: string }[] = [
+  { id: 'price_tag', label: 'ป้ายราคา', hint: 'เน้นราคาใหญ่ อ่านง่าย' },
+  { id: 'promotion', label: 'ป้ายโปรโมชั่น', hint: 'โปรลดราคา / ซื้อครบ / ของแถม' },
+  { id: 'benefit_card', label: 'ป้ายสรรพคุณ', hint: 'เล่าจุดเด่นสินค้า' },
+  { id: 'shelf_tag', label: 'Shelf Tag', hint: 'ป้ายเล็กติดชั้นวาง' },
+];
+
+const SIGN_SIZES: { id: SignSize; label: string }[] = [
+  { id: 'a5', label: 'A5 14.8 x 21 cm' },
+  { id: 'a6', label: 'A6 10.5 x 14.8 cm' },
+  { id: 'a7', label: 'A7 7.4 x 10.5 cm' },
+  { id: 'shelf_tag', label: 'Shelf Tag 8 x 5 cm' },
+];
+
+const STATUS_LABELS: Record<SignRequestStatus, string> = {
+  submitted: 'Submitted',
+  ai_processing: 'AI Processing',
+  pending_review: 'Pending Review',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  need_more_info: 'Need More Info',
+  exported: 'Exported',
+};
+
+const STATUS_CLASS: Record<SignRequestStatus, string> = {
+  submitted: 'bg-slate-100 text-slate-700',
+  ai_processing: 'bg-blue-100 text-blue-700',
+  pending_review: 'bg-amber-100 text-amber-800',
+  approved: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-700',
+  need_more_info: 'bg-orange-100 text-orange-800',
+  exported: 'bg-violet-100 text-violet-700',
+};
+
+const initialForm: CreateSignRequestDto = {
+  branchName: '',
+  requesterName: '',
+  sku: '',
+  productName: '',
+  price: undefined,
+  promotion: '',
+  signType: 'price_tag',
+  signSize: 'a6',
+  notes: '',
+  assets: [],
+};
+
+export function SignsView() {
+  const user = useAuthStore((state) => state.user);
+  const canReview = !!user?.roles?.some((role) => ['super_admin', 'admin', 'marketing_manager', 'marketing_staff'].includes(String(role)));
+  const [tab, setTab] = useState<Tab>('new');
+  const [requests, setRequests] = useState<SignRequestSummary[]>([]);
+  const [queue, setQueue] = useState<SignRequestSummary[]>([]);
+  const [selected, setSelected] = useState<SignRequestDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState<CreateSignRequestDto>(initialForm);
+  const [assetInputs, setAssetInputs] = useState<SignAssetInput[]>([]);
+  const [reviewNote, setReviewNote] = useState('');
+  const [responseNote, setResponseNote] = useState('');
+  const [editFields, setEditFields] = useState({ headline: '', promotion: '' });
+
+  const currentList = tab === 'review' ? queue : requests;
+  const selectedId = selected?.id;
+  const selectedDraftId = selected?.latestDraft?.id;
+  const selectedDraftFields = selected?.latestDraft?.editableFields;
+
+  const openDetail = useCallback(async (id: number) => {
+    const detail = await getSignRequest(id);
+    setSelected(detail);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [mine, reviewItems] = await Promise.all([
+        listSignRequests(),
+        canReview ? listSignReviewQueue().catch(() => []) : Promise.resolve([]),
+      ]);
+      setRequests(mine);
+      setQueue(reviewItems);
+      if (selectedId) {
+        await openDetail(selectedId);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [canReview, openDetail, selectedId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!selectedDraftFields) return;
+    setEditFields({
+      headline: String(selectedDraftFields.headline ?? ''),
+      promotion: String(selectedDraftFields.promotion ?? ''),
+    });
+  }, [selectedId, selectedDraftId, selectedDraftFields]);
+
+  const kpis = useMemo(() => {
+    const all = [...requests, ...queue];
+    return {
+      total: requests.length,
+      review: queue.length,
+      exported: all.filter((r) => r.status === 'exported').length,
+      info: all.filter((r) => r.status === 'need_more_info').length,
+    };
+  }, [requests, queue]);
+
+  async function handleFiles(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []).slice(0, 8);
+    const next = await Promise.all(files.map((file, index) => fileToAsset(file, index)));
+    setAssetInputs((prev) => [...prev, ...next].slice(0, 8));
+    e.target.value = '';
+  }
+
+  async function handleSubmit() {
+    if (!form.branchName || !form.requesterName || !form.productName) {
+      showError('ข้อมูลไม่ครบ', 'กรุณากรอกสาขา ผู้ขอ และชื่อสินค้า');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const detail = await createSignRequest({
+        ...form,
+        price: form.price ? Number(form.price) : undefined,
+        assets: assetInputs,
+      });
+      setSelected(detail);
+      setForm(initialForm);
+      setAssetInputs([]);
+      setTab('mine');
+      showSuccess('ส่งคำขอแล้ว', 'AI สร้าง Draft และส่งเข้า Approval Queue แล้ว');
+      await refresh();
+    } catch (err) {
+      showError('ส่งคำขอไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDecision(decision: 'approve' | 'reject' | 'need_more_info') {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      const detail = await reviewSignRequest(selected.id, {
+        decision,
+        note: reviewNote || undefined,
+      });
+      setSelected(detail);
+      setReviewNote('');
+      showSuccess('อัปเดตสถานะแล้ว', STATUS_LABELS[detail.status]);
+      await refresh();
+    } catch (err) {
+      showError('ตัดสินใจไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDraftSave() {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      const detail = await updateSignDraft(selected.id, editFields);
+      setSelected(detail);
+      showSuccess('แก้ Draft แล้ว', 'ระบบสร้าง preview เวอร์ชันใหม่แล้ว');
+    } catch (err) {
+      showError('แก้ Draft ไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleRegenerate() {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      const detail = await regenerateSignDraft(selected.id);
+      setSelected(detail);
+      showSuccess('สร้างใหม่แล้ว', 'Draft ใหม่พร้อมตรวจแล้ว');
+      await refresh();
+    } catch (err) {
+      showError('สร้างใหม่ไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleExport() {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      const detail = await exportSignRequest(selected.id);
+      setSelected(detail);
+      showSuccess('Export แล้ว', 'ไฟล์พร้อมดาวน์โหลดและส่งเข้า Drive หากตั้งค่าไว้');
+      await refresh();
+    } catch (err) {
+      showError('Export ไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleRespond() {
+    if (!selected || !responseNote.trim()) return;
+    setSubmitting(true);
+    try {
+      const detail = await respondSignRequest(selected.id, { note: responseNote, assets: assetInputs });
+      setSelected(detail);
+      setResponseNote('');
+      setAssetInputs([]);
+      showSuccess('ส่งข้อมูลเพิ่มแล้ว', 'AI สร้าง Draft ใหม่และส่งกลับไปตรวจแล้ว');
+      await refresh();
+    } catch (err) {
+      showError('ส่งข้อมูลเพิ่มไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">AI Sign Generator</h1>
+          <p className="text-sm text-muted-foreground">ระบบขอป้าย สร้าง Draft ด้วย AI ตรวจอนุมัติ และส่งออกไฟล์พร้อมใช้งาน</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+          รีเฟรช
+        </Button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <KpiCard label="คำขอทั้งหมด" value={kpis.total} />
+        <KpiCard label="รอ Marketing" value={kpis.review} tone="amber" />
+        <KpiCard label="ต้องการข้อมูลเพิ่ม" value={kpis.info} tone="orange" />
+        <KpiCard label="Exported" value={kpis.exported} tone="violet" />
+      </div>
+
+      <div className="flex gap-1 rounded-lg border bg-muted/30 p-1 w-fit">
+        <TabButton active={tab === 'new'} onClick={() => setTab('new')}>ขอป้ายใหม่</TabButton>
+        <TabButton active={tab === 'mine'} onClick={() => setTab('mine')}>คำขอทั้งหมด</TabButton>
+        {canReview && <TabButton active={tab === 'review'} onClick={() => setTab('review')}>Approval Queue</TabButton>}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+        <div className="space-y-4">
+          {tab === 'new' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Request Portal</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Field label="สาขา"><Input value={form.branchName} onChange={(e) => setForm({ ...form, branchName: e.target.value })} placeholder="เช่น CL / PTN / JJ" /></Field>
+                <Field label="ชื่อผู้ขอ"><Input value={form.requesterName} onChange={(e) => setForm({ ...form, requesterName: e.target.value })} placeholder={user?.fullName ?? 'ชื่อผู้ขอ'} /></Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="SKU"><Input value={form.sku ?? ''} onChange={(e) => setForm({ ...form, sku: e.target.value })} /></Field>
+                  <Field label="ราคา"><Input type="number" value={form.price ?? ''} onChange={(e) => setForm({ ...form, price: e.target.value ? Number(e.target.value) : undefined })} /></Field>
+                </div>
+                <Field label="ชื่อสินค้า"><Input value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} /></Field>
+                <Field label="โปรโมชั่น"><Input value={form.promotion ?? ''} onChange={(e) => setForm({ ...form, promotion: e.target.value })} /></Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="ประเภทป้าย">
+                    <NativeSelect value={form.signType} onChange={(e) => setForm({ ...form, signType: e.target.value as SignType })}>
+                      {SIGN_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                    </NativeSelect>
+                  </Field>
+                  <Field label="ขนาดป้าย">
+                    <NativeSelect value={form.signSize} onChange={(e) => setForm({ ...form, signSize: e.target.value as SignSize })}>
+                      {SIGN_SIZES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </NativeSelect>
+                  </Field>
+                </div>
+                <Field label="หมายเหตุ">
+                  <textarea className="min-h-[84px] w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                </Field>
+                <AssetPicker assets={assetInputs} onFiles={handleFiles} onClear={() => setAssetInputs([])} />
+                <Button className="w-full gap-2" onClick={() => void handleSubmit()} disabled={submitting}>
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  ส่งคำขอและสร้าง Draft
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">{tab === 'review' ? 'Marketing Approval Queue' : 'คำขอป้าย'}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {currentList.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">ยังไม่มีรายการ</p>
+                ) : currentList.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => void openDetail(item.id)}
+                    className={`w-full rounded-lg border p-3 text-left transition hover:bg-muted/50 ${selected?.id === item.id ? 'border-primary bg-primary/5' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold">{item.productName}</p>
+                        <p className="text-xs text-muted-foreground">{item.requestNo} • {item.branchName}</p>
+                      </div>
+                      <StatusBadge status={item.status} />
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">{SIGN_TYPES.find((t) => t.id === item.signType)?.label} • {SIGN_SIZES.find((s) => s.id === item.signSize)?.label}</p>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <RequestDetail
+          detail={selected}
+          canReview={canReview}
+          submitting={submitting}
+          reviewNote={reviewNote}
+          responseNote={responseNote}
+          editFields={editFields}
+          responseAssets={assetInputs}
+          onReviewNote={setReviewNote}
+          onResponseNote={setResponseNote}
+          onEditFields={setEditFields}
+          onFiles={handleFiles}
+          onClearAssets={() => setAssetInputs([])}
+          onDecision={handleDecision}
+          onDraftSave={handleDraftSave}
+          onRegenerate={handleRegenerate}
+          onExport={handleExport}
+          onRespond={handleRespond}
+        />
+      </div>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, tone = 'slate' }: { label: string; value: number; tone?: 'slate' | 'amber' | 'orange' | 'violet' }) {
+  const colors = {
+    slate: 'border-slate-200 bg-slate-50 text-slate-700',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700',
+    orange: 'border-orange-200 bg-orange-50 text-orange-700',
+    violet: 'border-violet-200 bg-violet-50 text-violet-700',
+  };
+  return (
+    <div className={`rounded-xl border p-3 ${colors[tone]}`}>
+      <p className="text-xs opacity-80">{label}</p>
+      <p className="mt-1 text-2xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function TabButton({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`rounded-md px-3 py-1.5 text-sm font-medium ${active ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: SignRequestStatus }) {
+  return <Badge className={`${STATUS_CLASS[status]} border-0`}>{STATUS_LABELS[status]}</Badge>;
+}
+
+function AssetPicker({
+  assets,
+  onFiles,
+  onClear,
+}: {
+  assets: SignAssetInput[];
+  onFiles: (e: ChangeEvent<HTMLInputElement>) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-dashed p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">รูปหน้างาน</p>
+          <p className="text-xs text-muted-foreground">สินค้า / ป้ายเดิม / ชั้นวาง</p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs hover:bg-muted">
+          <Upload className="h-3.5 w-3.5" />
+          อัปโหลด
+          <input type="file" accept="image/*" multiple className="hidden" onChange={onFiles} />
+        </label>
+      </div>
+      {assets.length > 0 && (
+        <div className="mt-3 flex items-center justify-between rounded bg-muted/40 px-2 py-1 text-xs">
+          <span>{assets.length} รูปพร้อมส่ง</span>
+          <button type="button" className="text-red-600" onClick={onClear}>ล้าง</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RequestDetail({
+  detail,
+  canReview,
+  submitting,
+  reviewNote,
+  responseNote,
+  editFields,
+  responseAssets,
+  onReviewNote,
+  onResponseNote,
+  onEditFields,
+  onFiles,
+  onClearAssets,
+  onDecision,
+  onDraftSave,
+  onRegenerate,
+  onExport,
+  onRespond,
+}: {
+  detail: SignRequestDetail | null;
+  canReview: boolean;
+  submitting: boolean;
+  reviewNote: string;
+  responseNote: string;
+  editFields: { headline: string; promotion: string };
+  responseAssets: SignAssetInput[];
+  onReviewNote: (value: string) => void;
+  onResponseNote: (value: string) => void;
+  onEditFields: (value: { headline: string; promotion: string }) => void;
+  onFiles: (e: ChangeEvent<HTMLInputElement>) => void;
+  onClearAssets: () => void;
+  onDecision: (decision: 'approve' | 'reject' | 'need_more_info') => Promise<void>;
+  onDraftSave: () => Promise<void>;
+  onRegenerate: () => Promise<void>;
+  onExport: () => Promise<void>;
+  onRespond: () => Promise<void>;
+}) {
+  if (!detail) {
+    return (
+      <Card className="min-h-[520px]">
+        <CardContent className="flex h-[520px] flex-col items-center justify-center text-center text-muted-foreground">
+          <FileImage className="mb-3 h-10 w-10 opacity-40" />
+          <p className="font-medium">เลือกคำขอเพื่อดูรายละเอียด</p>
+          <p className="text-sm">หรือส่งคำขอใหม่เพื่อให้ AI สร้าง Draft ป้าย</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg">{detail.productName}</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">{detail.requestNo} • {detail.branchName} • {detail.requesterName}</p>
+          </div>
+          <StatusBadge status={detail.status} />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <Info label="SKU" value={detail.sku || '-'} />
+            <Info label="ราคา" value={detail.price != null ? `฿${detail.price}` : '-'} />
+            <Info label="ประเภท" value={SIGN_TYPES.find((t) => t.id === detail.signType)?.label ?? detail.signType} />
+            <Info label="ขนาด" value={SIGN_SIZES.find((s) => s.id === detail.signSize)?.label ?? detail.signSize} />
+          </div>
+          {detail.statusNote && <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{detail.statusNote}</p>}
+          {detail.notes && <p className="text-sm whitespace-pre-wrap">{detail.notes}</p>}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Draft Preview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {detail.latestDraft ? (
+              <div className="space-y-3">
+                <div className="overflow-hidden rounded-xl border bg-white">
+                  <img src={resolveSignUrl(detail.latestDraft.previewUrl)} alt="Sign draft preview" className="w-full object-contain" />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => void onRegenerate()} disabled={submitting || !canReview}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    สร้างใหม่
+                  </Button>
+                  {detail.exports.map((file) => (
+                    <a key={file.id} href={resolveSignUrl(file.url)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-md border px-3 text-sm hover:bg-muted">
+                      <Download className="mr-2 h-4 w-4" />
+                      {file.format.toUpperCase()}
+                    </a>
+                  ))}
+                  {detail.status === 'approved' && canReview && (
+                    <Button size="sm" onClick={() => void onExport()} disabled={submitting}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Export
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="py-12 text-center text-sm text-muted-foreground">ยังไม่มี Draft</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          {canReview && detail.latestDraft && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Marketing Edit</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Field label="Headline">
+                  <Input value={editFields.headline} onChange={(e) => onEditFields({ ...editFields, headline: e.target.value })} />
+                </Field>
+                <Field label="Promotion">
+                  <Input value={editFields.promotion} onChange={(e) => onEditFields({ ...editFields, promotion: e.target.value })} />
+                </Field>
+                <Button variant="outline" className="w-full" onClick={() => void onDraftSave()} disabled={submitting}>
+                  บันทึก Draft ใหม่
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {canReview && detail.status === 'pending_review' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Approval Decision</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <textarea className="min-h-[84px] w-full rounded-md border bg-background px-3 py-2 text-sm" placeholder="หมายเหตุสำหรับ Reject / Need More Info" value={reviewNote} onChange={(e) => onReviewNote(e.target.value)} />
+                <div className="grid gap-2">
+                  <Button className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => void onDecision('approve')} disabled={submitting}>
+                    <CheckCircle2 className="h-4 w-4" /> Approve
+                  </Button>
+                  <Button variant="outline" className="gap-2 border-orange-300 text-orange-700" onClick={() => void onDecision('need_more_info')} disabled={submitting}>
+                    <MessageSquareWarning className="h-4 w-4" /> Need More Info
+                  </Button>
+                  <Button variant="outline" className="gap-2 border-red-300 text-red-700" onClick={() => void onDecision('reject')} disabled={submitting}>
+                    <XCircle className="h-4 w-4" /> Reject
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {detail.status === 'need_more_info' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">ตอบกลับข้อมูลเพิ่มเติม</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <textarea className="min-h-[84px] w-full rounded-md border bg-background px-3 py-2 text-sm" value={responseNote} onChange={(e) => onResponseNote(e.target.value)} placeholder="เพิ่มรายละเอียดหรือคำอธิบายให้ Marketing" />
+                <AssetPicker assets={responseAssets} onFiles={onFiles} onClear={onClearAssets} />
+                <Button className="w-full" onClick={() => void onRespond()} disabled={submitting || !responseNote.trim()}>
+                  ส่งกลับเข้าตรวจ
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">AI Extraction</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {detail.aiResult ? (
+                <>
+                  <Info label="Headline" value={detail.aiResult.headline ?? '-'} />
+                  <Info label="Product" value={detail.aiResult.extractedProductName ?? '-'} />
+                  <Info label="Price" value={detail.aiResult.extractedPrice ?? '-'} />
+                  <Info label="Promotion" value={detail.aiResult.extractedPromotion ?? '-'} />
+                  {detail.aiResult.benefits?.length ? (
+                    <ul className="list-disc pl-5 text-muted-foreground">
+                      {detail.aiResult.benefits.map((b) => <li key={b}>{b}</li>)}
+                    </ul>
+                  ) : null}
+                </>
+              ) : <p className="text-muted-foreground">ยังไม่มีผล AI</p>}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">รูปต้นทาง</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {detail.assets.length === 0 ? (
+                <p className="text-sm text-muted-foreground">ไม่มีรูปแนบ</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {detail.assets.map((asset) => (
+                    <a key={asset.id} href={resolveSignUrl(asset.url)} target="_blank" rel="noreferrer" className="overflow-hidden rounded border bg-muted">
+                      <img src={resolveSignUrl(asset.url)} alt={asset.kind} className="h-28 w-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-medium">{value}</p>
+    </div>
+  );
+}
+
+async function fileToAsset(file: File, index: number): Promise<SignAssetInput> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  const kinds = ['product', 'current_sign', 'shelf', 'other'] as const;
+  return { kind: kinds[index] ?? 'other', dataUrl, originalName: file.name };
+}

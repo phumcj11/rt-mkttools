@@ -28,6 +28,7 @@ import { PosmModule } from './modules/posm/posm.module';
 import { ProductsModule } from './modules/products/products.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
+import { SignsModule } from './modules/signs/signs.module';
 import { SocialModule } from './modules/social/social.module';
 import { MediaModule } from './modules/media/media.module';
 import { SystemSettingsModule } from './modules/system-settings/system-settings.module';
@@ -62,6 +63,7 @@ import { UsersModule } from './modules/users/users.module';
     AnalyticsModule,
     PosmModule,
     ReviewsModule,
+    SignsModule,
     SocialModule,
     AgentsModule,
     InboxModule,

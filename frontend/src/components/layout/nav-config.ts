@@ -3,6 +3,7 @@ import {
   BarChart3,
   Clapperboard,
   FileImage,
+  FileText,
   Gift,
   Globe,
   LayoutDashboard,
@@ -22,6 +23,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard',     href: '/dashboard',   icon: LayoutDashboard },
   { key: 'promotions',    href: '/promotions',  icon: Gift            },
+  { key: 'signs',         href: '/signs',       icon: FileText        },
   { key: 'posm',          href: '/posm',        icon: FileImage       },
   { key: 'contentStudio', href: '/content',     icon: Sparkles        },
   { key: 'reviews',       href: '/reviews',     icon: Globe           },
