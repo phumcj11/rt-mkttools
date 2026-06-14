@@ -88,6 +88,12 @@ export class SignsController {
     return this.signs.respond(user.tenantId, user.id, id, dto);
   }
 
+  @Post(':id/retry')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff', 'branch_manager')
+  retry(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.signs.retryDraft(user.tenantId, user.id, user.roles, id);
+  }
+
   @Post(':id/regenerate')
   @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   regenerate(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
@@ -118,6 +124,12 @@ export class SignsController {
   @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   export(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.signs.exportFinal(user.tenantId, id);
+  }
+
+  @Delete(':id')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff', 'branch_manager')
+  remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.signs.removeRequest(user.tenantId, user.id, user.roles, id);
   }
 
 }

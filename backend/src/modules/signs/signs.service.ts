@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import sharp from 'sharp';
@@ -159,8 +159,14 @@ export class SignsService {
 
     await this.saveAssets(tenantId, request.id, assets);
     await this.transition(request, 'ai_processing', 'AI กำลังอ่านข้อมูลและสร้าง Draft');
-    await this.processAiAndDraft(request, requesterId);
-    await this.notifyMarketing(tenantId, request);
+    try {
+      await this.processAiAndDraft(request, requesterId);
+      await this.notifyMarketing(tenantId, request);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.transition(request, 'ai_processing', `สร้าง Draft ไม่สำเร็จ — กด "ลองสร้าง Draft อีกครั้ง" (${msg.slice(0, 100)})`);
+      throw new BadRequestException(`สร้าง Draft ไม่สำเร็จ: ${msg}`);
+    }
     return this.findDetail(tenantId, request.id);
   }
 
@@ -185,8 +191,68 @@ export class SignsService {
       throw new BadRequestException('Request is not ready for regeneration');
     }
     await this.transition(request, 'ai_processing', 'กำลังสร้าง Draft ใหม่');
-    await this.processAiAndDraft(request, userId);
+    try {
+      await this.processAiAndDraft(request, userId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.transition(request, 'ai_processing', `สร้าง Draft ไม่สำเร็จ — กด "ลองสร้าง Draft อีกครั้ง" (${msg.slice(0, 100)})`);
+      throw new BadRequestException(`สร้าง Draft ไม่สำเร็จ: ${msg}`);
+    }
     return this.findDetail(tenantId, id);
+  }
+
+  async retryDraft(tenantId: number, userId: number, roles: string[], id: number): Promise<SignDetail> {
+    const request = await this.findRequest(tenantId, id);
+    this.assertCanMutateRequest(request, userId, roles);
+    if (!['submitted', 'ai_processing'].includes(request.status)) {
+      throw new BadRequestException('คำขอนี้ไม่ได้ค้างอยู่ในขั้นสร้าง Draft');
+    }
+    await this.transition(request, 'ai_processing', 'กำลังสร้าง Draft อีกครั้ง...');
+    try {
+      await this.retryDraftGeneration(request, userId);
+      await this.notifyMarketing(tenantId, request);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.transition(request, 'ai_processing', `สร้าง Draft ไม่สำเร็จ — กด "ลองสร้าง Draft อีกครั้ง" (${msg.slice(0, 100)})`);
+      throw new BadRequestException(`สร้าง Draft ไม่สำเร็จ: ${msg}`);
+    }
+    return this.findDetail(tenantId, id);
+  }
+
+  async removeRequest(tenantId: number, userId: number, roles: string[], id: number): Promise<{ message: string }> {
+    const request = await this.findRequest(tenantId, id);
+    this.assertCanMutateRequest(request, userId, roles);
+    if (request.status === 'exported') {
+      throw new BadRequestException('ไม่สามารถลบคำขอที่ Export แล้ว');
+    }
+
+    const [assets, drafts, exports] = await Promise.all([
+      this.assets.find({ where: { tenantId, requestId: id } }),
+      this.drafts.find({ where: { tenantId, requestId: id } }),
+      this.exportsRepo.find({ where: { tenantId, requestId: id } }),
+    ]);
+
+    for (const asset of assets) {
+      this.unlinkUpload(asset.filename);
+    }
+    for (const draft of drafts) {
+      this.unlinkUpload(path.basename(draft.previewPath));
+      const flatUrl = draft.editableFields?._flatPreviewUrl;
+      if (typeof flatUrl === 'string') {
+        this.unlinkUpload(flatUrl.replace(/^.*\//, ''));
+      }
+    }
+    for (const exp of exports) {
+      this.unlinkUpload(exp.filename);
+    }
+
+    await this.exportsRepo.delete({ tenantId, requestId: id });
+    await this.reviews.delete({ tenantId, requestId: id });
+    await this.drafts.delete({ tenantId, requestId: id });
+    await this.aiResults.delete({ tenantId, requestId: id });
+    await this.assets.delete({ tenantId, requestId: id });
+    await this.requests.remove(request);
+    return { message: 'ลบคำขอแล้ว' };
   }
 
   async updateDraft(tenantId: number, userId: number, id: number, dto: UpdateSignDraftDto): Promise<SignDetail> {
@@ -828,6 +894,44 @@ export class SignsService {
       this.logger.warn(`Catalog image fetch failed for ${sku}: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
+  }
+
+  private async retryDraftGeneration(request: SignRequest, userId: number | null): Promise<void> {
+    const existingAi = await this.aiResults.findOne({
+      where: { tenantId: request.tenantId, requestId: request.id },
+      order: { createdAt: 'DESC' },
+    });
+    if (existingAi) {
+      const existingDraft = await this.drafts.findOne({
+        where: { tenantId: request.tenantId, requestId: request.id },
+        order: { version: 'DESC' },
+      });
+      await this.createDraft(
+        request,
+        userId,
+        this.fieldsFromRequest(request, existingAi),
+        (existingDraft?.version ?? 0) + 1,
+      );
+      await this.transition(request, 'pending_review', 'AI สร้าง Draft แล้ว รอ Marketing ตรวจสอบ');
+      return;
+    }
+    await this.processAiAndDraft(request, userId);
+  }
+
+  private assertCanMutateRequest(request: SignRequest, userId: number, roles: string[]): void {
+    const isMarketing = roles.some((role) =>
+      ['super_admin', 'admin', 'marketing_manager', 'marketing_staff'].includes(role),
+    );
+    if (isMarketing) return;
+    if (request.requesterId === userId) return;
+    throw new ForbiddenException('ไม่มีสิทธิ์จัดการคำขอนี้');
+  }
+
+  private unlinkUpload(filename: string): void {
+    if (!filename) return;
+    const safe = path.basename(filename);
+    const localPath = path.join(this.uploadDir, safe);
+    if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
   }
 
   private makeRequestNo(): string {

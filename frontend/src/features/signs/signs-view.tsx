@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import {
   createSignRequest,
+  deleteSignRequest,
   deleteSignTemplate,
   exportSignRequest,
   getSignRequest,
@@ -33,6 +34,7 @@ import {
   regenerateSignDraft,
   resolveSignUrl,
   respondSignRequest,
+  retrySignDraft,
   reviewSignRequest,
   updateSignDraft,
   uploadSignTemplate,
@@ -46,7 +48,7 @@ import {
   type SignType,
 } from '@/lib/signs-api';
 import { getProductCatalogDetail, listProductCatalog, type ProductCatalogItem } from '@/lib/products-api';
-import { showError, showSuccess } from '@/lib/sweetalert';
+import { confirmDelete, showError, showSuccess } from '@/lib/sweetalert';
 import { useAuthStore } from '@/stores/auth-store';
 import { ShelfSceneMini, ShelfScenePreview } from '@/features/signs/shelf-mockup';
 
@@ -67,13 +69,13 @@ const SIGN_SIZES: { id: SignSize; label: string; sub: string; w: number; h: numb
 ];
 
 const STATUS_LABELS: Record<SignRequestStatus, string> = {
-  submitted: 'Submitted',
-  ai_processing: 'AI Processing',
-  pending_review: 'Pending Review',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  need_more_info: 'Need More Info',
-  exported: 'Exported',
+  submitted: 'ส่งแล้ว',
+  ai_processing: 'กำลังสร้าง Draft',
+  pending_review: 'รอ Marketing',
+  approved: 'อนุมัติแล้ว',
+  rejected: 'ปฏิเสธ',
+  need_more_info: 'ต้องการข้อมูลเพิ่ม',
+  exported: 'Export แล้ว',
 };
 
 const STATUS_CLASS: Record<SignRequestStatus, string> = {
@@ -102,6 +104,11 @@ const initialForm: CreateSignRequestDto = {
 export function SignsView() {
   const user = useAuthStore((state) => state.user);
   const canReview = !!user?.roles?.some((role) => ['super_admin', 'admin', 'marketing_manager', 'marketing_staff'].includes(String(role)));
+  const canDeleteRequest = useCallback((item: { status: SignRequestStatus; requesterId?: number | null }) => {
+    if (item.status === 'exported') return false;
+    if (canReview) return true;
+    return item.requesterId != null && item.requesterId === user?.id;
+  }, [canReview, user?.id]);
   const [tab, setTab] = useState<Tab>('new');
   const [requests, setRequests] = useState<SignRequestSummary[]>([]);
   const [queue, setQueue] = useState<SignRequestSummary[]>([]);
@@ -303,6 +310,37 @@ export function SignsView() {
     }
   }
 
+  async function handleRetry() {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      const detail = await retrySignDraft(selected.id);
+      setSelected(detail);
+      showSuccess('สร้าง Draft แล้ว', STATUS_LABELS[detail.status]);
+      await refresh();
+    } catch (err) {
+      showError('ลองสร้าง Draft ไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(id: number, productName: string) {
+    const ok = await confirmDelete(`ลบคำขอ "${productName}"?`, 'การลบไม่สามารถย้อนกลับได้');
+    if (!ok) return;
+    setSubmitting(true);
+    try {
+      await deleteSignRequest(id);
+      if (selected?.id === id) setSelected(null);
+      showSuccess('ลบแล้ว', 'ลบคำขอป้ายเรียบร้อย');
+      await refresh();
+    } catch (err) {
+      showError('ลบไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleExport() {
     if (!selected) return;
     setSubmitting(true);
@@ -481,21 +519,36 @@ export function SignsView() {
                 {currentList.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">ยังไม่มีรายการ</p>
                 ) : currentList.map((item) => (
-                  <button
+                  <div
                     key={item.id}
-                    type="button"
-                    onClick={() => void openDetail(item.id)}
-                    className={`w-full rounded-lg border p-3 text-left transition hover:bg-muted/50 ${selected?.id === item.id ? 'border-primary bg-primary/5' : ''}`}
+                    className={`flex items-stretch gap-1 rounded-lg border transition ${selected?.id === item.id ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold">{item.productName}</p>
-                        <p className="text-xs text-muted-foreground">{item.requestNo} • {item.branchName}</p>
+                    <button
+                      type="button"
+                      onClick={() => void openDetail(item.id)}
+                      className="min-w-0 flex-1 p-3 text-left"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold">{item.productName}</p>
+                          <p className="text-xs text-muted-foreground">{item.requestNo} • {item.branchName}</p>
+                        </div>
+                        <StatusBadge status={item.status} />
                       </div>
-                      <StatusBadge status={item.status} />
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">{SIGN_TYPES.find((t) => t.id === item.signType)?.label} • {SIGN_SIZES.find((s) => s.id === item.signSize)?.label}</p>
-                  </button>
+                      <p className="mt-2 text-xs text-muted-foreground">{SIGN_TYPES.find((t) => t.id === item.signType)?.label} • {SIGN_SIZES.find((s) => s.id === item.signSize)?.label}</p>
+                    </button>
+                    {canDeleteRequest(item) && (
+                      <button
+                        type="button"
+                        title="ลบคำขอ"
+                        disabled={submitting}
+                        onClick={() => void handleDelete(item.id, item.productName)}
+                        className="flex shrink-0 items-center px-2 text-muted-foreground hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </CardContent>
             </Card>
@@ -505,6 +558,7 @@ export function SignsView() {
         <RequestDetail
           detail={selected}
           canReview={canReview}
+          canDelete={selected ? canDeleteRequest(selected) : false}
           submitting={submitting}
           reviewNote={reviewNote}
           responseNote={responseNote}
@@ -518,6 +572,8 @@ export function SignsView() {
           onDecision={handleDecision}
           onDraftSave={handleDraftSave}
           onRegenerate={handleRegenerate}
+          onRetry={handleRetry}
+          onDelete={handleDelete}
           onExport={handleExport}
           onRespond={handleRespond}
         />
@@ -610,6 +666,7 @@ function AssetPicker({
 function RequestDetail({
   detail,
   canReview,
+  canDelete,
   submitting,
   reviewNote,
   responseNote,
@@ -623,11 +680,14 @@ function RequestDetail({
   onDecision,
   onDraftSave,
   onRegenerate,
+  onRetry,
+  onDelete,
   onExport,
   onRespond,
 }: {
   detail: SignRequestDetail | null;
   canReview: boolean;
+  canDelete: boolean;
   submitting: boolean;
   reviewNote: string;
   responseNote: string;
@@ -641,6 +701,8 @@ function RequestDetail({
   onDecision: (decision: 'approve' | 'reject' | 'need_more_info') => Promise<void>;
   onDraftSave: () => Promise<void>;
   onRegenerate: () => Promise<void>;
+  onRetry: () => Promise<void>;
+  onDelete: (id: number, productName: string) => Promise<void>;
   onExport: () => Promise<void>;
   onRespond: () => Promise<void>;
 }) {
@@ -673,7 +735,21 @@ function RequestDetail({
             <CardTitle className="text-lg">{detail.productName}</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">{detail.requestNo} • {detail.branchName} • {detail.requesterName}</p>
           </div>
-          <StatusBadge status={detail.status} />
+          <div className="flex items-center gap-2">
+            <StatusBadge status={detail.status} />
+            {canDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 border-red-200 text-red-600 hover:bg-red-50"
+                disabled={submitting}
+                onClick={() => void onDelete(detail.id, detail.productName)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                ลบ
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -728,7 +804,15 @@ function RequestDetail({
                 </div>
               </div>
             ) : (
-              <p className="py-12 text-center text-sm text-muted-foreground">ยังไม่มี Draft</p>
+              <div className="space-y-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">ยังไม่มี Draft</p>
+                {['submitted', 'ai_processing'].includes(detail.status) && (
+                  <Button className="gap-2" onClick={() => void onRetry()} disabled={submitting}>
+                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    ลองสร้าง Draft อีกครั้ง
+                  </Button>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

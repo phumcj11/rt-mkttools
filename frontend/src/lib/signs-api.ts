@@ -17,6 +17,7 @@ export type SignAssetKind = 'product' | 'current_sign' | 'shelf' | 'other';
 
 export interface SignRequestSummary {
   id: number;
+  requesterId: number | null;
   requestNo: string;
   branchName: string;
   requesterName: string;
@@ -140,6 +141,14 @@ export function respondSignRequest(id: number, body: { note: string; assets?: Si
 
 export function regenerateSignDraft(id: number) {
   return apiRequest<SignRequestDetail>(`/signs/${id}/regenerate`, { method: 'POST' });
+}
+
+export function retrySignDraft(id: number) {
+  return apiRequest<SignRequestDetail>(`/signs/${id}/retry`, { method: 'POST' });
+}
+
+export function deleteSignRequest(id: number) {
+  return apiRequest<{ message: string }>(`/signs/${id}`, { method: 'DELETE' });
 }
 
 export function updateSignDraft(id: number, fields: Record<string, unknown>) {
