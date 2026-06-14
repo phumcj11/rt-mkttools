@@ -873,6 +873,15 @@ function RequestDetail({
   onRespond: () => Promise<void>;
 }) {
   const flatPreviewUrl = detail?.latestDraft?.editableFields?._flatPreviewUrl;
+  const renderSource = typeof detail?.latestDraft?.editableFields?._renderSource === 'string'
+    ? detail.latestDraft.editableFields._renderSource
+    : null;
+  const gptModel = typeof detail?.latestDraft?.editableFields?._gptModel === 'string'
+    ? detail.latestDraft.editableFields._gptModel
+    : null;
+  const gptError = typeof detail?.latestDraft?.editableFields?._gptError === 'string'
+    ? detail.latestDraft.editableFields._gptError
+    : null;
   const hasFlatPreview = typeof flatPreviewUrl === 'string' && flatPreviewUrl.length > 0;
   const previewSrc = detail?.latestDraft
     ? resolveSignUrl(hasFlatPreview ? flatPreviewUrl : detail.latestDraft.previewUrl)
@@ -927,8 +936,13 @@ function RequestDetail({
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base">Draft Preview</CardTitle>
+            {renderSource && (
+              <Badge variant={renderSource === 'gpt_image' ? 'default' : 'secondary'} className="shrink-0">
+                {renderSourceLabel(renderSource)}
+              </Badge>
+            )}
           </CardHeader>
           <CardContent>
             {detail.latestDraft ? (
@@ -936,6 +950,11 @@ function RequestDetail({
                 <div className="overflow-hidden rounded-xl border bg-white">
                   <img src={previewSrc} alt="Sign draft preview" className="mx-auto w-full max-h-[520px] object-contain" />
                 </div>
+                {gptError && renderSource !== 'gpt_image' && (
+                  <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    GPT Image ใช้ไม่ได้ จึง fallback เป็น Template overlay: {gptError}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => void onRegenerate()} disabled={submitting || !canReview}>
                     <Sparkles className="mr-2 h-4 w-4" />
@@ -1033,6 +1052,9 @@ function RequestDetail({
             <CardContent className="space-y-2 text-sm">
               {detail.aiResult ? (
                 <>
+                  <Info label="Text AI Model" value={detail.aiResult.model ?? '-'} />
+                  <Info label="Draft Render" value={renderSourceLabel(renderSource)} />
+                  {gptModel && <Info label="Image AI Model" value={gptModel} />}
                   <Info label="Headline" value={detail.aiResult.headline ?? '-'} />
                   <Info label="Product" value={detail.aiResult.extractedProductName ?? '-'} />
                   <Info label="Price" value={detail.aiResult.extractedPrice ?? '-'} />
@@ -1078,6 +1100,13 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="font-medium">{value}</p>
     </div>
   );
+}
+
+function renderSourceLabel(source: unknown): string {
+  if (source === 'gpt_image') return 'สร้างด้วย AI Image';
+  if (source === 'template_overlay') return 'Template overlay';
+  if (source === 'builtin_svg') return 'Template เริ่มต้น';
+  return '-';
 }
 
 function SkuProductSearch({

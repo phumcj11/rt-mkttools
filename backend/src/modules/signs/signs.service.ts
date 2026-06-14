@@ -25,6 +25,7 @@ import { RespondSignRequestDto } from './dto/respond-sign-request.dto';
 import { ReviewSignRequestDto } from './dto/review-sign-request.dto';
 import { UpdateSignDraftDto } from './dto/update-sign-draft.dto';
 import { UploadTemplateDto } from './dto/upload-template.dto';
+import { craftSignImagePrompt, gptImageSizeForSign } from './sign-gpt-image';
 
 const SIGN_TYPE_LABELS: Record<string, string> = {
   price_tag: 'ป้ายราคา',
@@ -46,6 +47,18 @@ export interface SignDetail extends SignRequest {
   latestDraft: SignDraft | null;
   reviews: SignReview[];
   exports: SignExport[];
+}
+
+type SignRenderSource = 'gpt_image' | 'template_overlay' | 'builtin_svg';
+
+interface SignRenderResult {
+  filename: string;
+  url: string;
+  localPath: string;
+  renderSource: SignRenderSource;
+  gptModel?: string;
+  gptPromptUsed?: string;
+  gptError?: string;
 }
 
 @Injectable()
@@ -439,6 +452,14 @@ export class SignsService {
   ): Promise<SignDraft> {
     const flatFilename = `sign-${request.requestNo}-draft-v${version}.png`;
     const flat = await this.writePng(request, fields, flatFilename);
+    const editableFields = {
+      ...fields,
+      _flatPreviewUrl: flat.url,
+      _renderSource: flat.renderSource,
+      _gptModel: flat.gptModel,
+      _gptPromptUsed: flat.gptPromptUsed,
+      _gptError: flat.gptError,
+    };
     return this.drafts.save(this.drafts.create({
       tenantId: request.tenantId,
       requestId: request.id,
@@ -446,7 +467,7 @@ export class SignsService {
       templateId: this.templateFor(request),
       previewUrl: flat.url,
       previewPath: flat.localPath,
-      editableFields: { ...fields, _flatPreviewUrl: flat.url },
+      editableFields,
       createdBy: userId,
     }));
   }
@@ -455,7 +476,7 @@ export class SignsService {
     request: SignRequest,
     fields: Record<string, unknown>,
     filename: string,
-  ): Promise<{ filename: string; url: string; localPath: string }> {
+  ): Promise<SignRenderResult> {
     const localPath = path.join(this.uploadDir, filename);
 
     // Look for uploaded template — prefer explicit choice, then type+size match
@@ -483,6 +504,18 @@ export class SignsService {
     if (uploadedTpl) {
       const tplPath = path.join(this.uploadDir, uploadedTpl.filename);
       if (fs.existsSync(tplPath)) {
+        const gptResult = await this.tryWriteGptTemplateImage(request, fields, tplPath, localPath);
+        if (gptResult?.ok) {
+          return {
+            filename,
+            url: `/signs/serve/${filename}`,
+            localPath,
+            renderSource: 'gpt_image',
+            gptModel: gptResult.model,
+            gptPromptUsed: gptResult.prompt,
+          };
+        }
+
         const baseImg = sharp(tplPath);
         const meta = await baseImg.metadata();
         const w = meta.width ?? 1200;
@@ -492,14 +525,20 @@ export class SignsService {
           .composite([{ input: overlay, blend: 'over' }])
           .png()
           .toFile(localPath);
-        return { filename, url: `/signs/serve/${filename}`, localPath };
+        return {
+          filename,
+          url: `/signs/serve/${filename}`,
+          localPath,
+          renderSource: 'template_overlay',
+          gptError: gptResult?.error,
+        };
       }
     }
 
     // Fall back to built-in SVG template
     const svg = this.renderSvg(request, fields);
     await sharp(Buffer.from(svg)).png().toFile(localPath);
-    return { filename, url: `/signs/serve/${filename}`, localPath };
+    return { filename, url: `/signs/serve/${filename}`, localPath, renderSource: 'builtin_svg' };
   }
 
   private async writePdf(
@@ -510,6 +549,99 @@ export class SignsService {
     const localPath = path.join(this.uploadDir, filename);
     fs.writeFileSync(localPath, this.renderSimplePdf(request, fields));
     return { filename, url: `/signs/serve/${filename}`, localPath };
+  }
+
+  private async tryWriteGptTemplateImage(
+    request: SignRequest,
+    fields: Record<string, unknown>,
+    templatePath: string,
+    outputPath: string,
+  ): Promise<{ ok: true; model: string; prompt: string } | { ok: false; error: string } | null> {
+    if (!request.templateId || !this.openai.isConfigured()) return null;
+
+    try {
+      const productVisualHint = await this.productVisualHint(request);
+      const prompt = craftSignImagePrompt(request, fields, productVisualHint);
+      const templateBuffer = fs.readFileSync(templatePath);
+      const mimeType = templatePath.toLowerCase().endsWith('.jpg') || templatePath.toLowerCase().endsWith('.jpeg')
+        ? 'image/jpeg'
+        : 'image/png';
+      const result = await this.openai.editGptImage(prompt, templateBuffer, mimeType, {
+        size: gptImageSizeForSign(request.signSize),
+      });
+      fs.writeFileSync(outputPath, result.buffer);
+      return { ok: true, model: result.model, prompt };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Sign GPT Image render failed for ${request.requestNo}: ${msg}`);
+      return { ok: false, error: msg.slice(0, 240) };
+    }
+  }
+
+  private async productVisualHint(request: SignRequest): Promise<string | null> {
+    try {
+      const asset = await this.assets.findOne({
+        where: { tenantId: request.tenantId, requestId: request.id, kind: 'product' },
+        order: { createdAt: 'ASC' },
+      });
+
+      let buffer: Buffer | null = null;
+      let mimeType = 'image/jpeg';
+      if (asset) {
+        const localPath = path.join(this.uploadDir, asset.filename);
+        if (fs.existsSync(localPath)) {
+          buffer = fs.readFileSync(localPath);
+          mimeType = asset.mimeType || this.mimeFromFilename(asset.filename);
+        }
+      }
+
+      if (!buffer && request.sku) {
+        const product = await this.productCache.findOne({ where: { sku: request.sku } });
+        if (product?.imageUrl) {
+          const fetched = await this.fetchImageBuffer(product.imageUrl);
+          if (fetched) {
+            buffer = fetched.buffer;
+            mimeType = fetched.mimeType;
+          }
+        }
+      }
+
+      if (!buffer) return null;
+      const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+      return await this.openai.analyzeImage(
+        dataUrl,
+        [
+          'Describe the actual product packaging for placing it into a Thai retail sign template.',
+          'Mention package shape, label colors, logo/ingredient cues, and visible product type.',
+          'Ignore UI/card surroundings, prices, SKU labels, or unrelated page text.',
+          'Keep it concise, max 3 sentences in English.',
+        ].join(' '),
+      );
+    } catch (err) {
+      this.logger.warn(`Sign product vision hint skipped for ${request.requestNo}: ${String(err)}`);
+      return null;
+    }
+  }
+
+  private async fetchImageBuffer(url: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const mimeType = res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg';
+      if (!mimeType.startsWith('image/')) return null;
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.length < 32) return null;
+      return { buffer, mimeType };
+    } catch {
+      return null;
+    }
+  }
+
+  private mimeFromFilename(filename: string): string {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg';
   }
 
   private async saveExportWithDrive(
