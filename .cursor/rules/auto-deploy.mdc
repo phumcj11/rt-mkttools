@@ -1,0 +1,33 @@
+---
+description: Auto commit, push, and deploy to production after completing implementation work
+alwaysApply: true
+---
+
+# Auto commit + push + deploy
+
+After completing implementation changes in this repo (features, fixes, UI updates), **automatically** run commit, push, and production deploy without waiting for the user to ask.
+
+## When to run
+
+- Do this when meaningful code changes are done and build passes.
+- Skip only if: user explicitly says not to deploy, changes are local/experimental only, or there is nothing to commit.
+
+## Git
+
+- Follow git safety protocol: never force push, never commit secrets (.env).
+- Commit message: concise, focus on why (1 sentence).
+- Push to `main` on `origin`.
+
+## Deploy
+
+- Production: https://rt.k-mkt.com
+- VPS: `root@119.59.102.235`, app at `/var/www/rt_mkttools`
+- SSH key: `~/.ssh/rt_mkttools_github_actions` (Windows: `%USERPROFILE%\.ssh\rt_mkttools_github_actions`)
+- Command:
+  ```bash
+  ssh -i ~/.ssh/rt_mkttools_github_actions root@119.59.102.235 "bash /var/www/rt_mkttools/deploy/scripts/deploy.sh"
+  ```
+
+## After deploy
+
+- Briefly tell the user: commit hash, that push/deploy succeeded, and what to verify on production.
