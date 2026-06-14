@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
   Download,
@@ -9,6 +9,7 @@ import {
   Loader2,
   MessageSquareWarning,
   RefreshCw,
+  Search,
   Send,
   Sparkles,
   Trash2,
@@ -44,6 +45,7 @@ import {
   type SignTemplateRecord,
   type SignType,
 } from '@/lib/signs-api';
+import { getProductCatalogDetail, listProductCatalog, type ProductCatalogItem } from '@/lib/products-api';
 import { showError, showSuccess } from '@/lib/sweetalert';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -112,6 +114,11 @@ export function SignsView() {
   const [editFields, setEditFields] = useState({ headline: '', promotion: '' });
   const [signTemplates, setSignTemplates] = useState<SignTemplateRecord[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [selectedCatalog, setSelectedCatalog] = useState<ProductCatalogItem | null>(null);
+  const [skuSuggestions, setSkuSuggestions] = useState<ProductCatalogItem[]>([]);
+  const [skuSearching, setSkuSearching] = useState(false);
+  const [skuDropdownOpen, setSkuDropdownOpen] = useState(false);
+  const skuDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentList = tab === 'review' ? queue : requests;
   const selectedId = selected?.id;
@@ -152,6 +159,57 @@ export function SignsView() {
     });
   }, [selectedId, selectedDraftId, selectedDraftFields]);
 
+  const applyCatalogProduct = useCallback((product: ProductCatalogItem) => {
+    setSelectedCatalog(product);
+    setForm((prev) => ({
+      ...prev,
+      sku: product.sku,
+      productName: product.name,
+      price: product.retailPrice || prev.price,
+      promotion: product.promotions?.[0]
+        ? `${product.promotions[0].name} ฿${Math.round(product.promotions[0].promoPrice)}`
+        : product.lowestPromoPrice
+          ? `โปรพิเศษ ฿${Math.round(product.lowestPromoPrice)}`
+          : product.promotionNames || prev.promotion,
+    }));
+    setSkuDropdownOpen(false);
+  }, []);
+
+  const selectCatalogProduct = useCallback(async (item: ProductCatalogItem) => {
+    try {
+      const detail = await getProductCatalogDetail(item.sku);
+      applyCatalogProduct(detail);
+    } catch {
+      applyCatalogProduct(item);
+    }
+  }, [applyCatalogProduct]);
+
+  useEffect(() => {
+    const q = (form.sku ?? '').trim();
+    if (q.length < 2) {
+      setSkuSuggestions([]);
+      setSkuSearching(false);
+      return;
+    }
+    if (selectedCatalog?.sku === q.replace(/\s+/g, '').toUpperCase()) return;
+
+    if (skuDebounceRef.current) clearTimeout(skuDebounceRef.current);
+    skuDebounceRef.current = setTimeout(() => {
+      setSkuSearching(true);
+      listProductCatalog({ q, limit: 8 })
+        .then((res) => {
+          setSkuSuggestions(res.items);
+          setSkuDropdownOpen(res.items.length > 0);
+        })
+        .catch(() => setSkuSuggestions([]))
+        .finally(() => setSkuSearching(false));
+    }, 300);
+
+    return () => {
+      if (skuDebounceRef.current) clearTimeout(skuDebounceRef.current);
+    };
+  }, [form.sku, selectedCatalog?.sku]);
+
   const kpis = useMemo(() => {
     const all = [...requests, ...queue];
     return {
@@ -184,6 +242,8 @@ export function SignsView() {
       setSelected(detail);
       setForm(initialForm);
       setAssetInputs([]);
+      setSelectedCatalog(null);
+      setSkuSuggestions([]);
       setTab('mine');
       showSuccess('ส่งคำขอแล้ว', 'AI สร้าง Draft และส่งเข้า Approval Queue แล้ว');
       await refresh();
@@ -359,12 +419,37 @@ export function SignsView() {
               <CardContent className="space-y-3">
                 <Field label="สาขา"><Input value={form.branchName} onChange={(e) => setForm({ ...form, branchName: e.target.value })} placeholder="เช่น CL / PTN / JJ" /></Field>
                 <Field label="ชื่อผู้ขอ"><Input value={form.requesterName} onChange={(e) => setForm({ ...form, requesterName: e.target.value })} placeholder={user?.fullName ?? 'ชื่อผู้ขอ'} /></Field>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="SKU"><Input value={form.sku ?? ''} onChange={(e) => setForm({ ...form, sku: e.target.value })} /></Field>
-                  <Field label="ราคา"><Input type="number" value={form.price ?? ''} onChange={(e) => setForm({ ...form, price: e.target.value ? Number(e.target.value) : undefined })} /></Field>
-                </div>
+                <SkuProductSearch
+                  sku={form.sku ?? ''}
+                  searching={skuSearching}
+                  suggestions={skuSuggestions}
+                  open={skuDropdownOpen}
+                  selected={selectedCatalog}
+                  onSkuChange={(sku) => {
+                    setForm((prev) => ({ ...prev, sku }));
+                    if (selectedCatalog && selectedCatalog.sku !== sku.replace(/\s+/g, '').toUpperCase()) {
+                      setSelectedCatalog(null);
+                    }
+                    setSkuDropdownOpen(true);
+                  }}
+                  onSelect={(item) => void selectCatalogProduct(item)}
+                  onClear={() => {
+                    setSelectedCatalog(null);
+                    setForm((prev) => ({ ...prev, sku: '', productName: '', price: undefined, promotion: '' }));
+                  }}
+                  onApplyPromo={(promo) => setForm((prev) => ({
+                    ...prev,
+                    price: promo.promoPrice,
+                    promotion: `${promo.name} ฿${Math.round(promo.promoPrice)}${promo.conditions ? ` · ${promo.conditions}` : ''}`,
+                  }))}
+                />
                 <Field label="ชื่อสินค้า"><Input value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} /></Field>
-                <Field label="โปรโมชั่น"><Input value={form.promotion ?? ''} onChange={(e) => setForm({ ...form, promotion: e.target.value })} /></Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="ราคาขาย">
+                    <Input type="number" value={form.price ?? ''} onChange={(e) => setForm({ ...form, price: e.target.value ? Number(e.target.value) : undefined })} />
+                  </Field>
+                  <Field label="โปรโมชั่น"><Input value={form.promotion ?? ''} onChange={(e) => setForm({ ...form, promotion: e.target.value })} /></Field>
+                </div>
                 <Field label="ประเภทป้าย">
                   <NativeSelect value={form.signType} onChange={(e) => setForm({ ...form, signType: e.target.value as SignType })}>
                     {SIGN_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label} — {t.hint}</option>)}
@@ -732,6 +817,141 @@ function Info({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="font-medium">{value}</p>
+    </div>
+  );
+}
+
+function SkuProductSearch({
+  sku,
+  searching,
+  suggestions,
+  open,
+  selected,
+  onSkuChange,
+  onSelect,
+  onClear,
+  onApplyPromo,
+}: {
+  sku: string;
+  searching: boolean;
+  suggestions: ProductCatalogItem[];
+  open: boolean;
+  selected: ProductCatalogItem | null;
+  onSkuChange: (sku: string) => void;
+  onSelect: (item: ProductCatalogItem) => void;
+  onClear: () => void;
+  onApplyPromo: (promo: NonNullable<ProductCatalogItem['promotions']>[number]) => void;
+}) {
+  const money = (n: number) => n.toLocaleString('th-TH', { maximumFractionDigits: 0 });
+
+  return (
+    <div className="space-y-2">
+      <Label>SKU / ค้นหาสินค้า</Label>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={sku}
+          onChange={(e) => onSkuChange(e.target.value)}
+          onFocus={() => suggestions.length > 0 && onSkuChange(sku)}
+          placeholder="พิมพ์ SKU หรือชื่อสินค้า..."
+          className="pl-9 pr-9"
+        />
+        {(searching || sku) && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+            {searching ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <button type="button" className="text-muted-foreground hover:text-foreground" onClick={onClear}>×</button>
+            )}
+          </div>
+        )}
+        {open && suggestions.length > 0 && !selected && (
+          <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border bg-background shadow-lg">
+            {suggestions.map((item) => (
+              <button
+                key={item.sku}
+                type="button"
+                className="flex w-full items-center gap-3 border-b px-3 py-2 text-left last:border-0 hover:bg-muted/50"
+                onClick={() => onSelect(item)}
+              >
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border bg-muted">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">ไม่มีรูป</div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.name}</p>
+                  <p className="text-xs text-muted-foreground">{item.sku} · ฿{money(item.retailPrice)}</p>
+                </div>
+                {item.lowestPromoPrice != null && (
+                  <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                    โปร ฿{money(item.lowestPromoPrice)}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selected && (
+        <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+          <div className="flex gap-3">
+            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border bg-white">
+              {selected.imageUrl ? (
+                <img src={selected.imageUrl} alt={selected.name} className="h-full w-full object-contain" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">ไม่มีรูป</div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold leading-tight">{selected.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{selected.sku} · {selected.category || '-'}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                <span className="rounded-md bg-white px-2 py-0.5 border font-medium">ราคาขาย ฿{money(selected.retailPrice)}</span>
+                {selected.lowestPromoPrice != null && (
+                  <span className="rounded-md bg-amber-50 px-2 py-0.5 border border-amber-200 text-amber-800 font-medium">
+                    โปรต่ำสุด ฿{money(selected.lowestPromoPrice)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {selected.promotions && selected.promotions.length > 0 ? (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1.5">โปรโมชั่นแต่ละ Step — คลิกเพื่อใช้ราคานี้</p>
+              <div className="space-y-1.5">
+                {selected.promotions.map((promo, idx) => (
+                  <button
+                    key={promo.id}
+                    type="button"
+                    onClick={() => onApplyPromo(promo)}
+                    className="flex w-full items-center justify-between gap-2 rounded-md border bg-white px-2.5 py-2 text-left text-sm hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">
+                        <span className="mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">{idx + 1}</span>
+                        {promo.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {promo.typeName || promo.type}
+                        {promo.conditions ? ` · ${promo.conditions}` : ''}
+                        {promo.remainingGpPct != null ? ` · GP ${promo.remainingGpPct.toFixed(1)}%` : ''}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-bold text-red-600 tabular-nums">฿{money(promo.promoPrice)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">ไม่มีโปรโมชั่น active สำหรับ SKU นี้</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

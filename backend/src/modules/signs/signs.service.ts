@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import sharp from 'sharp';
 import {
   SignAiResult,
@@ -14,6 +14,8 @@ import {
   SignReview,
   SignReviewDecision,
   SignTemplate,
+  ErpProductCache,
+  ProductPromotionSnapshot,
 } from '../../database/entities';
 import { OpenAiService } from '../ai/openai.service';
 import { DriveService } from '../media/drive.service';
@@ -59,6 +61,8 @@ export class SignsService {
     @InjectRepository(SignReview) private readonly reviews: Repository<SignReview>,
     @InjectRepository(SignExport) private readonly exportsRepo: Repository<SignExport>,
     @InjectRepository(SignTemplate) private readonly templates: Repository<SignTemplate>,
+    @InjectRepository(ErpProductCache) private readonly productCache: Repository<ErpProductCache>,
+    @InjectRepository(ProductPromotionSnapshot) private readonly promoCache: Repository<ProductPromotionSnapshot>,
     private readonly openai: OpenAiService,
     private readonly notifications: NotificationsService,
     private readonly drive: DriveService,
@@ -125,6 +129,13 @@ export class SignsService {
   }
 
   async create(tenantId: number, requesterId: number, dto: CreateSignRequestDto): Promise<SignDetail> {
+    const catalog = dto.sku?.trim() ? await this.lookupCatalogProduct(dto.sku.trim()) : null;
+    const assets = [...(dto.assets ?? [])];
+    if (catalog?.imageUrl && !assets.some((a) => a.kind === 'product')) {
+      const imageAsset = await this.catalogImageAsAsset(catalog.imageUrl, catalog.sku);
+      if (imageAsset) assets.unshift(imageAsset);
+    }
+
     const request = await this.requests.save(this.requests.create({
       tenantId,
       requesterId,
@@ -132,10 +143,10 @@ export class SignsService {
       requestNo: this.makeRequestNo(),
       branchName: dto.branchName.trim(),
       requesterName: dto.requesterName.trim(),
-      sku: dto.sku?.trim() || null,
-      productName: dto.productName.trim(),
-      price: dto.price ?? null,
-      promotion: dto.promotion?.trim() || null,
+      sku: catalog?.sku ?? (dto.sku?.trim() || null),
+      productName: catalog?.name ?? dto.productName.trim(),
+      price: dto.price ?? catalog?.retailPrice ?? null,
+      promotion: dto.promotion?.trim() || catalog?.promotionText || null,
       signType: dto.signType,
       signSize: dto.signSize,
       notes: dto.notes?.trim() || null,
@@ -145,7 +156,7 @@ export class SignsService {
       exportedAt: null,
     }));
 
-    await this.saveAssets(tenantId, request.id, dto.assets ?? []);
+    await this.saveAssets(tenantId, request.id, assets);
     await this.transition(request, 'ai_processing', 'AI กำลังอ่านข้อมูลและสร้าง Draft');
     await this.processAiAndDraft(request, requesterId);
     await this.notifyMarketing(tenantId, request);
@@ -359,15 +370,19 @@ export class SignsService {
     const localPath = path.join(this.uploadDir, filename);
 
     // Look for an uploaded template that matches type+size (exact match preferred)
-    const { IsNull } = await import('typeorm');
-    const uploadedTpl = await this.templates.findOne({
-      where: [
-        { tenantId: request.tenantId, signType: request.signType, signSize: request.signSize, isActive: true },
-        { tenantId: request.tenantId, signType: request.signType, signSize: IsNull(), isActive: true },
-        { tenantId: request.tenantId, signType: IsNull(), signSize: request.signSize, isActive: true },
-      ],
-      order: { createdAt: 'DESC' },
-    });
+    let uploadedTpl: SignTemplate | null = null;
+    try {
+      uploadedTpl = await this.templates.findOne({
+        where: [
+          { tenantId: request.tenantId, signType: request.signType, signSize: request.signSize, isActive: true },
+          { tenantId: request.tenantId, signType: request.signType, signSize: IsNull(), isActive: true },
+          { tenantId: request.tenantId, signType: IsNull(), signSize: request.signSize, isActive: true },
+        ],
+        order: { createdAt: 'DESC' },
+      });
+    } catch (err) {
+      this.logger.warn(`Template lookup skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     if (uploadedTpl) {
       const tplPath = path.join(this.uploadDir, uploadedTpl.filename);
@@ -745,6 +760,70 @@ export class SignsService {
 
   private asString(value: unknown): string | null {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  private async lookupCatalogProduct(rawSku: string): Promise<{
+    sku: string;
+    name: string;
+    retailPrice: number;
+    imageUrl: string;
+    promotionText: string | null;
+    promotions: Array<{ id: number; name: string; typeName?: string; promoPrice: number; conditions: string }>;
+  } | null> {
+    const sku = rawSku.replace(/\s+/g, '').toUpperCase();
+    const [product, promo] = await Promise.all([
+      this.productCache.findOne({ where: { sku } }),
+      this.promoCache.findOne({ where: { sku } }),
+    ]);
+    if (!product) return null;
+    const promotions = (promo?.promotions ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      typeName: p.typeName,
+      promoPrice: Number(p.promoPrice ?? 0),
+      conditions: p.conditions ?? '',
+    }));
+    return {
+      sku: product.sku,
+      name: product.name,
+      retailPrice: Number(product.retailPrice ?? 0),
+      imageUrl: product.imageUrl ?? '',
+      promotionText: this.buildPromotionText(promotions, promo?.promotionNames ?? null),
+      promotions,
+    };
+  }
+
+  private buildPromotionText(
+    promotions: Array<{ name: string; typeName?: string; promoPrice: number; conditions: string }>,
+    promotionNames: string | null,
+  ): string | null {
+    if (promotions.length > 0) {
+      return promotions
+        .slice(0, 3)
+        .map((p) => `${p.name} ฿${Math.round(p.promoPrice)}${p.conditions ? ` (${p.conditions})` : ''}`)
+        .join(' · ');
+    }
+    return promotionNames?.trim() || null;
+  }
+
+  private async catalogImageAsAsset(imageUrl: string, sku: string): Promise<SignAssetInputDto | null> {
+    if (!imageUrl?.trim()) return null;
+    try {
+      const res = await fetch(imageUrl);
+      if (!res.ok) return null;
+      const mimeType = res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg';
+      if (!mimeType.startsWith('image/')) return null;
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.length < 32) return null;
+      return {
+        kind: 'product',
+        dataUrl: `data:${mimeType};base64,${buffer.toString('base64')}`,
+        originalName: `${sku}-catalog.jpg`,
+      };
+    } catch (err) {
+      this.logger.warn(`Catalog image fetch failed for ${sku}: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
   private makeRequestNo(): string {

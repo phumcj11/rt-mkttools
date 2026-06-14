@@ -8,6 +8,8 @@ import {
   SignRequestAsset,
   SignReview,
   SignTemplate,
+  ErpProductCache,
+  ProductPromotionSnapshot,
 } from '../../database/entities';
 import { AiModule } from '../ai/ai.module';
 import { MediaModule } from '../media/media.module';
@@ -17,7 +19,10 @@ import { SignsService } from './signs.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SignRequest, SignRequestAsset, SignAiResult, SignDraft, SignReview, SignExport, SignTemplate]),
+    TypeOrmModule.forFeature([
+      SignRequest, SignRequestAsset, SignAiResult, SignDraft, SignReview, SignExport, SignTemplate,
+      ErpProductCache, ProductPromotionSnapshot,
+    ]),
     AiModule,
     MediaModule,
     NotificationsModule,
