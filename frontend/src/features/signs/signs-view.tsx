@@ -5,11 +5,13 @@ import {
   CheckCircle2,
   Download,
   FileImage,
+  ImagePlus,
   Loader2,
   MessageSquareWarning,
   RefreshCw,
   Send,
   Sparkles,
+  Trash2,
   Upload,
   XCircle,
 } from 'lucide-react';
@@ -21,27 +23,31 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import {
   createSignRequest,
+  deleteSignTemplate,
   exportSignRequest,
   getSignRequest,
   listSignRequests,
   listSignReviewQueue,
+  listSignTemplates,
   regenerateSignDraft,
   resolveSignUrl,
   respondSignRequest,
   reviewSignRequest,
   updateSignDraft,
+  uploadSignTemplate,
   type CreateSignRequestDto,
   type SignAssetInput,
   type SignRequestDetail,
   type SignRequestStatus,
   type SignRequestSummary,
   type SignSize,
+  type SignTemplateRecord,
   type SignType,
 } from '@/lib/signs-api';
 import { showError, showSuccess } from '@/lib/sweetalert';
 import { useAuthStore } from '@/stores/auth-store';
 
-type Tab = 'new' | 'mine' | 'review';
+type Tab = 'new' | 'mine' | 'review' | 'templates';
 
 const SIGN_TYPES: { id: SignType; label: string; hint: string }[] = [
   { id: 'price_tag', label: 'ป้ายราคา', hint: 'เน้นราคาใหญ่ อ่านง่าย' },
@@ -50,11 +56,11 @@ const SIGN_TYPES: { id: SignType; label: string; hint: string }[] = [
   { id: 'shelf_tag', label: 'Shelf Tag', hint: 'ป้ายเล็กติดชั้นวาง' },
 ];
 
-const SIGN_SIZES: { id: SignSize; label: string }[] = [
-  { id: 'a5', label: 'A5 14.8 x 21 cm' },
-  { id: 'a6', label: 'A6 10.5 x 14.8 cm' },
-  { id: 'a7', label: 'A7 7.4 x 10.5 cm' },
-  { id: 'shelf_tag', label: 'Shelf Tag 8 x 5 cm' },
+const SIGN_SIZES: { id: SignSize; label: string; sub: string; w: number; h: number }[] = [
+  { id: 'a5', label: 'A5', sub: '14.8 × 21 cm', w: 38, h: 54 },
+  { id: 'a6', label: 'A6', sub: '10.5 × 14.8 cm', w: 32, h: 45 },
+  { id: 'a7', label: 'A7', sub: '7.4 × 10.5 cm', w: 26, h: 37 },
+  { id: 'shelf_tag', label: 'Shelf Tag', sub: '8 × 5 cm', w: 52, h: 32 },
 ];
 
 const STATUS_LABELS: Record<SignRequestStatus, string> = {
@@ -104,6 +110,8 @@ export function SignsView() {
   const [reviewNote, setReviewNote] = useState('');
   const [responseNote, setResponseNote] = useState('');
   const [editFields, setEditFields] = useState({ headline: '', promotion: '' });
+  const [signTemplates, setSignTemplates] = useState<SignTemplateRecord[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
 
   const currentList = tab === 'review' ? queue : requests;
   const selectedId = selected?.id;
@@ -266,6 +274,50 @@ export function SignsView() {
     }
   }
 
+  async function loadTemplates() {
+    if (!canReview) return;
+    setTemplatesLoading(true);
+    try {
+      const list = await listSignTemplates();
+      setSignTemplates(list);
+    } catch {
+      /* ignore */
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }
+
+  async function handleTemplateUpload(e: ChangeEvent<HTMLInputElement>, tplSignType?: SignType, tplSignSize?: SignSize) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    try {
+      const name = tplSignType && tplSignSize
+        ? `${SIGN_TYPES.find((t) => t.id === tplSignType)?.label ?? tplSignType} ${SIGN_SIZES.find((s) => s.id === tplSignSize)?.label ?? tplSignSize}`
+        : file.name.replace(/\.[^.]+$/, '');
+      await uploadSignTemplate({ name, signType: tplSignType, signSize: tplSignSize, dataUrl });
+      showSuccess('อัปโหลด Template แล้ว', name);
+      await loadTemplates();
+    } catch (err) {
+      showError('อัปโหลดไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    }
+  }
+
+  async function handleTemplateDelete(id: number) {
+    try {
+      await deleteSignTemplate(id);
+      setSignTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      showError('ลบไม่สำเร็จ', err instanceof Error ? err.message : 'กรุณาลองใหม่');
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -286,13 +338,18 @@ export function SignsView() {
         <KpiCard label="Exported" value={kpis.exported} tone="violet" />
       </div>
 
-      <div className="flex gap-1 rounded-lg border bg-muted/30 p-1 w-fit">
+      <div className="flex gap-1 rounded-lg border bg-muted/30 p-1 w-fit flex-wrap">
         <TabButton active={tab === 'new'} onClick={() => setTab('new')}>ขอป้ายใหม่</TabButton>
         <TabButton active={tab === 'mine'} onClick={() => setTab('mine')}>คำขอทั้งหมด</TabButton>
         {canReview && <TabButton active={tab === 'review'} onClick={() => setTab('review')}>Approval Queue</TabButton>}
+        {canReview && (
+          <TabButton active={tab === 'templates'} onClick={() => { setTab('templates'); void loadTemplates(); }}>
+            Templates
+          </TabButton>
+        )}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+      {tab !== 'templates' && <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
         <div className="space-y-4">
           {tab === 'new' ? (
             <Card>
@@ -308,18 +365,14 @@ export function SignsView() {
                 </div>
                 <Field label="ชื่อสินค้า"><Input value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} /></Field>
                 <Field label="โปรโมชั่น"><Input value={form.promotion ?? ''} onChange={(e) => setForm({ ...form, promotion: e.target.value })} /></Field>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="ประเภทป้าย">
-                    <NativeSelect value={form.signType} onChange={(e) => setForm({ ...form, signType: e.target.value as SignType })}>
-                      {SIGN_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-                    </NativeSelect>
-                  </Field>
-                  <Field label="ขนาดป้าย">
-                    <NativeSelect value={form.signSize} onChange={(e) => setForm({ ...form, signSize: e.target.value as SignSize })}>
-                      {SIGN_SIZES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                    </NativeSelect>
-                  </Field>
-                </div>
+                <Field label="ประเภทป้าย">
+                  <NativeSelect value={form.signType} onChange={(e) => setForm({ ...form, signType: e.target.value as SignType })}>
+                    {SIGN_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label} — {t.hint}</option>)}
+                  </NativeSelect>
+                </Field>
+                <Field label="ขนาดป้าย">
+                  <SignSizePicker value={form.signSize} onChange={(s) => setForm({ ...form, signSize: s })} />
+                </Field>
                 <Field label="หมายเหตุ">
                   <textarea className="min-h-[84px] w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                 </Field>
@@ -379,7 +432,16 @@ export function SignsView() {
           onExport={handleExport}
           onRespond={handleRespond}
         />
-      </div>
+      </div>}
+
+      {tab === 'templates' && canReview && (
+        <TemplatesPanel
+          templates={signTemplates}
+          loading={templatesLoading}
+          onUpload={handleTemplateUpload}
+          onDelete={handleTemplateDelete}
+        />
+      )}
     </div>
   );
 }
@@ -671,6 +733,138 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="font-medium">{value}</p>
     </div>
+  );
+}
+
+function SignSizePicker({ value, onChange }: { value: SignSize; onChange: (s: SignSize) => void }) {
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {SIGN_SIZES.map((s) => {
+        const active = value === s.id;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onChange(s.id)}
+            className={`flex flex-col items-center rounded-lg border-2 px-1 py-2 transition
+              ${active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40 hover:bg-muted/40'}`}
+          >
+            <div className="flex items-end justify-center" style={{ height: 60 }}>
+              <div
+                className={`rounded-sm border-2 transition
+                  ${active ? 'border-primary bg-primary/20' : 'border-muted-foreground/40 bg-muted/60'}`}
+                style={{ width: s.w, height: s.h }}
+              />
+            </div>
+            <p className={`mt-1.5 text-[11px] font-semibold leading-tight ${active ? 'text-primary' : 'text-foreground'}`}>{s.label}</p>
+            <p className="text-[9px] text-muted-foreground leading-tight">{s.sub}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TemplatesPanel({
+  templates,
+  loading,
+  onUpload,
+  onDelete,
+}: {
+  templates: SignTemplateRecord[];
+  loading: boolean;
+  onUpload: (e: ChangeEvent<HTMLInputElement>, signType?: SignType, signSize?: SignSize) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">Templates พื้นหลัง</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">อัปโหลดภาพพื้นหลัง PNG — ระบบจะ overlay ข้อความสินค้าและราคาทับอัตโนมัติ</p>
+          </div>
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90">
+            <ImagePlus className="h-3.5 w-3.5" />
+            อัปโหลดใหม่
+            <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={(e) => void onUpload(e)} />
+          </label>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> กำลังโหลด...
+          </div>
+        ) : templates.length === 0 ? (
+          <div className="rounded-xl border border-dashed py-16 text-center text-sm text-muted-foreground">
+            <ImagePlus className="mx-auto mb-2 h-8 w-8 opacity-30" />
+            <p>ยังไม่มี Template</p>
+            <p className="text-xs mt-1">อัปโหลด PNG พื้นหลังเพื่อใช้แทน Template เริ่มต้น</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {templates.map((tpl) => (
+              <div key={tpl.id} className="group relative overflow-hidden rounded-xl border bg-muted/20">
+                <div className="aspect-[3/4] overflow-hidden bg-muted">
+                  <img src={resolveSignUrl(tpl.url)} alt={tpl.name} className="h-full w-full object-cover" />
+                </div>
+                <div className="p-2">
+                  <p className="text-sm font-medium leading-tight">{tpl.name}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {tpl.signType && (
+                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                        {SIGN_TYPES.find((t) => t.id === tpl.signType)?.label ?? tpl.signType}
+                      </span>
+                    )}
+                    {tpl.signSize && (
+                      <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+                        {SIGN_SIZES.find((s) => s.id === tpl.signSize)?.label ?? tpl.signSize}
+                      </span>
+                    )}
+                    {!tpl.signType && !tpl.signSize && (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">ใช้กับทุกขนาด</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="absolute right-1.5 top-1.5 hidden rounded-full bg-red-600 p-1 text-white shadow group-hover:flex"
+                  onClick={() => void onDelete(tpl.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6">
+          <p className="mb-3 text-sm font-semibold text-muted-foreground">อัปโหลดตาม Type × Size</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {SIGN_TYPES.flatMap((type) =>
+              SIGN_SIZES.map((size) => (
+                <label
+                  key={`${type.id}-${size.id}`}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed p-2.5 text-xs hover:bg-muted/40"
+                >
+                  <ImagePlus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="font-medium">{type.label}</span>
+                  <span className="text-muted-foreground">×</span>
+                  <span>{size.label}</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="hidden"
+                    onChange={(e) => void onUpload(e, type.id, size.id)}
+                  />
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

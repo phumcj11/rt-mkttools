@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -21,6 +22,7 @@ import { CreateSignRequestDto } from './dto/create-sign-request.dto';
 import { RespondSignRequestDto } from './dto/respond-sign-request.dto';
 import { ReviewSignRequestDto } from './dto/review-sign-request.dto';
 import { UpdateSignDraftDto } from './dto/update-sign-draft.dto';
+import { UploadTemplateDto } from './dto/upload-template.dto';
 import { SignsService } from './signs.service';
 
 @Controller('signs')
@@ -30,6 +32,24 @@ export class SignsController {
   @Get()
   list(@CurrentUser() user: AuthUser, @Query('status') status?: SignRequestStatus) {
     return this.signs.list(user.tenantId, status);
+  }
+
+  @Get('templates')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
+  listTemplates(@CurrentUser() user: AuthUser) {
+    return this.signs.listTemplates(user.tenantId);
+  }
+
+  @Post('templates')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
+  uploadTemplate(@CurrentUser() user: AuthUser, @Body() dto: UploadTemplateDto) {
+    return this.signs.uploadTemplate(user.tenantId, dto);
+  }
+
+  @Delete('templates/:id')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
+  deleteTemplate(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.signs.deleteTemplate(user.tenantId, id);
   }
 
   @Get('review-queue')

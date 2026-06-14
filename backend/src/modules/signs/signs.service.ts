@@ -13,6 +13,7 @@ import {
   SignRequestStatus,
   SignReview,
   SignReviewDecision,
+  SignTemplate,
 } from '../../database/entities';
 import { OpenAiService } from '../ai/openai.service';
 import { DriveService } from '../media/drive.service';
@@ -21,6 +22,7 @@ import { CreateSignRequestDto, SignAssetInputDto } from './dto/create-sign-reque
 import { RespondSignRequestDto } from './dto/respond-sign-request.dto';
 import { ReviewSignRequestDto } from './dto/review-sign-request.dto';
 import { UpdateSignDraftDto } from './dto/update-sign-draft.dto';
+import { UploadTemplateDto } from './dto/upload-template.dto';
 
 const SIGN_TYPE_LABELS: Record<string, string> = {
   price_tag: 'ป้ายราคา',
@@ -56,11 +58,42 @@ export class SignsService {
     @InjectRepository(SignDraft) private readonly drafts: Repository<SignDraft>,
     @InjectRepository(SignReview) private readonly reviews: Repository<SignReview>,
     @InjectRepository(SignExport) private readonly exportsRepo: Repository<SignExport>,
+    @InjectRepository(SignTemplate) private readonly templates: Repository<SignTemplate>,
     private readonly openai: OpenAiService,
     private readonly notifications: NotificationsService,
     private readonly drive: DriveService,
   ) {
     fs.mkdirSync(this.uploadDir, { recursive: true });
+  }
+
+  async listTemplates(tenantId: number): Promise<SignTemplate[]> {
+    return this.templates.find({ where: { tenantId }, order: { createdAt: 'DESC' } });
+  }
+
+  async uploadTemplate(tenantId: number, dto: UploadTemplateDto): Promise<SignTemplate> {
+    const parsed = this.parseDataUrl(dto.dataUrl);
+    const ext = parsed.mimeType.includes('jpeg') ? 'jpg' : 'png';
+    const filename = `tmpl-${tenantId}-${Date.now()}.${ext}`;
+    const localPath = path.join(this.uploadDir, filename);
+    fs.writeFileSync(localPath, parsed.buffer);
+    return this.templates.save(this.templates.create({
+      tenantId,
+      name: dto.name.trim(),
+      signType: dto.signType ?? null,
+      signSize: dto.signSize ?? null,
+      filename,
+      url: `/signs/serve/${filename}`,
+      isActive: true,
+    }));
+  }
+
+  async deleteTemplate(tenantId: number, id: number): Promise<{ message: string }> {
+    const tpl = await this.templates.findOne({ where: { tenantId, id } });
+    if (!tpl) throw new NotFoundException('Template not found');
+    const localPath = path.join(this.uploadDir, tpl.filename);
+    if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+    await this.templates.remove(tpl);
+    return { message: 'ลบ Template แล้ว' };
   }
 
   async list(tenantId: number, status?: SignRequestStatus): Promise<SignRequest[]> {
@@ -324,6 +357,35 @@ export class SignsService {
     filename: string,
   ): Promise<{ filename: string; url: string; localPath: string }> {
     const localPath = path.join(this.uploadDir, filename);
+
+    // Look for an uploaded template that matches type+size (exact match preferred)
+    const { IsNull } = await import('typeorm');
+    const uploadedTpl = await this.templates.findOne({
+      where: [
+        { tenantId: request.tenantId, signType: request.signType, signSize: request.signSize, isActive: true },
+        { tenantId: request.tenantId, signType: request.signType, signSize: IsNull(), isActive: true },
+        { tenantId: request.tenantId, signType: IsNull(), signSize: request.signSize, isActive: true },
+      ],
+      order: { createdAt: 'DESC' },
+    });
+
+    if (uploadedTpl) {
+      const tplPath = path.join(this.uploadDir, uploadedTpl.filename);
+      if (fs.existsSync(tplPath)) {
+        const baseImg = sharp(tplPath);
+        const meta = await baseImg.metadata();
+        const w = meta.width ?? 1200;
+        const h = meta.height ?? 1400;
+        const overlay = Buffer.from(this.renderTextOverlay(request, fields, w, h));
+        await sharp(tplPath)
+          .composite([{ input: overlay, blend: 'over' }])
+          .png()
+          .toFile(localPath);
+        return { filename, url: `/signs/serve/${filename}`, localPath };
+      }
+    }
+
+    // Fall back to built-in SVG template
     const svg = this.renderSvg(request, fields);
     await sharp(Buffer.from(svg)).png().toFile(localPath);
     return { filename, url: `/signs/serve/${filename}`, localPath };
@@ -428,35 +490,199 @@ export class SignsService {
     return base.length > 0 ? base : ['เหมาะสำหรับหน้าร้าน', 'อ่านง่าย สะดุดตา', 'พร้อมใช้งานทันที'];
   }
 
+  private signCanvas(signSize: string): { w: number; h: number } {
+    const map: Record<string, { w: number; h: number }> = {
+      a5: { w: 1240, h: 1754 },
+      a6: { w: 1240, h: 1400 },
+      a7: { w: 993, h: 1240 },
+      shelf_tag: { w: 1240, h: 590 },
+    };
+    return map[signSize] ?? { w: 1240, h: 1400 };
+  }
+
   private renderSvg(request: SignRequest, fields: Record<string, unknown>): string {
-    const width = request.signSize === 'shelf_tag' ? 1000 : request.signSize === 'a7' ? 900 : 1200;
-    const height = request.signSize === 'shelf_tag' ? 625 : request.signSize === 'a5' ? 1690 : request.signSize === 'a6' ? 1400 : 1280;
+    const { w, h } = this.signCanvas(request.signSize);
     const headline = this.escape(String(fields.headline ?? this.defaultHeadline(request)));
     const product = this.escape(String(fields.productName ?? request.productName));
     const price = this.escape(String(fields.price ?? (request.price != null ? `฿${request.price}` : '')));
     const promo = this.escape(String(fields.promotion ?? request.promotion ?? ''));
     const benefits = Array.isArray(fields.benefits) ? fields.benefits.map((v) => this.escape(String(v))).slice(0, 3) : [];
-    const isShelf = request.signSize === 'shelf_tag';
-    const priceSize = isShelf ? 150 : 210;
-    const productSize = isShelf ? 52 : 76;
-    const headlineSize = isShelf ? 48 : 72;
-    const benefitY = isShelf ? 500 : height - 310;
-    const benefitText = benefits.map((b, i) => `<text x="90" y="${benefitY + i * 58}" font-size="${isShelf ? 34 : 42}" fill="#1f2937">• ${b}</text>`).join('');
+    const branchLine = this.escape(`${request.branchName} • ${SIGN_TYPE_LABELS[request.signType]} ${SIGN_SIZE_LABELS[request.signSize]}`);
 
-    return `
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect width="${width}" height="${height}" rx="42" fill="#ffffff"/>
-  <rect x="0" y="0" width="${width}" height="${Math.round(height * 0.22)}" fill="#dc2626"/>
-  <circle cx="${width - 120}" cy="105" r="62" fill="#ffffff" opacity="0.18"/>
-  <text x="64" y="96" font-family="Arial, sans-serif" font-size="44" font-weight="800" fill="#ffffff">100 BAHT SHOP</text>
-  <text x="64" y="154" font-family="Arial, sans-serif" font-size="${headlineSize}" font-weight="900" fill="#fff7ed">${headline}</text>
-  <rect x="58" y="${Math.round(height * 0.26)}" width="${width - 116}" height="${isShelf ? 250 : 420}" rx="36" fill="#fff7ed" stroke="#f97316" stroke-width="6"/>
-  <text x="${width / 2}" y="${Math.round(height * 0.34)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${productSize}" font-weight="900" fill="#111827">${product}</text>
-  <text x="${width / 2}" y="${Math.round(height * 0.48)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${priceSize}" font-weight="900" fill="#dc2626">${price}</text>
-  <text x="${width / 2}" y="${Math.round(height * 0.58)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${isShelf ? 42 : 58}" font-weight="800" fill="#b45309">${promo}</text>
-  <rect x="58" y="${benefitY - 65}" width="${width - 116}" height="${isShelf ? 150 : 250}" rx="30" fill="#f8fafc" stroke="#e5e7eb"/>
+    if (request.signType === 'price_tag') return this.svgPriceTag(w, h, { headline, product, price, promo, branchLine });
+    if (request.signType === 'promotion') return this.svgPromotion(w, h, { headline, product, price, promo, branchLine });
+    if (request.signType === 'benefit_card') return this.svgBenefitCard(w, h, { headline, product, price, benefits, branchLine });
+    if (request.signSize === 'shelf_tag') return this.svgShelfTag(w, h, { headline, product, price, branchLine });
+    return this.svgDefault(w, h, { headline, product, price, promo, benefits, branchLine });
+  }
+
+  private svgPriceTag(w: number, h: number, f: { headline: string; product: string; price: string; promo: string; branchLine: string }): string {
+    const cx = w / 2;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#991b1b"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fef9f0"/>
+    </linearGradient>
+  </defs>
+  <rect width="${w}" height="${h}" fill="url(#bg)"/>
+  <!-- decorative circles -->
+  <circle cx="${w}" cy="0" r="${w * 0.55}" fill="#ffffff" opacity="0.04"/>
+  <circle cx="0" cy="${h}" r="${w * 0.45}" fill="#f59e0b" opacity="0.07"/>
+  <!-- header band -->
+  <rect x="0" y="0" width="${w}" height="${Math.round(h * 0.14)}" fill="#b91c1c"/>
+  <text x="${cx}" y="${Math.round(h * 0.09)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.042)}" font-weight="900" fill="#fef2f2" letter-spacing="6">100 BAHT SHOP</text>
+  <text x="${cx}" y="${Math.round(h * 0.126)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.022)}" font-weight="700" fill="#fecaca" letter-spacing="2">${f.headline}</text>
+  <!-- white card -->
+  <rect x="60" y="${Math.round(h * 0.17)}" width="${w - 120}" height="${Math.round(h * 0.54)}" rx="32" fill="url(#card)" stroke="#e5e7eb" stroke-width="2"/>
+  <!-- product name -->
+  <text x="${cx}" y="${Math.round(h * 0.28)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.038)}" font-weight="800" fill="#111827">${f.product}</text>
+  <!-- price starburst -->
+  <circle cx="${cx}" cy="${Math.round(h * 0.47)}" r="${Math.round(h * 0.16)}" fill="#dc2626"/>
+  <circle cx="${cx}" cy="${Math.round(h * 0.47)}" r="${Math.round(h * 0.155)}" fill="none" stroke="#fca5a5" stroke-width="4" stroke-dasharray="14 8"/>
+  <text x="${cx}" y="${Math.round(h * 0.455)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.024)}" font-weight="900" fill="#fef2f2">ราคา</text>
+  <text x="${cx}" y="${Math.round(h * 0.505)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.092)}" font-weight="900" fill="#ffffff">${f.price}</text>
+  <!-- promo badge -->
+  ${f.promo ? `<rect x="${cx - 280}" y="${Math.round(h * 0.635)}" width="560" height="${Math.round(h * 0.055)}" rx="24" fill="#fef3c7"/>
+  <text x="${cx}" y="${Math.round(h * 0.674)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.03)}" font-weight="700" fill="#92400e">${f.promo}</text>` : ''}
+  <!-- footer -->
+  <text x="${cx}" y="${Math.round(h * 0.965)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.018)}" fill="#94a3b8">${f.branchLine}</text>
+</svg>`;
+  }
+
+  private svgPromotion(w: number, h: number, f: { headline: string; product: string; price: string; promo: string; branchLine: string }): string {
+    const cx = w / 2;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  <defs>
+    <linearGradient id="gbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#14532d"/>
+      <stop offset="100%" stop-color="#166534"/>
+    </linearGradient>
+  </defs>
+  <rect width="${w}" height="${h}" fill="url(#gbg)"/>
+  <circle cx="${w * 0.85}" cy="${h * 0.12}" r="${h * 0.2}" fill="#f59e0b" opacity="0.18"/>
+  <circle cx="${w * 0.1}" cy="${h * 0.85}" r="${h * 0.18}" fill="#22c55e" opacity="0.12"/>
+  <!-- top ribbon -->
+  <rect x="0" y="0" width="${w}" height="${Math.round(h * 0.12)}" fill="#15803d"/>
+  <text x="${cx}" y="${Math.round(h * 0.075)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.044)}" font-weight="900" fill="#fef9c3" letter-spacing="5">100 BAHT SHOP</text>
+  <!-- headline burst -->
+  <rect x="40" y="${Math.round(h * 0.14)}" width="${w - 80}" height="${Math.round(h * 0.16)}" rx="28" fill="#f59e0b"/>
+  <text x="${cx}" y="${Math.round(h * 0.20)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.052)}" font-weight="900" fill="#1c1917">${f.headline}</text>
+  <text x="${cx}" y="${Math.round(h * 0.255)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.025)}" font-weight="700" fill="#292524">${f.promo}</text>
+  <!-- product white card -->
+  <rect x="60" y="${Math.round(h * 0.33)}" width="${w - 120}" height="${Math.round(h * 0.28)}" rx="28" fill="#ffffff" fill-opacity="0.97"/>
+  <text x="${cx}" y="${Math.round(h * 0.4)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.032)}" font-weight="700" fill="#374151">${f.product}</text>
+  <text x="${cx}" y="${Math.round(h * 0.52)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.1)}" font-weight="900" fill="#dc2626">${f.price}</text>
+  <!-- badge -->
+  <rect x="${cx - 200}" y="${Math.round(h * 0.64)}" width="400" height="${Math.round(h * 0.07)}" rx="24" fill="#dcfce7"/>
+  <text x="${cx}" y="${Math.round(h * 0.687)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.033)}" font-weight="700" fill="#166534">✓ โปรโมชั่นพิเศษ</text>
+  <text x="${cx}" y="${Math.round(h * 0.965)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.018)}" fill="#86efac">${f.branchLine}</text>
+</svg>`;
+  }
+
+  private svgBenefitCard(w: number, h: number, f: { headline: string; product: string; price: string; benefits: string[]; branchLine: string }): string {
+    const cx = w / 2;
+    const benefitItems = f.benefits.map((b, i) =>
+      `<g>
+        <circle cx="82" cy="${Math.round(h * 0.51) + i * Math.round(h * 0.1)}" r="18" fill="#6366f1"/>
+        <text x="82" y="${Math.round(h * 0.517) + i * Math.round(h * 0.1)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="900" fill="#fff">${i + 1}</text>
+        <text x="116" y="${Math.round(h * 0.517) + i * Math.round(h * 0.1)}" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.028)}" font-weight="600" fill="#1e1b4b">${b}</text>
+      </g>`).join('');
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  <defs>
+    <linearGradient id="hdr" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4338ca"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="${w}" height="${h}" fill="#f8fafc"/>
+  <!-- left accent bar -->
+  <rect x="0" y="0" width="18" height="${h}" fill="url(#hdr)"/>
+  <!-- header -->
+  <rect x="18" y="0" width="${w - 18}" height="${Math.round(h * 0.22)}" fill="url(#hdr)"/>
+  <text x="${cx + 9}" y="${Math.round(h * 0.1)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.042)}" font-weight="900" fill="#ffffff" letter-spacing="4">100 BAHT SHOP</text>
+  <text x="${cx + 9}" y="${Math.round(h * 0.17)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.034)}" font-weight="700" fill="#c7d2fe">${f.product}</text>
+  <!-- headline badge -->
+  <rect x="60" y="${Math.round(h * 0.24)}" width="${w - 120}" height="${Math.round(h * 0.08)}" rx="24" fill="#ede9fe"/>
+  <text x="${cx}" y="${Math.round(h * 0.293)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.036)}" font-weight="700" fill="#5b21b6">${f.headline}</text>
+  <!-- price row -->
+  <text x="${cx}" y="${Math.round(h * 0.42)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.082)}" font-weight="900" fill="#dc2626">${f.price}</text>
+  <!-- benefits section -->
+  <text x="60" y="${Math.round(h * 0.49)}" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.023)}" font-weight="700" fill="#6366f1" letter-spacing="2">จุดเด่น</text>
+  ${benefitItems}
+  <!-- footer -->
+  <text x="${cx}" y="${Math.round(h * 0.965)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.018)}" fill="#94a3b8">${f.branchLine}</text>
+</svg>`;
+  }
+
+  private svgShelfTag(w: number, h: number, f: { headline: string; product: string; price: string; branchLine: string }): string {
+    const priceX = Math.round(w * 0.74);
+    const mid = Math.round(h / 2);
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  <defs>
+    <linearGradient id="sl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e40af"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+  </defs>
+  <rect width="${w}" height="${h}" rx="20" fill="#ffffff" stroke="#e2e8f0" stroke-width="3"/>
+  <!-- left block -->
+  <rect x="0" y="0" width="${Math.round(w * 0.62)}" height="${h}" rx="20" fill="url(#sl)"/>
+  <rect x="${Math.round(w * 0.52)}" y="0" width="${Math.round(w * 0.12)}" height="${h}" fill="url(#sl)"/>
+  <!-- brand -->
+  <text x="${Math.round(w * 0.04)}" y="${Math.round(h * 0.38)}" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.19)}" font-weight="900" fill="#93c5fd" opacity="0.6" letter-spacing="1">100</text>
+  <!-- product name -->
+  <text x="${Math.round(w * 0.05)}" y="${Math.round(h * 0.52)}" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.18)}" font-weight="800" fill="#ffffff">${f.product.slice(0, 22)}</text>
+  <text x="${Math.round(w * 0.05)}" y="${Math.round(h * 0.78)}" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.13)}" font-weight="600" fill="#bfdbfe">${f.headline}</text>
+  <!-- price circle -->
+  <circle cx="${priceX}" cy="${mid}" r="${Math.round(h * 0.44)}" fill="#dc2626"/>
+  <circle cx="${priceX}" cy="${mid}" r="${Math.round(h * 0.42)}" fill="none" stroke="#fca5a5" stroke-width="3" stroke-dasharray="10 6"/>
+  <text x="${priceX}" y="${mid - Math.round(h * 0.07)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.12)}" fill="#fef2f2">ราคา</text>
+  <text x="${priceX}" y="${mid + Math.round(h * 0.22)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.3)}" font-weight="900" fill="#ffffff">${f.price}</text>
+</svg>`;
+  }
+
+  private svgDefault(w: number, h: number, f: { headline: string; product: string; price: string; promo: string; benefits: string[]; branchLine: string }): string {
+    const cx = w / 2;
+    const benefitText = f.benefits.map((b, i) =>
+      `<text x="80" y="${Math.round(h * 0.68) + i * Math.round(h * 0.075)}" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.028)}" fill="#1f2937">• ${b}</text>`
+    ).join('');
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  <rect width="${w}" height="${h}" fill="#ffffff"/>
+  <rect x="0" y="0" width="${w}" height="${Math.round(h * 0.22)}" fill="#dc2626"/>
+  <circle cx="${w - 100}" cy="96" r="54" fill="#ffffff" opacity="0.12"/>
+  <text x="64" y="${Math.round(h * 0.09)}" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.038)}" font-weight="900" fill="#ffffff" letter-spacing="4">100 BAHT SHOP</text>
+  <text x="64" y="${Math.round(h * 0.155)}" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.026)}" font-weight="700" fill="#fecaca">${f.headline}</text>
+  <rect x="58" y="${Math.round(h * 0.25)}" width="${w - 116}" height="${Math.round(h * 0.3)}" rx="28" fill="#fef9f0" stroke="#f97316" stroke-width="4"/>
+  <text x="${cx}" y="${Math.round(h * 0.34)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.04)}" font-weight="800" fill="#111827">${f.product}</text>
+  <text x="${cx}" y="${Math.round(h * 0.495)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.1)}" font-weight="900" fill="#dc2626">${f.price}</text>
+  <text x="${cx}" y="${Math.round(h * 0.595)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.031)}" font-weight="700" fill="#b45309">${f.promo}</text>
   ${benefitText}
-  <text x="64" y="${height - 54}" font-family="Arial, sans-serif" font-size="30" fill="#6b7280">${this.escape(SIGN_TYPE_LABELS[request.signType])} • ${this.escape(SIGN_SIZE_LABELS[request.signSize])} • ${this.escape(request.branchName)}</text>
+  <text x="${cx}" y="${Math.round(h * 0.965)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.018)}" fill="#94a3b8">${f.branchLine}</text>
+</svg>`;
+  }
+
+  /** SVG overlay for uploaded template: transparent bg + text only */
+  private renderTextOverlay(request: SignRequest, fields: Record<string, unknown>, w: number, h: number): string {
+    const cx = w / 2;
+    const headline = this.escape(String(fields.headline ?? this.defaultHeadline(request)));
+    const product = this.escape(String(fields.productName ?? request.productName));
+    const price = this.escape(String(fields.price ?? (request.price != null ? `฿${request.price}` : '')));
+    const promo = this.escape(String(fields.promotion ?? request.promotion ?? ''));
+    const benefits = Array.isArray(fields.benefits) ? fields.benefits.map((v) => this.escape(String(v))).slice(0, 3) : [];
+    const benefitText = benefits.map((b, i) =>
+      `<text x="${Math.round(w * 0.08)}" y="${Math.round(h * 0.7) + i * Math.round(h * 0.07)}" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.028)}" fill="#1f2937">• ${b}</text>`
+    ).join('');
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  <text x="${cx}" y="${Math.round(h * 0.12)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.05)}" font-weight="900" fill="#ffffff" stroke="#000000" stroke-width="2">${product}</text>
+  <text x="${cx}" y="${Math.round(h * 0.32)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h * 0.13)}" font-weight="900" fill="#dc2626" stroke="#1a0000" stroke-width="3">${price}</text>
+  <text x="${cx}" y="${Math.round(h * 0.47)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.038)}" font-weight="700" fill="#1e1b4b">${headline}</text>
+  ${promo ? `<text x="${cx}" y="${Math.round(h * 0.58)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(h * 0.03)}" font-weight="600" fill="#92400e">${promo}</text>` : ''}
+  ${benefitText}
 </svg>`;
   }
 

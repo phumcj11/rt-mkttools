@@ -36,3 +36,4 @@ export * from './sign-export.entity';
 export * from './sign-request-asset.entity';
 export * from './sign-request.entity';
 export * from './sign-review.entity';
+export * from './sign-template.entity';

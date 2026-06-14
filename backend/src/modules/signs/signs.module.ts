@@ -7,6 +7,7 @@ import {
   SignRequest,
   SignRequestAsset,
   SignReview,
+  SignTemplate,
 } from '../../database/entities';
 import { AiModule } from '../ai/ai.module';
 import { MediaModule } from '../media/media.module';
@@ -16,7 +17,7 @@ import { SignsService } from './signs.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SignRequest, SignRequestAsset, SignAiResult, SignDraft, SignReview, SignExport]),
+    TypeOrmModule.forFeature([SignRequest, SignRequestAsset, SignAiResult, SignDraft, SignReview, SignExport, SignTemplate]),
     AiModule,
     MediaModule,
     NotificationsModule,

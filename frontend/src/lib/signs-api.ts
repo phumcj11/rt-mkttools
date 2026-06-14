@@ -156,3 +156,25 @@ export function reviewSignRequest(
 export function exportSignRequest(id: number) {
   return apiRequest<SignRequestDetail>(`/signs/${id}/export`, { method: 'POST' });
 }
+
+export interface SignTemplateRecord {
+  id: number;
+  name: string;
+  signType: SignType | null;
+  signSize: SignSize | null;
+  url: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export function listSignTemplates() {
+  return apiRequest<SignTemplateRecord[]>('/signs/templates');
+}
+
+export function uploadSignTemplate(body: { name: string; signType?: SignType; signSize?: SignSize; dataUrl: string }) {
+  return apiRequest<SignTemplateRecord>('/signs/templates', { method: 'POST', body });
+}
+
+export function deleteSignTemplate(id: number) {
+  return apiRequest<{ message: string }>(`/signs/templates/${id}`, { method: 'DELETE' });
+}
