@@ -26,6 +26,7 @@ import { ReviewSignRequestDto } from './dto/review-sign-request.dto';
 import { UpdateSignDraftDto } from './dto/update-sign-draft.dto';
 import { UploadTemplateDto } from './dto/upload-template.dto';
 import { craftSignImagePrompt, gptImageSizeForSign } from './sign-gpt-image';
+import { composeUploadedTemplate } from './sign-template-compose';
 
 const SIGN_TYPE_LABELS: Record<string, string> = {
   price_tag: 'ป้ายราคา',
@@ -504,33 +505,40 @@ export class SignsService {
     if (uploadedTpl) {
       const tplPath = path.join(this.uploadDir, uploadedTpl.filename);
       if (fs.existsSync(tplPath)) {
-        const gptResult = await this.tryWriteGptTemplateImage(request, fields, tplPath, localPath);
-        if (gptResult?.ok) {
-          return {
-            filename,
-            url: `/signs/serve/${filename}`,
-            localPath,
-            renderSource: 'gpt_image',
-            gptModel: gptResult.model,
-            gptPromptUsed: gptResult.prompt,
-          };
+        let gptError: string | undefined;
+        const useGptImage = process.env.SIGN_USE_GPT_IMAGE === '1';
+
+        if (useGptImage) {
+          const gptResult = await this.tryWriteGptTemplateImage(request, fields, tplPath, localPath);
+          if (gptResult?.ok) {
+            return {
+              filename,
+              url: `/signs/serve/${filename}`,
+              localPath,
+              renderSource: 'gpt_image',
+              gptModel: gptResult.model,
+              gptPromptUsed: gptResult.prompt,
+            };
+          }
+          gptError = gptResult?.error;
         }
 
-        const baseImg = sharp(tplPath);
-        const meta = await baseImg.metadata();
-        const w = meta.width ?? 1200;
-        const h = meta.height ?? 1400;
-        const overlay = Buffer.from(this.renderTextOverlay(request, fields, w, h));
-        await sharp(tplPath)
-          .composite([{ input: overlay, blend: 'over' }])
-          .png()
-          .toFile(localPath);
+        const productBuffer = await this.resolveProductImageBuffer(request);
+        await composeUploadedTemplate(
+          tplPath,
+          localPath,
+          request,
+          fields,
+          productBuffer,
+          (value) => this.escape(value),
+          this.defaultHeadline(request),
+        );
         return {
           filename,
           url: `/signs/serve/${filename}`,
           localPath,
           renderSource: 'template_overlay',
-          gptError: gptResult?.error,
+          gptError,
         };
       }
     }
@@ -578,35 +586,45 @@ export class SignsService {
     }
   }
 
-  private async productVisualHint(request: SignRequest): Promise<string | null> {
+  private async resolveProductImageBuffer(request: SignRequest): Promise<Buffer | null> {
     try {
       const asset = await this.assets.findOne({
         where: { tenantId: request.tenantId, requestId: request.id, kind: 'product' },
         order: { createdAt: 'ASC' },
       });
 
-      let buffer: Buffer | null = null;
-      let mimeType = 'image/jpeg';
       if (asset) {
         const localPath = path.join(this.uploadDir, asset.filename);
         if (fs.existsSync(localPath)) {
-          buffer = fs.readFileSync(localPath);
-          mimeType = asset.mimeType || this.mimeFromFilename(asset.filename);
+          return fs.readFileSync(localPath);
         }
       }
 
-      if (!buffer && request.sku) {
+      if (request.sku) {
         const product = await this.productCache.findOne({ where: { sku: request.sku } });
         if (product?.imageUrl) {
           const fetched = await this.fetchImageBuffer(product.imageUrl);
-          if (fetched) {
-            buffer = fetched.buffer;
-            mimeType = fetched.mimeType;
-          }
+          if (fetched) return fetched.buffer;
         }
       }
+    } catch (err) {
+      this.logger.warn(`Sign product image resolve skipped for ${request.requestNo}: ${String(err)}`);
+    }
+    return null;
+  }
 
+  private async productVisualHint(request: SignRequest): Promise<string | null> {
+    try {
+      const buffer = await this.resolveProductImageBuffer(request);
       if (!buffer) return null;
+
+      const asset = await this.assets.findOne({
+        where: { tenantId: request.tenantId, requestId: request.id, kind: 'product' },
+        order: { createdAt: 'ASC' },
+      });
+      const mimeType = asset
+        ? (asset.mimeType || this.mimeFromFilename(asset.filename))
+        : 'image/jpeg';
       const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
       return await this.openai.analyzeImage(
         dataUrl,
@@ -915,7 +933,7 @@ export class SignsService {
 </svg>`;
   }
 
-  /** SVG overlay for uploaded template: transparent bg + text only */
+  /** @deprecated Use composeUploadedTemplate zone overlay instead */
   private renderTextOverlay(request: SignRequest, fields: Record<string, unknown>, w: number, h: number): string {
     const cx = w / 2;
     const headline = this.escape(String(fields.headline ?? this.defaultHeadline(request)));

@@ -50,16 +50,11 @@ export function craftSignImagePrompt(
     ? fields.benefits.map((value) => String(value).trim()).filter(Boolean)
     : [];
   const data = {
-    requestNo: request.requestNo,
-    branchName: request.branchName,
-    sku: request.sku ?? '',
     productName: String(fields.productName ?? request.productName),
     headline: String(fields.headline ?? ''),
     price: String(fields.price ?? (request.price != null ? `฿${request.price}` : '')),
     promotion: String(fields.promotion ?? request.promotion ?? ''),
     benefits,
-    signType: String(fields.signTypeLabel ?? request.signType),
-    signSize: String(fields.signSizeLabel ?? request.signSize),
   };
 
   return [
@@ -69,7 +64,9 @@ export function craftSignImagePrompt(
     'Critical instructions:',
     '- KEEP the exact template layout, aspect ratio, brand colors, logo, mascot, barcode area, borders, icons, and decorative elements.',
     '- DO NOT redesign the template from scratch.',
-    '- Replace placeholder text and placeholder image areas with the data below.',
+    '- Replace placeholder text and placeholder image areas with the customer-facing data below only.',
+    '- NEVER print internal codes, request numbers, SKU, branch names, or system metadata on the sign.',
+    '- NEVER redraw or invent barcodes — leave existing barcode graphics untouched.',
     '- Remove placeholder labels such as PRODUCT NAME, PRODUCT DESCRIPTION, PRODUCT IMAGE, and empty price-box examples when replacing them.',
     '- Render Thai text clearly and as large/readable as the template allows.',
     '- Do not add medical claims, discount claims, or extra promotions that are not present in the data.',

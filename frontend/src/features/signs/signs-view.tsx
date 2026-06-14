@@ -1104,7 +1104,7 @@ function Info({ label, value }: { label: string; value: string }) {
 
 function renderSourceLabel(source: unknown): string {
   if (source === 'gpt_image') return 'สร้างด้วย AI Image';
-  if (source === 'template_overlay') return 'Template overlay';
+  if (source === 'template_overlay') return 'Template + รูปสินค้า';
   if (source === 'builtin_svg') return 'Template เริ่มต้น';
   return '-';
 }
