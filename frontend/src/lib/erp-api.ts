@@ -4,6 +4,7 @@ import type {
   ErpAlert,
   ErpBranchSales,
   ErpCacheStatus,
+  ErpCampaignCacheItem,
   ErpCampaignCandidate,
   ErpCampaignResult,
   ErpCategoryPerformance,
@@ -15,7 +16,10 @@ import type {
   ErpSalesSummary,
   ErpSyncResult,
   ErpTopProduct,
+  SkuPromotionStep,
 } from './types';
+
+export type { ErpCampaignCacheItem, SkuPromotionStep };
 
 export type {
   CampaignAnalysisSummary,
@@ -137,4 +141,20 @@ export function syncErpSales(days = 90) {
 
 export function getErpProductDetail(sku: string) {
   return apiRequest<ErpProductDetail>(`/erp/products/${encodeURIComponent(sku)}/detail`);
+}
+
+export function getCachedCampaigns(activeOnly = true) {
+  return apiRequest<ErpCampaignCacheItem[]>(`/erp/promotions/cached?active=${activeOnly ? '1' : '0'}`);
+}
+
+export function getCachedCampaignDetail(id: number) {
+  return apiRequest<ErpCampaignCacheItem>(`/erp/promotions/cached/${id}`);
+}
+
+export function getSkuPromotionSteps(sku: string) {
+  return apiRequest<SkuPromotionStep[]>(`/erp/promotions/sku/${encodeURIComponent(sku)}`);
+}
+
+export function syncErpCampaigns() {
+  return apiRequest<{ synced: number; failed: number }>('/erp/sync/campaigns', { method: 'POST' });
 }

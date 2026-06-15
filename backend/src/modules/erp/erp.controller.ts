@@ -107,6 +107,21 @@ export class ErpController {
     return this.erp.promotions(limit, isForce(force));
   }
 
+  @Get('promotions/cached')
+  getCachedCampaigns(@Query('active') active?: string) {
+    return this.sync.getCachedCampaigns(active !== '0');
+  }
+
+  @Get('promotions/sku/:sku')
+  getSkuPromotions(@Param('sku') sku: string) {
+    return this.sync.getSkuPromotions(sku);
+  }
+
+  @Get('promotions/cached/:id')
+  getCachedCampaignDetail(@Param('id', ParseIntPipe) id: number) {
+    return this.sync.getCachedCampaignDetail(id);
+  }
+
   @Get('category-performance')
   categoryPerformance(
     @Query('from') from?: string,
@@ -208,6 +223,12 @@ export class ErpController {
   @Roles('super_admin', 'admin')
   syncPromotions(@Query('limit', new DefaultValuePipe(1000), ParseIntPipe) limit: number) {
     return this.sync.syncPromotionSnapshots(limit);
+  }
+
+  @Post('sync/campaigns')
+  @Roles('super_admin', 'admin')
+  syncCampaigns() {
+    return this.sync.syncCampaigns();
   }
 
   @Get('products/:sku/detail')

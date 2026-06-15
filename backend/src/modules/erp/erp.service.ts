@@ -269,6 +269,41 @@ export class ErpService {
     }));
   }
 
+  async promotionDetail(campaignId: number) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = await this.call<any>('promotions', 'detail', { campaign_id: campaignId }, false, TTL_STATIC);
+    if (!d) return null;
+    return {
+      id: num(d.id),
+      code: String(d.code ?? ''),
+      name: String(d.promotion_name ?? d.name ?? ''),
+      type: String(d.promotion_type ?? ''),
+      typeName: String(d.promotion_type_name ?? ''),
+      dateStart: String(d.date_start ?? ''),
+      dateStop: String(d.date_stop ?? ''),
+      retailPrice: num(d.retail_price ?? d.price ?? 0),
+      promoPrice: num(d.promo_price ?? d.promotion_price ?? 0),
+      discountPct: num(d.discount_pct ?? 0),
+      conditions: String(d.conditions ?? ''),
+    };
+  }
+
+  async promotionProducts(campaignId: number) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = await this.call<any[]>('promotions', 'products', { campaign_id: campaignId }, false, TTL_STATIC);
+    return (d ?? []).map((p) => ({
+      sku: String(p.sku ?? ''),
+      productId: num(p.product_id),
+      name: String(p.name ?? ''),
+      imageUrl: String(p.image_url ?? ''),
+      promoPrice: num(p.promo_price ?? p.promotion_price ?? 0),
+      retailPrice: num(p.retail_price ?? p.price ?? 0),
+      minQty: num(p.min_qty ?? 1),
+      freeItemQty: num(p.free_item_qty ?? 0),
+      costSales: num(p.cost_sales ?? p.cost ?? 0),
+    }));
+  }
+
   async campaignCandidates(params: {
     targetPrice: number;
     minGpPct: number;

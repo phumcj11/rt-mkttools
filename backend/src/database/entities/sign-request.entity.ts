@@ -90,6 +90,17 @@ export class SignRequest {
   @Column({ name: 'exported_at', type: 'datetime', nullable: true })
   exportedAt: Date | null;
 
+  /** ERP campaign/promotion traceability — set when sign is created from a specific promotion step */
+  @Column({ name: 'erp_campaign_id', type: 'int', unsigned: true, nullable: true })
+  erpCampaignId: number | null;
+
+  @Column({ name: 'erp_campaign_name', type: 'varchar', length: 255, nullable: true })
+  erpCampaignName: string | null;
+
+  /** Human-readable step description, e.g. "ซื้อ 2 ชิ้น ฿89" */
+  @Column({ name: 'erp_step_text', type: 'varchar', length: 255, nullable: true })
+  erpStepText: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

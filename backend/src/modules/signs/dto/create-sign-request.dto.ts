@@ -74,4 +74,21 @@ export class CreateSignRequestDto {
   @ValidateNested({ each: true })
   @Type(() => SignAssetInputDto)
   assets?: SignAssetInputDto[];
+
+  /** ERP campaign ID (for promotion traceability) */
+  @IsOptional()
+  @IsNumber()
+  erpCampaignId?: number;
+
+  /** ERP campaign display name */
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  erpCampaignName?: string;
+
+  /** Human-readable promotion step text, e.g. "ซื้อ 2 ชิ้น ฿89" */
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  erpStepText?: string;
 }

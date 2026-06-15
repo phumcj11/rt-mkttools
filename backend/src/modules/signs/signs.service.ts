@@ -186,6 +186,9 @@ export class SignsService {
       statusNote: null,
       approvedAt: null,
       exportedAt: null,
+      erpCampaignId: dto.erpCampaignId ?? null,
+      erpCampaignName: dto.erpCampaignName?.trim() || null,
+      erpStepText: dto.erpStepText?.trim() || null,
     }));
 
     await this.saveAssets(tenantId, request.id, assets);

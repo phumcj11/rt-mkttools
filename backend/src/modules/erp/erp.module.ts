@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
+  ErpCampaignCache,
   ErpProductCache,
   ErpSalesDaily,
   ErpSalesSummary,
@@ -17,6 +18,7 @@ import { ErpService } from './erp.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
+      ErpCampaignCache,
       ErpSalesDaily,
       ErpProductCache,
       ErpSalesSummary,

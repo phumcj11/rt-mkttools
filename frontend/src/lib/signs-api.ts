@@ -112,6 +112,16 @@ export interface CreateSignRequestDto {
   benefits?: string;
   notes?: string;
   assets?: SignAssetInput[];
+  /** ERP campaign traceability */
+  erpCampaignId?: number;
+  erpCampaignName?: string;
+  erpStepText?: string;
+}
+
+export interface SignRequestSummaryFull extends SignRequestSummary {
+  erpCampaignId?: number | null;
+  erpCampaignName?: string | null;
+  erpStepText?: string | null;
 }
 
 export function resolveSignUrl(path: string): string {

@@ -551,3 +551,49 @@ export interface ErpProductDetail {
   } | null;
   promotions: ErpProductPromotion[];
 }
+
+/** A campaign from the ErpCampaignCache */
+export interface ErpCampaignCacheItem {
+  campaignId: number;
+  code: string | null;
+  name: string;
+  promotionType: string | null;
+  promotionTypeName: string | null;
+  dateStart: string | null;
+  dateStop: string | null;
+  retailPrice: string;
+  promoPrice: string;
+  discountPct: string;
+  isActive: boolean;
+  productCount: number;
+  products: Array<{
+    sku: string;
+    productId: number;
+    name: string;
+    imageUrl: string;
+    promoPrice: number;
+    retailPrice: number;
+    minQty: number;
+    freeItemQty: number;
+    gp: number | null;
+    stepText: string;
+  }> | null;
+  syncedAt: string;
+}
+
+/** Promotion step that a SKU is part of — returned by /erp/promotions/sku/:sku */
+export interface SkuPromotionStep {
+  campaignId: number;
+  campaignName: string;
+  promotionType: string | null;
+  promotionTypeName: string | null;
+  dateStart: string | null;
+  dateStop: string | null;
+  promoPrice: number;
+  retailPrice: number;
+  minQty: number;
+  freeItemQty: number;
+  gp: number | null;
+  /** e.g. "ซื้อ 2 ชิ้น ฿89" */
+  stepText: string;
+}

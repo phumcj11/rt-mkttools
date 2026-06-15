@@ -33,12 +33,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  getCachedCampaigns,
   getErpCampaignCandidates,
   getErpCategoryPerformance,
   getErpProducts,
   getErpPromotions,
   getErpSyncStatus,
   getErpTopProducts,
+  getSkuPromotionSteps,
+  syncErpCampaigns,
   syncErpProducts,
   syncErpSales,
   type ErpRangeOpts,
@@ -46,11 +49,13 @@ import {
 import type {
   CampaignAnalysisSummary,
   ErpCacheStatus,
+  ErpCampaignCacheItem,
   ErpCampaignCandidate,
   ErpCategoryPerformance,
   ErpProductListItem,
   ErpPromotion,
   ErpTopProduct,
+  SkuPromotionStep,
 } from '@/lib/types';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
 
@@ -101,7 +106,7 @@ const ABC_OPTIONS = [
   { key: 'ACOM', label: 'A เท่านั้น' },
 ];
 
-type Tab = 'overview' | 'planner' | 'products';
+type Tab = 'overview' | 'planner' | 'products' | 'campaigns' | 'sku-lookup';
 
 // ─── main component ────────────────────────────────────────────────────────
 
@@ -122,12 +127,14 @@ export function PromotionsView() {
         </p>
 
         {/* Tab bar — pill style, always visible */}
-        <div className="mb-4 inline-flex rounded-lg border bg-muted/60 p-1">
+        <div className="mb-4 flex flex-wrap gap-1 rounded-lg border bg-muted/60 p-1 w-fit">
           {(
             [
-              { key: 'overview', label: 'Overview', icon: BarChart2 },
-              { key: 'planner',  label: 'Campaign Planner', icon: Wand2 },
-              { key: 'products', label: 'Products', icon: Tag },
+              { key: 'overview',   label: 'Overview',          icon: BarChart2 },
+              { key: 'campaigns',  label: 'ERP Campaigns',     icon: Gift },
+              { key: 'sku-lookup', label: 'ค้น SKU',           icon: Search },
+              { key: 'planner',    label: 'Campaign Planner',  icon: Wand2 },
+              { key: 'products',   label: 'Products',          icon: Tag },
             ] as const
           ).map(({ key, label, icon: Icon }) => (
             <button
@@ -148,9 +155,11 @@ export function PromotionsView() {
       </div>
 
       <div className="px-4 pt-4 lg:px-6">
-        {tab === 'overview'  && <OverviewTab router={router} />}
-        {tab === 'planner'   && <CampaignPlannerTab router={router} />}
-        {tab === 'products'  && <ProductsTab router={router} />}
+        {tab === 'overview'   && <OverviewTab router={router} />}
+        {tab === 'campaigns'  && <CampaignsTab />}
+        {tab === 'sku-lookup' && <SkuLookupTab />}
+        {tab === 'planner'    && <CampaignPlannerTab router={router} />}
+        {tab === 'products'   && <ProductsTab router={router} />}
       </div>
     </div>
   );
@@ -1031,6 +1040,309 @@ function ProductsTab({ router }: { router: ReturnType<typeof useRouter> }) {
             ถัดไป
           </Button>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// TAB: ERP Campaigns
+// ──────────────────────────────────────────────────────────────────────────
+
+function campaignStatusLabel(c: ErpCampaignCacheItem): 'active' | 'ending-soon' | 'expired' {
+  if (!c.dateStop) return 'active';
+  const stop = new Date(c.dateStop);
+  const now = new Date();
+  if (stop < now) return 'expired';
+  return (stop.getTime() - now.getTime()) / 86400000 <= 7 ? 'ending-soon' : 'active';
+}
+
+function CampaignsTab() {
+  const [campaigns, setCampaigns] = useState<ErpCampaignCacheItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getCachedCampaigns(false);
+      setCampaigns(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'โหลดข้อมูลไม่สำเร็จ');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const doSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await syncErpCampaigns();
+      alert(`Sync สำเร็จ: ${res.synced} campaigns`);
+      void load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Sync ไม่สำเร็จ');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const filtered = campaigns.filter((c) =>
+    !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.code ?? '').toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const statusBadge = (c: ErpCampaignCacheItem) => {
+    const s = campaignStatusLabel(c);
+    if (s === 'expired') return <Badge variant="secondary" className="text-xs">หมดแล้ว</Badge>;
+    if (s === 'ending-soon') return <Badge className="bg-amber-500 text-white text-xs">ใกล้หมด</Badge>;
+    return <Badge className="bg-emerald-600 text-white text-xs">กำลังใช้</Badge>;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input
+            className="h-9 w-64 rounded-md border bg-background pl-8 pr-3 text-sm outline-none focus:ring-1 focus:ring-ring"
+            placeholder="ค้นชื่อ Campaign..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">{campaigns.length} campaigns ใน cache</span>
+          <Button size="sm" variant="outline" onClick={doSync} disabled={syncing}>
+            {syncing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            Sync จาก ERP
+          </Button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />{error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex h-32 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
+          <Gift className="h-8 w-8 opacity-30" />
+          <p className="text-sm">{campaigns.length === 0 ? 'ยังไม่มีข้อมูล — กด Sync จาก ERP ก่อน' : 'ไม่พบ campaign ที่ค้น'}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((c) => (
+            <Card key={c.campaignId} className="overflow-hidden">
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => setExpanded(expanded === c.campaignId ? null : c.campaignId)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Tag className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-sm">{c.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {c.code && <span className="mr-2 font-mono">{c.code}</span>}
+                          {c.promotionTypeName || c.promotionType || '—'}
+                          {c.dateStart && ` · ${c.dateStart}${c.dateStop ? ` – ${c.dateStop}` : ''}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {statusBadge(c)}
+                      <div className="text-right">
+                        {Number(c.promoPrice) > 0 && (
+                          <p className="text-sm font-bold text-primary">฿{Math.round(Number(c.promoPrice))}</p>
+                        )}
+                        {Number(c.discountPct) > 0 && (
+                          <p className="text-xs text-muted-foreground">ลด {Number(c.discountPct).toFixed(0)}%</p>
+                        )}
+                      </div>
+                      <Badge variant="outline" className="text-xs">{c.productCount} สินค้า</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </button>
+
+              {/* Expanded product list */}
+              {expanded === c.campaignId && c.products && c.products.length > 0 && (
+                <div className="border-t bg-muted/30 px-4 py-3">
+                  <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">สินค้าในแคมเปญ</p>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">SKU</TableHead>
+                          <TableHead className="text-xs">ชื่อสินค้า</TableHead>
+                          <TableHead className="text-right text-xs">ราคาปกติ</TableHead>
+                          <TableHead className="text-right text-xs">ราคาโปร</TableHead>
+                          <TableHead className="text-center text-xs">ขั้นต่ำ</TableHead>
+                          <TableHead className="text-center text-xs">แถม</TableHead>
+                          <TableHead className="text-right text-xs">GP%</TableHead>
+                          <TableHead className="text-xs">Step</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {c.products.map((p) => (
+                          <TableRow key={p.sku}>
+                            <TableCell className="font-mono text-xs text-muted-foreground">{p.sku}</TableCell>
+                            <TableCell className="text-xs max-w-[180px] truncate">{p.name}</TableCell>
+                            <TableCell className="text-right text-xs text-muted-foreground">
+                              {p.retailPrice > 0 ? `฿${p.retailPrice}` : '—'}
+                            </TableCell>
+                            <TableCell className="text-right text-xs font-semibold text-primary">
+                              {p.promoPrice > 0 ? `฿${Math.round(p.promoPrice)}` : '—'}
+                            </TableCell>
+                            <TableCell className="text-center text-xs">{p.minQty > 1 ? p.minQty : '—'}</TableCell>
+                            <TableCell className="text-center text-xs">{p.freeItemQty > 0 ? p.freeItemQty : '—'}</TableCell>
+                            <TableCell className="text-right text-xs">
+                              {p.gp != null ? (
+                                <span className={p.gp >= 30 ? 'text-emerald-600' : p.gp >= 20 ? 'text-amber-600' : 'text-red-500'}>
+                                  {p.gp.toFixed(1)}%
+                                </span>
+                              ) : '—'}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{p.stepText}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+              {expanded === c.campaignId && (!c.products || c.products.length === 0) && (
+                <div className="border-t bg-muted/30 px-4 py-3 text-center text-xs text-muted-foreground">
+                  ไม่มีข้อมูลสินค้าใน cache — Sync อีกครั้งเพื่อดึงรายการสินค้า
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// TAB: SKU Lookup
+// ──────────────────────────────────────────────────────────────────────────
+
+function SkuLookupTab() {
+  const [sku, setSku] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<SkuPromotionStep[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const doLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = sku.trim();
+    if (!q) return;
+    setLoading(true);
+    setError(null);
+    setResults(null);
+    try {
+      const data = await getSkuPromotionSteps(q);
+      setResults(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'ค้นหาไม่สำเร็จ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div>
+        <h2 className="text-base font-semibold">ค้นหาโปรโมชันตาม SKU</h2>
+        <p className="text-sm text-muted-foreground">ใส่ SKU เพื่อดูว่าสินค้าตัวนี้อยู่ใน Campaign ไหนบ้าง พร้อมราคาโปรและ step</p>
+      </div>
+
+      <form onSubmit={(e) => { void doLookup(e); }} className="flex gap-2">
+        <input
+          className="flex-1 h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-ring font-mono uppercase"
+          placeholder="เช่น 1002565"
+          value={sku}
+          onChange={(e) => setSku(e.target.value.toUpperCase())}
+        />
+        <Button type="submit" disabled={loading || !sku.trim()}>
+          {loading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Search className="mr-1.5 h-4 w-4" />}
+          ค้นหา
+        </Button>
+      </form>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />{error}
+        </div>
+      )}
+
+      {results !== null && (
+        results.length === 0 ? (
+          <div className="flex h-24 flex-col items-center justify-center gap-1 rounded-lg border bg-muted/30 text-muted-foreground">
+            <Star className="h-6 w-6 opacity-30" />
+            <p className="text-sm">ไม่พบโปรโมชันสำหรับ SKU นี้ใน cache</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">พบ {results.length} โปรโมชัน</p>
+            {results.map((step) => (
+              <Card key={step.campaignId}>
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm">{step.campaignName}</p>
+                        {step.dateStop && new Date(step.dateStop) < new Date() ? (
+                          <Badge variant="secondary" className="text-xs">หมดแล้ว</Badge>
+                        ) : (
+                          <Badge className="bg-emerald-600 text-white text-xs">ใช้งาน</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {step.promotionTypeName || step.promotionType || ''}
+                        {step.dateStart && ` · ${step.dateStart}${step.dateStop ? ` – ${step.dateStop}` : ''}`}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xl font-bold text-primary">฿{Math.round(step.promoPrice)}</p>
+                      {step.retailPrice > 0 && (
+                        <p className="text-xs text-muted-foreground line-through">฿{step.retailPrice}</p>
+                      )}
+                      {step.gp != null && (
+                        <p className={`text-xs ${step.gp >= 30 ? 'text-emerald-600' : step.gp >= 20 ? 'text-amber-600' : 'text-red-500'}`}>
+                          GP {step.gp.toFixed(1)}%
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                    <TrendingUp className="h-3 w-3" />
+                    {step.stepText}
+                    {step.minQty > 1 && <span className="text-muted-foreground">· ขั้นต่ำ {step.minQty} ชิ้น</span>}
+                    {step.freeItemQty > 0 && <span className="text-muted-foreground">· แถม {step.freeItemQty}</span>}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )
       )}
     </div>
   );
