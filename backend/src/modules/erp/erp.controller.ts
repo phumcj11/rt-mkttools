@@ -122,6 +122,11 @@ export class ErpController {
     return this.sync.getCachedCampaignDetail(id);
   }
 
+  @Post('promotions/sku/:sku/sync')
+  syncSkuPromotions(@Param('sku') sku: string) {
+    return this.sync.syncPromotionSnapshotForSku(sku);
+  }
+
   @Get('category-performance')
   categoryPerformance(
     @Query('from') from?: string,

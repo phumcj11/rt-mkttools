@@ -16,10 +16,11 @@ import type {
   ErpSalesSummary,
   ErpSyncResult,
   ErpTopProduct,
+  SkuPromotionLookupResult,
   SkuPromotionStep,
 } from './types';
 
-export type { ErpCampaignCacheItem, SkuPromotionStep };
+export type { ErpCampaignCacheItem, SkuPromotionLookupResult, SkuPromotionStep };
 
 export type {
   CampaignAnalysisSummary,
@@ -152,7 +153,7 @@ export function getCachedCampaignDetail(id: number) {
 }
 
 export function getSkuPromotionSteps(sku: string) {
-  return apiRequest<SkuPromotionStep[]>(`/erp/promotions/sku/${encodeURIComponent(sku)}`);
+  return apiRequest<SkuPromotionLookupResult>(`/erp/promotions/sku/${encodeURIComponent(sku)}`);
 }
 
 export function syncErpCampaigns() {

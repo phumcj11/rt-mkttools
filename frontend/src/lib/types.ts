@@ -593,6 +593,7 @@ export interface ErpCampaignCacheItem {
 /** Promotion step that a SKU is part of — returned by /erp/promotions/sku/:sku */
 export interface SkuPromotionStep {
   campaignId: number;
+  campaignCode?: string | null;
   campaignName: string;
   promotionType: string | null;
   promotionTypeName: string | null;
@@ -601,8 +602,16 @@ export interface SkuPromotionStep {
   promoPrice: number;
   retailPrice: number;
   minQty: number;
+  minAmount?: number;
   freeItemQty: number;
   gp: number | null;
-  /** e.g. "ซื้อ 2 ชิ้น ฿89" */
+  /** e.g. "ซื้อครบ 100 มูลค่า ฿3500" */
   stepText: string;
+}
+
+export interface SkuPromotionLookupResult {
+  sku: string;
+  productId: number | null;
+  source: 'live' | 'cache' | 'live+cache' | 'none';
+  items: SkuPromotionStep[];
 }

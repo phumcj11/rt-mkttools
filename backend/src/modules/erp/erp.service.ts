@@ -269,22 +269,25 @@ export class ErpService {
     }));
   }
 
-  async promotionDetail(campaignId: number) {
+  async promotionDetail(campaignId: number, force = false) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const d = await this.call<any>('promotions', 'detail', { campaign_id: campaignId }, false, TTL_STATIC);
+    const d = await this.call<any>('promotions', 'detail', { campaign_id: campaignId }, force, TTL_STATIC);
     if (!d) return null;
+    const row = Array.isArray(d) ? d[0] : d;
     return {
-      id: num(d.id),
-      code: String(d.code ?? ''),
-      name: String(d.promotion_name ?? d.name ?? ''),
-      type: String(d.promotion_type ?? ''),
-      typeName: String(d.promotion_type_name ?? ''),
-      dateStart: String(d.date_start ?? ''),
-      dateStop: String(d.date_stop ?? ''),
-      retailPrice: num(d.retail_price ?? d.price ?? 0),
-      promoPrice: num(d.promo_price ?? d.promotion_price ?? 0),
-      discountPct: num(d.discount_pct ?? 0),
-      conditions: String(d.conditions ?? ''),
+      id: num(row.id ?? row.campaign_id),
+      code: String(row.code ?? ''),
+      name: String(row.promotion_name ?? row.name ?? ''),
+      type: String(row.promotion_type ?? ''),
+      typeName: String(row.promotion_type_name ?? ''),
+      dateStart: String(row.date_start ?? ''),
+      dateStop: String(row.date_stop ?? ''),
+      retailPrice: num(row.retail_price ?? row.price ?? 0),
+      promoPrice: num(row.promo_price ?? row.promotion_price ?? 0),
+      discountPct: num(row.discount_pct ?? 0),
+      conditions: String(row.conditions ?? ''),
+      minQty: num(row.min_qty ?? row.promo_quantity ?? row.quantity_buy ?? row.buy_qty ?? 0),
+      minAmount: num(row.min_amount ?? row.amount ?? row.promo_amount ?? row.value ?? 0),
     };
   }
 
@@ -316,22 +319,34 @@ export class ErpService {
     }));
   }
 
-  async promotionsByProductDetail(productId: number) {
-    const d = await this.call<any[]>('promotions', 'by_product', { product_id: productId, active_only: 1 }, false, TTL_STATIC);
+  async promotionsByProductDetail(productId: number, force = false, activeOnly = true) {
+    const params: Query = { product_id: productId };
+    if (activeOnly) params.active_only = 1;
+    const d = await this.call<any[]>('promotions', 'by_product', params, force, TTL_STATIC);
     return (d ?? []).map((p) => ({
       id: num(p.id ?? p.campaign_id),
+      code: String(p.code ?? ''),
       name: String(p.promotion_name ?? p.name ?? ''),
       type: String(p.promotion_type ?? ''),
       typeName: String(p.promotion_type_name ?? ''),
       promoPrice: num(p.promo_price ?? p.promotion_price ?? 0),
       retailPrice: num(p.retail_price ?? p.price ?? 0),
-      minQty: num(p.min_qty ?? 1),
-      freeItemQty: num(p.free_item_qty ?? 0),
+      minQty: num(p.min_qty ?? p.promo_quantity ?? p.qty_min ?? 0),
+      minAmount: num(p.min_amount ?? p.amount ?? p.promo_amount ?? 0),
+      freeItemQty: num(p.free_item_qty ?? p.free_qty ?? 0),
       conditions: String(p.conditions ?? ''),
       dateStart: String(p.date_start ?? ''),
       dateStop: String(p.date_stop ?? ''),
       remainingGpPct: p.remaining_gp_pct != null ? num(p.remaining_gp_pct) : null,
     }));
+  }
+
+  /** Resolve ERP product row by SKU (live products/list) */
+  async findProductBySku(sku: string, force = false) {
+    const normalSku = String(sku ?? '').replace(/\s+/g, '').toUpperCase();
+    if (!normalSku) return null;
+    const rows = await this.productsList({ q: normalSku, limit: 30 }, force);
+    return rows.find((r) => String(r.sku ?? '').replace(/\s+/g, '').toUpperCase() === normalSku) ?? null;
   }
 
   async campaignCandidates(params: {

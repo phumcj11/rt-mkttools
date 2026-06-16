@@ -25,6 +25,30 @@ export interface ErpAlert {
   value?: number;
 }
 
+export interface SkuPromotionStepDto {
+  campaignId: number;
+  campaignCode: string | null;
+  campaignName: string;
+  promotionType: string | null;
+  promotionTypeName: string | null;
+  dateStart: string | null;
+  dateStop: string | null;
+  promoPrice: number;
+  retailPrice: number;
+  minQty: number;
+  minAmount: number;
+  freeItemQty: number;
+  gp: number | null;
+  stepText: string;
+}
+
+export interface SkuPromotionLookupResult {
+  sku: string;
+  productId: number | null;
+  source: 'live' | 'cache' | 'live+cache' | 'none';
+  items: SkuPromotionStepDto[];
+}
+
 @Injectable()
 export class ErpSyncService {
   private readonly logger = new Logger(ErpSyncService.name);
@@ -296,7 +320,7 @@ export class ErpSyncService {
 
         if (product.productId > 0) {
           try {
-            const byProduct = await this.erp.promotionsByProductDetail(product.productId);
+            const byProduct = await this.erp.promotionsByProductDetail(product.productId, true);
             promotions = byProduct.map((p) => ({
               id: p.id,
               name: p.name,
@@ -413,14 +437,241 @@ export class ErpSyncService {
   private buildPromoStepText(p: {
     promoPrice: number;
     minQty: number;
+    minAmount?: number;
     freeItemQty: number;
     conditions?: string;
+    freeItemLabel?: string;
   }): string {
     if (p.conditions?.trim()) return p.conditions.trim();
-    if (p.freeItemQty > 0 && p.minQty > 0) return `ซื้อ ${p.minQty} แถม ${p.freeItemQty}`;
-    if (p.minQty > 1) return `${p.minQty} ชิ้น ฿${Math.round(p.promoPrice)}`;
+    const minAmount = p.minAmount ?? 0;
+    const minQty = p.minQty > 0 ? p.minQty : 0;
+    if (minAmount > 0 && minQty > 1) {
+      return `ซื้อครบ ${minQty} มูลค่า ฿${Math.round(minAmount)}`;
+    }
+    if (minAmount > 0 && p.freeItemQty > 0) {
+      const gift = p.freeItemLabel ? ` ${p.freeItemLabel}` : '';
+      return `ซื้อครบ ฿${Math.round(minAmount)} แถม${gift}`;
+    }
+    if (minAmount > 0) return `ซื้อครบ ฿${Math.round(minAmount)}`;
+    if (p.freeItemQty > 0 && minQty > 0) return `ซื้อ ${minQty} แถม ${p.freeItemQty}`;
+    if (minQty > 1 && p.promoPrice > 0) return `${minQty} ชิ้น ฿${Math.round(p.promoPrice)}`;
     if (p.promoPrice > 0) return `ราคาโปร ฿${Math.round(p.promoPrice)}`;
     return 'โปรพิเศษ';
+  }
+
+  private normalSku(sku: string) {
+    return String(sku ?? '').replace(/\s+/g, '').toUpperCase();
+  }
+
+  /** Resolve product_id from local cache or live ERP products/list */
+  async resolveProductIdBySku(sku: string): Promise<{ sku: string; productId: number } | null> {
+    const normalSku = this.normalSku(sku);
+    if (!normalSku) return null;
+
+    const cached = await this.productCacheRepo.findOne({ where: { sku: normalSku } });
+    if (cached?.productId) return { sku: normalSku, productId: cached.productId };
+
+    const live = await this.erp.findProductBySku(normalSku, true);
+    if (live?.id) return { sku: normalSku, productId: live.id };
+    return null;
+  }
+
+  private mapStepDto(input: {
+    campaignId: number;
+    campaignCode?: string | null;
+    campaignName: string;
+    promotionType?: string | null;
+    promotionTypeName?: string | null;
+    dateStart?: string | null;
+    dateStop?: string | null;
+    promoPrice: number;
+    retailPrice: number;
+    minQty: number;
+    minAmount: number;
+    freeItemQty: number;
+    gp?: number | null;
+    stepText: string;
+  }): SkuPromotionStepDto {
+    return {
+      campaignId: input.campaignId,
+      campaignCode: input.campaignCode ?? null,
+      campaignName: input.campaignName,
+      promotionType: input.promotionType ?? null,
+      promotionTypeName: input.promotionTypeName ?? null,
+      dateStart: input.dateStart ?? null,
+      dateStop: input.dateStop ?? null,
+      promoPrice: input.promoPrice,
+      retailPrice: input.retailPrice,
+      minQty: input.minQty,
+      minAmount: input.minAmount,
+      freeItemQty: input.freeItemQty,
+      gp: input.gp ?? null,
+      stepText: input.stepText,
+    };
+  }
+
+  /** Read cached promotions for SKU (snapshot + campaign product lists) */
+  private async readCachedSkuPromotions(normalSku: string): Promise<SkuPromotionStepDto[]> {
+    const results: SkuPromotionStepDto[] = [];
+
+    const snapshot = await this.promotionSnapshotRepo.findOne({ where: { sku: normalSku } });
+    const snapshotPromos = snapshot?.promotions ?? [];
+
+    const allCampaigns = await this.campaignCacheRepo.find({ where: { isActive: true } });
+    for (const campaign of allCampaigns) {
+      if (!campaign.products) continue;
+      const match = campaign.products.find(
+        (p) => this.normalSku(p.sku) === normalSku,
+      );
+      if (!match) continue;
+      results.push(this.mapStepDto({
+        campaignId: campaign.campaignId,
+        campaignCode: campaign.code,
+        campaignName: campaign.name,
+        promotionType: campaign.promotionType,
+        promotionTypeName: campaign.promotionTypeName,
+        dateStart: campaign.dateStart,
+        dateStop: campaign.dateStop,
+        promoPrice: match.promoPrice,
+        retailPrice: match.retailPrice,
+        minQty: match.minQty,
+        minAmount: 0,
+        freeItemQty: match.freeItemQty,
+        gp: match.gp,
+        stepText: match.stepText ?? this.buildPromoStepText({
+          promoPrice: match.promoPrice,
+          minQty: match.minQty,
+          freeItemQty: match.freeItemQty,
+          conditions: campaign.conditions ?? undefined,
+        }),
+      }));
+    }
+
+    for (const sp of snapshotPromos) {
+      if (results.some((r) => r.campaignId === sp.id)) continue;
+      const promoPrice = typeof sp.promoPrice === 'number' ? sp.promoPrice : 0;
+      const retailPrice = typeof sp.retailPrice === 'number' ? sp.retailPrice : 0;
+      results.push(this.mapStepDto({
+        campaignId: sp.id,
+        campaignCode: null,
+        campaignName: sp.name,
+        promotionType: sp.type ?? null,
+        promotionTypeName: sp.typeName ?? null,
+        dateStart: null,
+        dateStop: null,
+        promoPrice,
+        retailPrice,
+        minQty: 1,
+        minAmount: 0,
+        freeItemQty: 0,
+        gp: typeof sp.remainingGpPct === 'number' ? sp.remainingGpPct : null,
+        stepText: promoPrice > 0 ? `ราคาโปร ฿${Math.round(promoPrice)}` : sp.conditions ?? sp.name,
+      }));
+    }
+
+    return results;
+  }
+
+  /** Fetch promotions for SKU directly from ERP promotions/by_product + detail */
+  private async fetchLiveSkuPromotions(productId: number): Promise<SkuPromotionStepDto[]> {
+    let promos = await this.erp.promotionsByProductDetail(productId, true, true);
+    if (promos.length === 0) {
+      promos = await this.erp.promotionsByProductDetail(productId, true, false);
+    }
+    const results: SkuPromotionStepDto[] = [];
+
+    for (const promo of promos) {
+      let detail: Awaited<ReturnType<ErpService['promotionDetail']>> = null;
+      let freeItems: Awaited<ReturnType<ErpService['promotionFreeItems']>> = [];
+      try {
+        [detail, freeItems] = await Promise.all([
+          this.erp.promotionDetail(promo.id, true),
+          this.erp.promotionFreeItems(promo.id),
+        ]);
+      } catch {
+        // detail/free_items are best-effort
+      }
+
+      const minQty = promo.minQty || detail?.minQty || 0;
+      const minAmount = promo.minAmount || detail?.minAmount || 0;
+      const freeItemQty = promo.freeItemQty || freeItems.reduce((s, f) => s + f.qty, 0);
+      const freeItemLabel = freeItems.length > 0
+        ? freeItems.map((f) => f.name || f.sku).filter(Boolean).slice(0, 2).join(', ')
+        : undefined;
+
+      const stepText = this.buildPromoStepText({
+        promoPrice: promo.promoPrice || detail?.promoPrice || 0,
+        minQty: minQty || 1,
+        minAmount,
+        freeItemQty,
+        conditions: promo.conditions || detail?.conditions,
+        freeItemLabel,
+      });
+
+      results.push(this.mapStepDto({
+        campaignId: promo.id,
+        campaignCode: promo.code || detail?.code || null,
+        campaignName: promo.name || detail?.name || '',
+        promotionType: promo.type || detail?.type || null,
+        promotionTypeName: promo.typeName || detail?.typeName || null,
+        dateStart: promo.dateStart || detail?.dateStart || null,
+        dateStop: promo.dateStop || detail?.dateStop || null,
+        promoPrice: promo.promoPrice || detail?.promoPrice || 0,
+        retailPrice: promo.retailPrice || detail?.retailPrice || 0,
+        minQty: minQty || 1,
+        minAmount,
+        freeItemQty,
+        gp: promo.remainingGpPct,
+        stepText,
+      }));
+    }
+
+    return results;
+  }
+
+  private mergeSkuPromotionSteps(a: SkuPromotionStepDto[], b: SkuPromotionStepDto[]): SkuPromotionStepDto[] {
+    const map = new Map<number, SkuPromotionStepDto>();
+    for (const item of a) map.set(item.campaignId, item);
+    for (const item of b) map.set(item.campaignId, item);
+    return Array.from(map.values());
+  }
+
+  /** Persist promotion snapshot for a single SKU after live lookup */
+  private async upsertPromotionSnapshotForSku(
+    sku: string,
+    productId: number,
+    items: SkuPromotionStepDto[],
+  ): Promise<void> {
+    const promotions = items.map((s) => ({
+      id: s.campaignId,
+      name: s.campaignName,
+      type: s.promotionType ?? '',
+      typeName: s.promotionTypeName ?? '',
+      promoPrice: s.promoPrice,
+      retailPrice: s.retailPrice,
+      conditions: s.stepText,
+      remainingGpPct: s.gp,
+    }));
+    const promoPrices = promotions.map((p) => p.promoPrice).filter((v) => v > 0);
+    const gpValues = promotions
+      .map((p) => p.remainingGpPct)
+      .filter((v): v is number => typeof v === 'number');
+
+    await this.promotionSnapshotRepo.save(this.promotionSnapshotRepo.create({
+      sku,
+      productId,
+      activePromotionCount: promotions.length,
+      promotionNames: promotions.map((p) => p.name).filter(Boolean).join(' | ') || null,
+      promotionTypes: promotions.map((p) => p.type || p.typeName).filter(Boolean).join(' | ') || null,
+      lowestPromoPrice: promoPrices.length > 0 ? Math.min(...promoPrices).toFixed(2) : null,
+      bestRemainingGpPct: gpValues.length > 0 ? Math.max(...gpValues).toFixed(2) : null,
+      promotions,
+    }));
+  }
+
+  /** On-demand sync promotion snapshot for one SKU */
+  async syncPromotionSnapshotForSku(sku: string): Promise<SkuPromotionLookupResult> {
+    return this.getSkuPromotions(sku);
   }
 
   /** Sync active campaigns from ERP promotions/list + detail + products + free_items */
@@ -444,11 +695,15 @@ export class ErpSyncService {
               ? Math.round(((p.retailPrice - p.promoPrice) / p.retailPrice) * 1000) / 10
               : null;
           const freeQty = p.freeItemQty || freeItems.reduce((s, f) => s + f.qty, 0);
+          const minAmount = detail?.minAmount ?? 0;
+          const minQty = p.minQty || detail?.minQty || 1;
           const stepText = this.buildPromoStepText({
             promoPrice: p.promoPrice,
-            minQty: p.minQty,
+            minQty,
+            minAmount,
             freeItemQty: freeQty,
             conditions: p.conditions || detail?.conditions,
+            freeItemLabel: freeItems.map((f) => f.name).filter(Boolean).slice(0, 2).join(', ') || undefined,
           });
           return { ...p, freeItemQty: freeQty, gp, stepText };
         });
@@ -493,90 +748,46 @@ export class ErpSyncService {
     return this.campaignCacheRepo.findOne({ where: { campaignId } });
   }
 
-  /** Get all campaigns a given SKU appears in (from campaign product lists) */
-  async getSkuPromotions(sku: string): Promise<Array<{
-    campaignId: number;
-    campaignName: string;
-    promotionType: string | null;
-    promotionTypeName: string | null;
-    dateStart: string | null;
-    dateStop: string | null;
-    promoPrice: number;
-    retailPrice: number;
-    minQty: number;
-    freeItemQty: number;
-    gp: number | null;
-    stepText: string;
-  }>> {
-    const normalSku = String(sku ?? '').replace(/\s+/g, '').toUpperCase();
+  /** Get promotions for SKU — live ERP lookup + cache merge + on-demand snapshot */
+  async getSkuPromotions(sku: string): Promise<SkuPromotionLookupResult> {
+    const normalSku = this.normalSku(sku);
+    const cached = await this.readCachedSkuPromotions(normalSku);
 
-    // Fetch from ProductPromotionSnapshot (fast, per-product)
-    const snapshot = await this.promotionSnapshotRepo.findOne({ where: { sku: normalSku } });
-    const snapshotPromos = snapshot?.promotions ?? [];
-
-    // Also scan campaign product lists for this SKU
-    const allCampaigns = await this.campaignCacheRepo.find({ where: { isActive: true } });
-    const results: Array<{
-      campaignId: number;
-      campaignName: string;
-      promotionType: string | null;
-      promotionTypeName: string | null;
-      dateStart: string | null;
-      dateStop: string | null;
-      promoPrice: number;
-      retailPrice: number;
-      minQty: number;
-      freeItemQty: number;
-      gp: number | null;
-      stepText: string;
-    }> = [];
-
-    for (const campaign of allCampaigns) {
-      if (!campaign.products) continue;
-      const match = campaign.products.find(
-        (p) => String(p.sku ?? '').replace(/\s+/g, '').toUpperCase() === normalSku,
-      );
-      if (!match) continue;
-      results.push({
-        campaignId: campaign.campaignId,
-        campaignName: campaign.name,
-        promotionType: campaign.promotionType,
-        promotionTypeName: campaign.promotionTypeName,
-        dateStart: campaign.dateStart,
-        dateStop: campaign.dateStop,
-        promoPrice: match.promoPrice,
-        retailPrice: match.retailPrice,
-        minQty: match.minQty,
-        freeItemQty: match.freeItemQty,
-        gp: match.gp,
-        stepText: match.stepText ?? `ราคาโปร ฿${Math.round(match.promoPrice)}`,
-      });
-    }
-
-    // Supplement with snapshot promos not already found via campaigns
-    for (const sp of snapshotPromos) {
-      const alreadyHave = results.some((r) => r.campaignId === sp.id);
-      if (!alreadyHave) {
-        const promoPrice = typeof sp.promoPrice === 'number' ? sp.promoPrice : 0;
-        const retailPrice = typeof sp.retailPrice === 'number' ? sp.retailPrice : 0;
-        results.push({
-          campaignId: sp.id,
-          campaignName: sp.name,
-          promotionType: sp.type ?? null,
-          promotionTypeName: sp.typeName ?? null,
-          dateStart: null,
-          dateStop: null,
-          promoPrice,
-          retailPrice,
-          minQty: 1,
-          freeItemQty: 0,
-          gp: typeof sp.remainingGpPct === 'number' ? sp.remainingGpPct : null,
-          stepText: promoPrice > 0 ? `ราคาโปร ฿${Math.round(promoPrice)}` : sp.conditions ?? sp.name,
-        });
+    const resolved = await this.resolveProductIdBySku(normalSku);
+    let live: SkuPromotionStepDto[] = [];
+    if (resolved?.productId) {
+      try {
+        live = await this.fetchLiveSkuPromotions(resolved.productId);
+      } catch (err) {
+        this.logger.warn(
+          `getSkuPromotions live fetch ${normalSku}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
-    return results;
+    const items = this.mergeSkuPromotionSteps(cached, live);
+
+    if (resolved?.productId && items.length > 0) {
+      try {
+        await this.upsertPromotionSnapshotForSku(normalSku, resolved.productId, items);
+      } catch (err) {
+        this.logger.warn(
+          `getSkuPromotions snapshot upsert ${normalSku}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    let source: SkuPromotionLookupResult['source'] = 'none';
+    if (live.length > 0 && cached.length > 0) source = 'live+cache';
+    else if (live.length > 0) source = 'live';
+    else if (cached.length > 0) source = 'cache';
+
+    return {
+      sku: normalSku,
+      productId: resolved?.productId ?? null,
+      source,
+      items,
+    };
   }
 
   /** อ่าน product cache ทั้งหมด (ใช้ใน campaignCandidates) */
@@ -629,10 +840,6 @@ export class ErpSyncService {
       if (rows.length < limit) break;
     }
     return all;
-  }
-
-  private normalSku(sku: string) {
-    return String(sku ?? '').replace(/\s+/g, '').toUpperCase();
   }
 
   private productHash(product: Awaited<ReturnType<ErpService['productsList']>>[number]) {

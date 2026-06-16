@@ -56,6 +56,7 @@ import type {
   ErpPromotion,
   ErpTopProduct,
   SkuPromotionStep,
+  SkuPromotionLookupResult,
 } from '@/lib/types';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
 
@@ -1266,7 +1267,7 @@ function CampaignsTab() {
 function SkuLookupTab() {
   const [sku, setSku] = useState('');
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<SkuPromotionStep[] | null>(null);
+  const [lookup, setLookup] = useState<SkuPromotionLookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const doLookup = async (e: React.FormEvent) => {
@@ -1275,16 +1276,25 @@ function SkuLookupTab() {
     if (!q) return;
     setLoading(true);
     setError(null);
-    setResults(null);
+    setLookup(null);
     try {
       const data = await getSkuPromotionSteps(q);
-      setResults(data);
+      setLookup(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ค้นหาไม่สำเร็จ');
     } finally {
       setLoading(false);
     }
   };
+
+  const results = lookup?.items ?? null;
+  const sourceLabel = lookup?.source === 'live'
+    ? 'ดึงจาก ERP สด'
+    : lookup?.source === 'live+cache'
+      ? 'ERP สด + cache'
+      : lookup?.source === 'cache'
+        ? 'จาก cache'
+        : null;
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -1312,22 +1322,37 @@ function SkuLookupTab() {
         </div>
       )}
 
-      {results !== null && (
-        results.length === 0 ? (
-          <div className="flex h-24 flex-col items-center justify-center gap-1 rounded-lg border bg-muted/30 text-muted-foreground">
+      {lookup !== null && (
+        results && results.length === 0 ? (
+          <div className="flex h-24 flex-col items-center justify-center gap-1 rounded-lg border bg-muted/30 text-muted-foreground px-4 text-center">
             <Star className="h-6 w-6 opacity-30" />
-            <p className="text-sm">ไม่พบโปรโมชันสำหรับ SKU นี้ใน cache</p>
+            <p className="text-sm">
+              {lookup.productId
+                ? 'ERP ไม่พบแคมเปญที่ใช้งานสำหรับ SKU นี้ (active_only=1)'
+                : 'ไม่พบสินค้า SKU นี้ใน ERP — ตรวจสอบรหัสสินค้า'}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
-            <p className="text-sm font-medium">พบ {results.length} โปรโมชัน</p>
-            {results.map((step) => (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium">พบ {results?.length ?? 0} โปรโมชัน</p>
+              {sourceLabel && (
+                <Badge variant="outline" className="text-xs font-normal">{sourceLabel}</Badge>
+              )}
+              {lookup.productId ? (
+                <span className="text-xs text-muted-foreground">product_id: {lookup.productId}</span>
+              ) : null}
+            </div>
+            {(results ?? []).map((step) => (
               <Card key={step.campaignId}>
                 <CardContent className="p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-sm">{step.campaignName}</p>
+                        {step.campaignCode && (
+                          <span className="font-mono text-xs text-muted-foreground">{step.campaignCode}</span>
+                        )}
                         {step.dateStop && new Date(step.dateStop) < new Date() ? (
                           <Badge variant="secondary" className="text-xs">หมดแล้ว</Badge>
                         ) : (
@@ -1340,7 +1365,11 @@ function SkuLookupTab() {
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-xl font-bold text-primary">฿{Math.round(step.promoPrice)}</p>
+                      {step.promoPrice > 0 ? (
+                        <p className="text-xl font-bold text-primary">฿{Math.round(step.promoPrice)}</p>
+                      ) : step.minAmount && step.minAmount > 0 ? (
+                        <p className="text-lg font-bold text-primary">฿{Math.round(step.minAmount)}</p>
+                      ) : null}
                       {step.retailPrice > 0 && (
                         <p className="text-xs text-muted-foreground line-through">฿{step.retailPrice}</p>
                       )}

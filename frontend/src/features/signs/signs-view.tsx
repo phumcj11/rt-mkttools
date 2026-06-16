@@ -253,7 +253,7 @@ export function SignsView() {
     if (product.sku) {
       setPromoStepsLoading(true);
       getSkuPromotionSteps(product.sku)
-        .then((steps) => setPromoSteps(steps))
+        .then((res) => setPromoSteps(res.items))
         .catch(() => setPromoSteps([]))
         .finally(() => setPromoStepsLoading(false));
     }
