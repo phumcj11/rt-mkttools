@@ -173,11 +173,13 @@ export class ErpController {
   ) {
     const r = defaultRange();
 
-    // Try DB cache first (faster, no ERP round-trip)
+    // Use DB product cache when available; sales cache is optional (GP falls back to cost)
     const cacheStatus = await this.sync.getCacheStatus();
-    const useCache = cacheStatus.products.count > 0 && cacheStatus.sales.count > 0;
-    const cachedProducts = useCache ? await this.sync.getAllCachedProducts() : undefined;
-    const cachedSales    = useCache ? await this.sync.getAllCachedSales()    : undefined;
+    const useProductCache = cacheStatus.products.count > 0;
+    const cachedProducts = useProductCache ? await this.sync.getAllCachedProducts() : undefined;
+    const cachedSales    = useProductCache && cacheStatus.sales.count > 0
+      ? await this.sync.getAllCachedSales()
+      : useProductCache ? [] : undefined;
 
     const candidates = await this.erp.campaignCandidates({
       targetPrice, minGpPct, pieceQty: Math.max(1, pieceQty),

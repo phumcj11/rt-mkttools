@@ -839,27 +839,40 @@ export class ErpSyncService {
     const limit = 200;
     const all: Awaited<ReturnType<ErpService['productsList']>> = [];
     for (let page = 1; page <= 200; page += 1) {
-      const rows = await this.erp.productsList({ page, limit }, true);
-      all.push(...rows);
-      if (rows.length < limit) break;
+      try {
+        const rows = await this.fetchWithRetry(
+          () => this.erp.productsList({ page, limit }, true),
+          3,
+        );
+        all.push(...rows);
+        if (rows.length < limit) break;
+      } catch (err) {
+        this.logger.warn(
+          `fetchAllProducts page ${page} failed after retries: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        if (all.length === 0) throw err;
+        break;
+      }
     }
     return all;
   }
 
-  /** Paginate sales/by_sku_branch — single large requests often hit ERP timeout (20s). */
+  /** Paginate sales/by_sku_branch — chunk by week, retry failures, continue on partial errors. */
   private async fetchAllSkuBranchSales(from: string, to: string) {
     type Row = Awaited<ReturnType<ErpService['skuBranchSales']>>[number];
-    const limit = 300;
+    const limit = 200;
     const all: Row[] = [];
 
-    // Chunk date range into ~30-day windows to keep each ERP call fast
+    // 7-day windows keep each ERP call small enough to finish within timeout
     const start = new Date(from);
     const end = new Date(to);
     const chunks: Array<{ from: string; to: string }> = [];
     let chunkStart = new Date(start);
     while (chunkStart <= end) {
       const chunkEnd = new Date(chunkStart);
-      chunkEnd.setDate(chunkEnd.getDate() + 29);
+      chunkEnd.setDate(chunkEnd.getDate() + 6);
       if (chunkEnd > end) chunkEnd.setTime(end.getTime());
       chunks.push({
         from: chunkStart.toISOString().slice(0, 10),
@@ -869,15 +882,52 @@ export class ErpSyncService {
       chunkStart.setDate(chunkStart.getDate() + 1);
     }
 
+    let failedChunks = 0;
     for (const chunk of chunks) {
-      for (let page = 1; page <= 50; page += 1) {
-        const rows = await this.erp.skuBranchSales(chunk.from, chunk.to, { page, limit }, true);
-        all.push(...rows);
-        if (rows.length < limit) break;
+      let chunkRows = 0;
+      for (let page = 1; page <= 100; page += 1) {
+        try {
+          const rows = await this.fetchWithRetry(
+            () => this.erp.skuBranchSales(chunk.from, chunk.to, { page, limit }, true),
+            3,
+          );
+          all.push(...rows);
+          chunkRows += rows.length;
+          if (rows.length < limit) break;
+        } catch (err) {
+          this.logger.warn(
+            `sales chunk ${chunk.from}–${chunk.to} page ${page} failed after retries: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          break;
+        }
       }
+      if (chunkRows === 0) failedChunks += 1;
     }
 
+    if (failedChunks > 0 && all.length === 0) {
+      throw new Error(`All ${chunks.length} sales chunks failed`);
+    }
+    if (failedChunks > 0) {
+      this.logger.warn(`fetchAllSkuBranchSales: ${failedChunks}/${chunks.length} chunks returned no data`);
+    }
     return all;
+  }
+
+  private async fetchWithRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+        }
+      }
+    }
+    throw lastErr;
   }
 
   private productHash(product: Awaited<ReturnType<ErpService['productsList']>>[number]) {

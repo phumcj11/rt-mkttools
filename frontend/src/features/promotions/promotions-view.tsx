@@ -455,6 +455,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
   // ERP DB cache status
   const [cacheStatus, setCacheStatus] = useState<ErpCacheStatus | null>(null);
   const [syncing, setSyncing]         = useState(false);
+  const [syncingSales, setSyncingSales] = useState(false);
   const [syncingCampaigns, setSyncingCampaigns] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
@@ -469,33 +470,41 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
     setSyncing(true);
     setSyncMsg(null);
     try {
-      const [products, sales] = await Promise.all([
-        syncErpProducts(),
-        syncErpSales(90),
-      ]);
+      const products = await syncErpProducts();
       const status = await getErpSyncStatus();
       setCacheStatus(status);
-
-      const parts = [
-        `สินค้า ${products.synced.toLocaleString()} รายการ`,
-        `ยอดขาย ${sales.synced.toLocaleString()} SKU`,
-      ];
-      setSyncMsg(`Sync สำเร็จ: ${parts.join(' · ')} — กด "วิเคราะห์สินค้าเข้าร่วม" เพื่อดูรายการ`);
-
-      if (sales.synced === 0) {
-        showError(
-          'ยอดขายยังว่าง',
-          'Sync สินค้าแล้ว แต่ยอดขาย 0 SKU — Planner จะใช้ข้อมูล GP จากทุนแทนยอดขายจริง',
-        );
-      } else {
-        showSuccess('Sync ERP สำเร็จ', parts.join(' · '));
-      }
+      setSyncMsg(`Sync สินค้าสำเร็จ: ${products.synced.toLocaleString()} รายการ — กด "วิเคราะห์สินค้าเข้าร่วม" เพื่อดูรายการ`);
+      showSuccess('Sync สินค้าสำเร็จ', `${products.synced.toLocaleString()} รายการ`);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Sync ไม่สำเร็จ';
+      const msg = err instanceof ApiError ? err.message : 'Sync สินค้าไม่สำเร็จ';
       setSyncMsg(msg);
-      showError('Sync ไม่สำเร็จ', msg);
+      showError('Sync สินค้าไม่สำเร็จ', msg);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleSyncSales = async () => {
+    setSyncingSales(true);
+    setSyncMsg(null);
+    try {
+      const days = Number(lookback) || 30;
+      const sales = await syncErpSales(days);
+      const status = await getErpSyncStatus();
+      setCacheStatus(status);
+      if (sales.synced === 0) {
+        setSyncMsg('Sync ยอดขายเสร็จ แต่ได้ 0 SKU — Planner จะใช้ GP จากต้นทุนแทน');
+        showError('ยอดขายยังว่าง', 'ERP ไม่คืนข้อมูลยอดขาย — ลอง sync อีกครั้งหรือใช้ Planner ด้วย GP จากต้นทุน');
+      } else {
+        setSyncMsg(`Sync ยอดขายสำเร็จ: ${sales.synced.toLocaleString()} SKU (${days} วัน)`);
+        showSuccess('Sync ยอดขายสำเร็จ', `${sales.synced.toLocaleString()} SKU`);
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Sync ยอดขายไม่สำเร็จ';
+      setSyncMsg(msg);
+      showError('Sync ยอดขายไม่สำเร็จ', msg);
+    } finally {
+      setSyncingSales(false);
     }
   };
 
@@ -614,10 +623,20 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
             variant="outline"
             className="h-7 gap-1.5 text-xs"
             onClick={handleSync}
-            disabled={syncing}
+            disabled={syncing || syncingSales}
           >
             <RefreshCw className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Sync…' : 'Sync สินค้า'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs"
+            onClick={handleSyncSales}
+            disabled={syncing || syncingSales}
+          >
+            <RefreshCw className={`h-3 w-3 ${syncingSales ? 'animate-spin' : ''}`} />
+            {syncingSales ? 'Sync…' : 'Sync ยอดขาย'}
           </Button>
           <Button
             size="sm"
@@ -650,7 +669,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
       {cacheStatus && cacheStatus.sales.count === 0 && !syncMsg && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          ยอดขายยังไม่ได้ sync — กด &quot;Sync สินค้า&quot; แล้วรอ ~1 นาที จากนั้นกด &quot;วิเคราะห์สินค้าเข้าร่วม&quot; (Sync ไม่แสดงรายการสินค้าโดยอัตโนมัติ)
+          ยอดขายยังไม่ได้ sync — กด &quot;Sync ยอดขาย&quot; (ใช้ช่วงวันเดียวกับที่เลือก) หรือกด &quot;วิเคราะห์สินค้าเข้าร่วม&quot; ได้เลย (Planner จะใช้ GP จากต้นทุน)
         </div>
       )}
 
