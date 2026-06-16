@@ -371,7 +371,7 @@ export class ErpService {
       gpBaht: number; gpPct: number; abcCompany: string;
     }>;
   }) {
-    const limit = params.limit ?? 80;
+    const limit = params.limit ?? 500;
     const pieceQty = Math.max(1, params.pieceQty ?? 1);
     const perPieceTarget = params.targetPrice / pieceQty;
 

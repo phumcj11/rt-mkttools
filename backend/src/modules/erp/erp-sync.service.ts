@@ -832,9 +832,13 @@ export class ErpSyncService {
   }
 
   private async fetchAllProducts() {
-    const limit = 1000;
+    // Use limit=200 (well below ERP's ~500-per-page server cap) so pagination
+    // triggers correctly: if ERP caps at 500, requesting 200/page gives 200→200→100,
+    // each < 200 on the last page signals end. With limit=1000 the cap of 500
+    // looks like the last page and we never fetch page 2.
+    const limit = 200;
     const all: Awaited<ReturnType<ErpService['productsList']>> = [];
-    for (let page = 1; page <= 100; page += 1) {
+    for (let page = 1; page <= 200; page += 1) {
       const rows = await this.erp.productsList({ page, limit }, true);
       all.push(...rows);
       if (rows.length < limit) break;

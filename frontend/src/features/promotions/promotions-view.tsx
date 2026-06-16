@@ -445,6 +445,10 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
   const [error, setError]             = useState<string | null>(null);
   const [ran, setRan]                 = useState(false);
 
+  // Pagination for results table
+  const [resultPage, setResultPage] = useState(1);
+  const RESULT_PAGE_SIZE = 50;
+
   // Detail drawer
   const [detailSku, setDetailSku] = useState<string | null>(null);
 
@@ -536,6 +540,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
     setError(null);
     setRan(false);
     setSummary(null);
+    setResultPage(1);
     try {
       const today = new Date();
       const from  = new Date(today);
@@ -550,7 +555,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
           from: fmtD(from),
           to:   fmtD(today),
           abc:  abcFilter || undefined,
-          limit: 80,
+          limit: 500,
           withAi,
         }),
         loadCampaignMap(),
@@ -817,7 +822,11 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
               <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
                 ไม่มีสินค้าที่ผ่านเงื่อนไข — ลองลด GP ขั้นต่ำหรือขยายช่วงวันที่
               </div>
-            ) : (
+            ) : (() => {
+              const totalPages = Math.max(1, Math.ceil(candidates.length / RESULT_PAGE_SIZE));
+              const safeResultPage = Math.min(resultPage, totalPages);
+              const pagedCandidates = candidates.slice((safeResultPage - 1) * RESULT_PAGE_SIZE, safeResultPage * RESULT_PAGE_SIZE);
+              return (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -835,9 +844,11 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {candidates.map((c, i) => (
+                    {pagedCandidates.map((c, i) => {
+                      const globalIdx = (safeResultPage - 1) * RESULT_PAGE_SIZE + i;
+                      return (
                       <TableRow key={c.sku} className={c.eligibleForTarget && c.dataQuality.length === 0 ? 'bg-green-50/40' : ''}>
-                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="text-muted-foreground">{globalIdx + 1}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2.5">
                             {c.imageUrl ? (
@@ -968,11 +979,37 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between border-t px-4 py-3 text-sm text-muted-foreground">
+                    <span>
+                      แสดง {(safeResultPage - 1) * RESULT_PAGE_SIZE + 1}–{Math.min(safeResultPage * RESULT_PAGE_SIZE, candidates.length)} จาก {candidates.length} รายการ
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm" variant="outline" className="h-7 px-2 text-xs"
+                        disabled={safeResultPage <= 1}
+                        onClick={() => setResultPage((p) => Math.max(1, p - 1))}
+                      >
+                        ← ก่อนหน้า
+                      </Button>
+                      <span className="px-2">หน้า {safeResultPage}/{totalPages}</span>
+                      <Button
+                        size="sm" variant="outline" className="h-7 px-2 text-xs"
+                        disabled={safeResultPage >= totalPages}
+                        onClick={() => setResultPage((p) => Math.min(totalPages, p + 1))}
+                      >
+                        ถัดไป →
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+              );
+            })()}
           </CardContent>
         </Card>
       )}

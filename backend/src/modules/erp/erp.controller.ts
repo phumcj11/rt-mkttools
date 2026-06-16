@@ -167,7 +167,7 @@ export class ErpController {
     @Query('to') to?: string,
     @Query('category') category?: string,
     @Query('abc') abc?: string,
-    @Query('limit', new DefaultValuePipe(80), ParseIntPipe) limit = 80,
+    @Query('limit', new DefaultValuePipe(500), ParseIntPipe) limit = 500,
     @Query('campaignName') campaignName?: string,
     @Query('withAi') withAi?: string,
   ) {
