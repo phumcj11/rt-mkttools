@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
+  ArrowRight,
   Banknote,
   Building2,
   CheckCircle2,
@@ -13,6 +15,7 @@ import {
   Loader2,
   Package,
   RefreshCw,
+  Search,
   ShoppingCart,
   Sparkles,
   TrendingUp,
@@ -62,6 +65,7 @@ function num(value: number): string {
 
 export function ErpView() {
   const t = useTranslations('erp');
+  const router = useRouter();
 
   const [days, setDays] = useState<number>(30);
   const [loading, setLoading] = useState(true);
@@ -391,11 +395,31 @@ export function ErpView() {
           </div>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Gift className="h-4 w-4 text-gold" />
                 {t('promotions.title')}
               </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => router.push('/promotions?tab=sku-lookup')}
+                >
+                  <Search className="h-3 w-3" />
+                  ค้น SKU
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => router.push('/promotions?tab=campaigns')}
+                >
+                  ดูทั้งหมด
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -411,9 +435,14 @@ export function ErpView() {
                   {promotions.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="max-w-md">
-                        <div className="truncate font-medium" title={p.name}>
+                        <button
+                          type="button"
+                          className="truncate font-medium text-left hover:text-primary hover:underline"
+                          title={p.name}
+                          onClick={() => router.push('/promotions?tab=campaigns')}
+                        >
                           {p.name}
-                        </div>
+                        </button>
                         <div className="text-xs text-muted-foreground">{p.code}</div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{p.typeName || p.type}</TableCell>

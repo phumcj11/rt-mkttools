@@ -159,3 +159,7 @@ export function getSkuPromotionSteps(sku: string) {
 export function syncErpCampaigns() {
   return apiRequest<{ synced: number; failed: number }>('/erp/sync/campaigns', { method: 'POST' });
 }
+
+export function forceSyncSkuPromotion(sku: string) {
+  return apiRequest<{ synced: number }>(`/erp/promotions/sku/${encodeURIComponent(sku)}/sync`, { method: 'POST' });
+}

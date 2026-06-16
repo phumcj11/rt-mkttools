@@ -51,6 +51,7 @@ import {
 import { getProductCatalogDetail, listProductCatalog, type ProductCatalogItem } from '@/lib/products-api';
 import { getSkuPromotionSteps } from '@/lib/erp-api';
 import type { SkuPromotionStep } from '@/lib/types';
+import { PromoStepPicker } from '@/features/promotions/promo-step-picker';
 import { confirmDelete, showError, showSuccess } from '@/lib/sweetalert';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -1570,80 +1571,3 @@ async function fileToAsset(file: File, index: number): Promise<SignAssetInput> {
   return { kind: kinds[index] ?? 'other', dataUrl, originalName: file.name };
 }
 
-// ─── ERP Promotion Step Picker ───────────────────────────────────────────────
-
-function PromoStepPicker({
-  steps,
-  loading,
-  selected,
-  onSelect,
-  onClear,
-}: {
-  steps: SkuPromotionStep[];
-  loading: boolean;
-  selected: SkuPromotionStep | null;
-  onSelect: (step: SkuPromotionStep) => void;
-  onClear: () => void;
-}) {
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-dashed bg-muted/20 px-3 py-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        กำลังดึงโปรโมชันจาก ERP...
-      </div>
-    );
-  }
-
-  if (steps.length === 0) return null;
-
-  const now = new Date();
-  const activeSteps = steps.filter((s) => !s.dateStop || new Date(s.dateStop) >= now);
-
-  return (
-    <div className="rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-          <Sparkles className="h-3 w-3" />
-          โปรโมชัน ERP ({activeSteps.length} รายการ)
-        </p>
-        {selected && (
-          <button type="button" onClick={onClear} className="text-[10px] text-muted-foreground hover:text-foreground underline">
-            ล้าง
-          </button>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {activeSteps.map((step) => {
-          const isSelected = selected?.campaignId === step.campaignId;
-          return (
-            <button
-              key={step.campaignId}
-              type="button"
-              onClick={() => onSelect(step)}
-              className={`flex flex-col items-start rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
-                isSelected
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border bg-background hover:border-primary hover:bg-muted'
-              }`}
-            >
-              <span className="font-semibold truncate max-w-[160px]">{step.campaignName}</span>
-              <span className="mt-0.5 text-primary font-bold">฿{Math.round(step.promoPrice)}</span>
-              <span className="text-muted-foreground">{step.stepText}</span>
-              {step.gp != null && (
-                <span className={`text-[10px] mt-0.5 ${step.gp >= 30 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                  GP {step.gp.toFixed(1)}%
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-      {selected && (
-        <p className="text-[10px] text-muted-foreground">
-          เลือกแล้ว: <span className="font-medium text-primary">{selected.campaignName} — {selected.stepText}</span>
-          {' '}· จะเก็บ Campaign ID เพื่อ trace ได้ตอน Review
-        </p>
-      )}
-    </div>
-  );
-}

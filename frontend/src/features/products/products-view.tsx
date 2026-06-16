@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Eye, Loader2, RefreshCw, Search, Tag, XCircle } from 'lucide-react';
+import { CheckCircle2, Eye, Loader2, RefreshCw, Search, Sparkles, Tag, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,6 +25,8 @@ import {
   type ProductCatalogItem,
   type ProductCatalogStatus,
 } from '@/lib/products-api';
+import { getSkuPromotionSteps } from '@/lib/erp-api';
+import type { SkuPromotionStep } from '@/lib/types';
 
 const FILTERS: { value: ProductCatalogFilter; label: string }[] = [
   { value: 'ready', label: 'พร้อมทำสื่อ' },
@@ -48,6 +50,9 @@ export function ProductsView() {
   const [items, setItems] = useState<ProductCatalogItem[]>([]);
   const [status, setStatus] = useState<ProductCatalogStatus | null>(null);
   const [selected, setSelected] = useState<ProductCatalogItem | null>(null);
+  const [livePromos, setLivePromos] = useState<SkuPromotionStep[] | null>(null);
+  const [livePromoSource, setLivePromoSource] = useState<string | null>(null);
+  const [livePromoLoading, setLivePromoLoading] = useState(false);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<ProductCatalogFilter>('ready');
   const [page, setPage] = useState(1);
@@ -98,12 +103,26 @@ export function ProductsView() {
 
   async function openDetail(item: ProductCatalogItem) {
     setSelected(item);
+    setLivePromos(null);
+    setLivePromoSource(null);
     try {
       const detail = await getProductCatalogDetail(item.sku);
       setSelected(detail);
     } catch {
       // Keep list data visible if detail endpoint fails.
     }
+    loadLivePromos(item.sku);
+  }
+
+  function loadLivePromos(sku: string) {
+    setLivePromoLoading(true);
+    getSkuPromotionSteps(sku)
+      .then((res) => {
+        setLivePromos(res.items);
+        setLivePromoSource(res.source);
+      })
+      .catch(() => setLivePromos([]))
+      .finally(() => setLivePromoLoading(false));
   }
 
   return (
@@ -293,19 +312,49 @@ export function ProductsView() {
               <Detail label="จำนวนขาย" value={`${selected.qtySold.toLocaleString('th-TH')} ชิ้น`} />
             </div>
 
-            <div className="mt-4 rounded-lg border p-3">
-              <p className="text-sm font-medium">โปรโมชั่นที่เกี่ยวข้อง</p>
-              {!selected.promotions || selected.promotions.length === 0 ? (
-                <p className="mt-2 text-sm text-muted-foreground">ไม่มีโปรโมชั่น active</p>
+            <div className="mt-4 rounded-lg border p-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                  โปรโมชัน ERP สด
+                  {livePromoSource && (
+                    <Badge variant="outline" className="text-[10px] font-normal ml-1">
+                      {livePromoSource === 'live' ? 'ERP สด' : livePromoSource === 'live+cache' ? 'สด+cache' : 'cache'}
+                    </Badge>
+                  )}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  disabled={livePromoLoading}
+                  onClick={() => selected && loadLivePromos(selected.sku)}
+                >
+                  {livePromoLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  รีเฟรช
+                </Button>
+              </div>
+              {livePromoLoading ? (
+                <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> กำลังดึงจาก ERP...
+                </div>
+              ) : livePromos === null ? null : livePromos.length === 0 ? (
+                <p className="text-xs text-muted-foreground">ไม่พบโปรโมชันใน ERP สำหรับ SKU นี้</p>
               ) : (
-                <div className="mt-2 space-y-2">
-                  {selected.promotions.map((promo) => (
-                    <div key={promo.id} className="rounded-md bg-muted/40 px-3 py-2 text-sm">
-                      <p className="font-medium">{promo.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {promo.typeName || promo.type} · ราคาโปร ฿{money(promo.promoPrice)}
-                        {promo.remainingGpPct !== null ? ` · GP หลังโปร ${promo.remainingGpPct.toFixed(1)}%` : ''}
-                      </p>
+                <div className="space-y-1.5">
+                  {livePromos.map((step) => (
+                    <div key={step.campaignId} className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate">{step.campaignName}</p>
+                          <p className="text-muted-foreground mt-0.5">
+                            {step.promotionTypeName || step.promotionType || ''}
+                            {step.dateStop ? ` · หมด ${step.dateStop}` : ''}
+                          </p>
+                          <p className="mt-0.5 text-amber-800 dark:text-amber-300">{step.stepText}</p>
+                        </div>
+                        <span className="shrink-0 font-bold text-primary tabular-nums">฿{money(Math.round(step.promoPrice))}</span>
+                      </div>
                     </div>
                   ))}
                 </div>

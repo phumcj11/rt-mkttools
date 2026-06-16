@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { generatePosm, listPosm, deletePosm } from '@/lib/posm-api';
 import type { GeneratePosmResult, PosmProject } from '@/lib/posm-api';
+import { SkuPromoStepSelector } from '@/features/promotions/promo-step-picker';
 
 const POSM_TYPES = [
   { id: 'price_tag',     label: 'ป้ายราคา',             icon: Tag },
@@ -284,6 +285,14 @@ export function PosmView() {
               <CardTitle className="text-base">ข้อมูลสินค้า</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <SkuPromoStepSelector
+                label="ค้น SKU เพื่อดึงราคาโปรจาก ERP (ไม่บังคับ)"
+                onApply={(fill) => {
+                  if (!productName) setProductName(fill.sku);
+                  setPrice(String(Math.round(fill.price)));
+                  setPromotion(fill.stepText);
+                }}
+              />
               <div className="space-y-1.5">
                 <Label>ชื่อสินค้า *</Label>
                 <Input

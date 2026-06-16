@@ -34,6 +34,7 @@ import {
   type PromoType,
   type SpendFreeGiftData,
 } from './promo-templates';
+import { SkuPromoStepSelector, type PromoAutoFill } from '@/features/promotions/promo-step-picker';
 
 // ---------------------------------------------------------------------------
 // Steps
@@ -377,6 +378,30 @@ export function PromoTab({ products }: { products: ErpProduct[] }) {
     setStep('idle');
   };
 
+  const handleErpImport = (fill: PromoAutoFill) => {
+    setPromoData((prev) => {
+      if (promoType === 'spend_free_gift') {
+        const d = prev as SpendFreeGiftData;
+        return {
+          ...d,
+          spendAmount: String(Math.round(fill.minAmount > 0 ? fill.minAmount : fill.price)),
+        };
+      }
+      if (promoType === 'bundle_deal') {
+        const d = prev as BundleDealData;
+        return { ...d, bundlePrice: String(Math.round(fill.price)) };
+      }
+      if (promoType === 'clearance_sale') {
+        const d = prev as ClearanceSaleData;
+        const pct = fill.retailPrice > 0
+          ? Math.round((1 - fill.price / fill.retailPrice) * 100)
+          : 0;
+        return { ...d, discountPercent: String(pct > 0 ? pct : '') };
+      }
+      return prev;
+    });
+  };
+
   const handleGenerate = async () => {
     setResultUrl(null);
     setResultMeta(null);
@@ -499,6 +524,18 @@ export function PromoTab({ products }: { products: ErpProduct[] }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {(promoType === 'spend_free_gift' || promoType === 'bundle_deal' || promoType === 'clearance_sale') && (
+              <SkuPromoStepSelector
+                label={
+                  promoType === 'spend_free_gift'
+                    ? 'SKU → ดึง spendAmount จาก ERP'
+                    : promoType === 'bundle_deal'
+                    ? 'SKU → ดึง bundle price จาก ERP'
+                    : 'SKU → ดึง discount% จาก ERP'
+                }
+                onApply={handleErpImport}
+              />
+            )}
             {promoType === 'spend_free_gift' && (
               <SpendFreeGiftForm data={promoData as SpendFreeGiftData} setData={setPromoData} {...formProps} />
             )}

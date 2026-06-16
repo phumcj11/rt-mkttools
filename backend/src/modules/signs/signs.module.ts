@@ -12,6 +12,7 @@ import {
   ProductPromotionSnapshot,
 } from '../../database/entities';
 import { AiModule } from '../ai/ai.module';
+import { ErpModule } from '../erp/erp.module';
 import { MediaModule } from '../media/media.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SystemSettingsModule } from '../system-settings/system-settings.module';
@@ -25,6 +26,7 @@ import { SignsService } from './signs.service';
       ErpProductCache, ProductPromotionSnapshot,
     ]),
     AiModule,
+    ErpModule,
     MediaModule,
     NotificationsModule,
     SystemSettingsModule,

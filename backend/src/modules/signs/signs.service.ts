@@ -31,6 +31,7 @@ import { getSignFormatByTypeSize, listSignFormats } from './sign-format-catalog'
 import { runImagePipeline } from './sign-image-pipeline';
 import { runCopyPipeline } from './sign-copy-pipeline';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
+import { ErpSyncService } from '../erp/erp-sync.service';
 
 const SIGN_TYPE_LABELS: Record<string, string> = {
   price_tag: 'ป้ายราคา',
@@ -88,6 +89,7 @@ export class SignsService {
     private readonly notifications: NotificationsService,
     private readonly drive: DriveService,
     private readonly settings: SystemSettingsService,
+    private readonly erpSync: ErpSyncService,
   ) {
     fs.mkdirSync(this.uploadDir, { recursive: true });
   }
@@ -1116,13 +1118,33 @@ export class SignsService {
       this.promoCache.findOne({ where: { sku } }),
     ]);
     if (!product) return null;
-    const promotions = (promo?.promotions ?? []).map((p) => ({
+
+    let promotions = (promo?.promotions ?? []).map((p) => ({
       id: p.id,
       name: p.name,
       typeName: p.typeName,
       promoPrice: Number(p.promoPrice ?? 0),
       conditions: p.conditions ?? '',
     }));
+
+    // Fallback: if snapshot has no promotions, attempt a live ERP lookup
+    if (promotions.length === 0) {
+      try {
+        const live = await this.erpSync.getSkuPromotions(sku);
+        if (live.items.length > 0) {
+          promotions = live.items.map((s, idx) => ({
+            id: s.campaignId ?? idx,
+            name: s.campaignName,
+            typeName: s.promotionTypeName ?? undefined,
+            promoPrice: s.promoPrice,
+            conditions: s.stepText,
+          }));
+        }
+      } catch {
+        // Live lookup failure is non-fatal — continue with empty promotions
+      }
+    }
+
     return {
       sku: product.sku,
       name: product.name,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowRight,
@@ -44,6 +44,7 @@ import {
   syncErpCampaigns,
   syncErpProducts,
   syncErpSales,
+  forceSyncSkuPromotion,
   type ErpRangeOpts,
 } from '@/lib/erp-api';
 import type {
@@ -113,7 +114,9 @@ type Tab = 'overview' | 'planner' | 'products' | 'campaigns' | 'sku-lookup';
 
 export function PromotionsView() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('overview');
+  const searchParams = useSearchParams();
+  const initialTab = (searchParams.get('tab') ?? 'overview') as Tab;
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   return (
     <div className="-mx-4 -mt-4 mb-2 flex flex-col gap-0 lg:-mx-6 lg:-mt-6">
@@ -446,6 +449,10 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
   // ERP DB cache status
   const [cacheStatus, setCacheStatus] = useState<ErpCacheStatus | null>(null);
   const [syncing, setSyncing]         = useState(false);
+  const [syncingCampaigns, setSyncingCampaigns] = useState(false);
+
+  // Cached campaigns indexed by SKU for planner badges
+  const [skuCampaignMap, setSkuCampaignMap] = useState<Map<string, ErpCampaignCacheItem[]>>(new Map());
 
   useEffect(() => {
     getErpSyncStatus().then(setCacheStatus).catch(() => {});
@@ -464,6 +471,37 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
     }
   };
 
+  const handleSyncCampaigns = async () => {
+    setSyncingCampaigns(true);
+    try {
+      await syncErpCampaigns();
+      const status = await getErpSyncStatus();
+      setCacheStatus(status);
+      await loadCampaignMap();
+    } catch {
+      // silent
+    } finally {
+      setSyncingCampaigns(false);
+    }
+  };
+
+  const loadCampaignMap = async () => {
+    try {
+      const camps = await getCachedCampaigns(false);
+      const map = new Map<string, ErpCampaignCacheItem[]>();
+      camps.forEach((c) => {
+        (c.products ?? []).forEach((p) => {
+          const existing = map.get(p.sku) ?? [];
+          existing.push(c);
+          map.set(p.sku, existing);
+        });
+      });
+      setSkuCampaignMap(map);
+    } catch {
+      // non-fatal
+    }
+  };
+
   const handleRun = async () => {
     setLoading(true);
     setError(null);
@@ -474,17 +512,20 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
       const from  = new Date(today);
       from.setDate(from.getDate() - (Number(lookback) - 1));
       const fmtD  = (d: Date) => d.toISOString().slice(0, 10);
-      const result = await getErpCampaignCandidates({
-        targetPrice:  priceNum,
-        pieceQty:     qtyNum,
-        minGpPct:     Number(minGpPct)    || 30,
-        campaignName: campaignName || 'Campaign',
-        from: fmtD(from),
-        to:   fmtD(today),
-        abc:  abcFilter || undefined,
-        limit: 80,
-        withAi,
-      });
+      const [result] = await Promise.all([
+        getErpCampaignCandidates({
+          targetPrice:  priceNum,
+          pieceQty:     qtyNum,
+          minGpPct:     Number(minGpPct)    || 30,
+          campaignName: campaignName || 'Campaign',
+          from: fmtD(from),
+          to:   fmtD(today),
+          abc:  abcFilter || undefined,
+          limit: 80,
+          withAi,
+        }),
+        loadCampaignMap(),
+      ]);
       setCandidates(result?.candidates ?? []);
       setSummary(result?.summary ?? null);
       setRan(true);
@@ -518,20 +559,43 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                 ? ` · ล่าสุด ${new Date(cacheStatus.sales.syncedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}`
                 : ' · ยังไม่ได้ sync'}
             </span>
+            {cacheStatus.campaigns !== undefined && (
+              <>
+                <span>·</span>
+                <span className={cacheStatus.campaigns.count > 0 ? 'text-amber-700 dark:text-amber-400 font-medium' : ''}>
+                  Campaigns {cacheStatus.campaigns.count.toLocaleString()} รายการ
+                  {cacheStatus.campaigns.syncedAt
+                    ? ` · ล่าสุด ${new Date(cacheStatus.campaigns.syncedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}`
+                    : ' · ยังไม่ได้ sync'}
+                </span>
+              </>
+            )}
           </>
         ) : (
           <span>กำลังตรวจสอบ…</span>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto h-7 gap-1.5 text-xs"
-          onClick={handleSync}
-          disabled={syncing}
-        >
-          <RefreshCw className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing ? 'กำลัง Sync…' : 'Sync ERP'}
-        </Button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs"
+            onClick={handleSync}
+            disabled={syncing}
+          >
+            <RefreshCw className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Sync…' : 'Sync สินค้า'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400"
+            onClick={handleSyncCampaigns}
+            disabled={syncingCampaigns}
+          >
+            <RefreshCw className={`h-3 w-3 ${syncingCampaigns ? 'animate-spin' : ''}`} />
+            {syncingCampaigns ? 'Sync…' : 'Sync Campaigns'}
+          </Button>
+        </div>
       </div>
 
       {/* Form */}
@@ -817,19 +881,39 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm" variant="outline" className="h-7 px-2 text-xs"
-                              onClick={() => router.push(`/posm?product=${encodeURIComponent(c.name)}&price=${c.minSellPrice || c.retailPrice}&promo=${encodeURIComponent(campaignName)}`)}
-                            >
-                              <FileImage className="mr-1 h-3 w-3" />POSM
-                            </Button>
-                            <Button
-                              size="sm" variant="outline" className="h-7 px-2 text-xs"
-                              onClick={() => router.push(`/content?product=${encodeURIComponent(c.name)}&promo=${encodeURIComponent(campaignName)}`)}
-                            >
-                              <Sparkles className="mr-1 h-3 w-3" />Caption
-                            </Button>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex gap-1 flex-wrap">
+                              <Button
+                                size="sm" variant="outline" className="h-7 px-2 text-xs"
+                                onClick={() => router.push(`/signs?sku=${encodeURIComponent(c.sku)}`)}
+                              >
+                                <ArrowRight className="mr-1 h-3 w-3" />ป้าย
+                              </Button>
+                              <Button
+                                size="sm" variant="outline" className="h-7 px-2 text-xs"
+                                onClick={() => router.push(`/posm?product=${encodeURIComponent(c.name)}&price=${c.minSellPrice || c.retailPrice}&promo=${encodeURIComponent(campaignName)}`)}
+                              >
+                                <FileImage className="mr-1 h-3 w-3" />POSM
+                              </Button>
+                              <Button
+                                size="sm" variant="outline" className="h-7 px-2 text-xs"
+                                onClick={() => router.push(`/content?product=${encodeURIComponent(c.name)}&promo=${encodeURIComponent(campaignName)}`)}
+                              >
+                                <Sparkles className="mr-1 h-3 w-3" />Caption
+                              </Button>
+                            </div>
+                            {(skuCampaignMap.get(c.sku) ?? []).slice(0, 2).map((camp) => (
+                              <button
+                                key={camp.campaignId}
+                                type="button"
+                                onClick={() => router.push(`/signs?sku=${encodeURIComponent(c.sku)}`)}
+                                className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 text-[10px] text-amber-800 dark:text-amber-300 hover:bg-amber-100 transition-colors"
+                                title={`มีโปร ERP: ${camp.name}`}
+                              >
+                                <Tag className="h-2.5 w-2.5" />
+                                {camp.name.slice(0, 20)}{camp.name.length > 20 ? '…' : ''}
+                              </button>
+                            ))}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1269,14 +1353,17 @@ function SkuLookupTab() {
   const [loading, setLoading] = useState(false);
   const [lookup, setLookup] = useState<SkuPromotionLookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [forceSyncing, setForceSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
-  const doLookup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doLookup = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     const q = sku.trim();
     if (!q) return;
     setLoading(true);
     setError(null);
     setLookup(null);
+    setSyncMsg(null);
     try {
       const data = await getSkuPromotionSteps(q);
       setLookup(data);
@@ -1284,6 +1371,22 @@ function SkuLookupTab() {
       setError(err instanceof Error ? err.message : 'ค้นหาไม่สำเร็จ');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const doForceSync = async () => {
+    const q = sku.trim();
+    if (!q) return;
+    setForceSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await forceSyncSkuPromotion(q);
+      setSyncMsg(`Sync สำเร็จ: ${res.synced} โปรโมชัน — กำลังโหลดใหม่...`);
+      await doLookup();
+    } catch (err) {
+      setSyncMsg(`Sync ล้มเหลว: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setForceSyncing(false);
     }
   };
 
@@ -1306,7 +1409,7 @@ function SkuLookupTab() {
       <form onSubmit={(e) => { void doLookup(e); }} className="flex gap-2">
         <input
           className="flex-1 h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-ring font-mono uppercase"
-          placeholder="เช่น 1002565"
+          placeholder="เช่น RT20787 หรือ 1002565"
           value={sku}
           onChange={(e) => setSku(e.target.value.toUpperCase())}
         />
@@ -1314,7 +1417,23 @@ function SkuLookupTab() {
           {loading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Search className="mr-1.5 h-4 w-4" />}
           ค้นหา
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={forceSyncing || !sku.trim()}
+          onClick={() => void doForceSync()}
+          title="บังคับ sync โปรโมชัน SKU นี้จาก ERP แล้วค้นหาใหม่"
+        >
+          {forceSyncing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
+          Force Sync
+        </Button>
       </form>
+
+      {syncMsg && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-primary">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />{syncMsg}
+        </div>
+      )}
 
       {error && (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
