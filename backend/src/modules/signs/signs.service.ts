@@ -476,6 +476,7 @@ export class SignsService {
     const flat = await this.writePngWithBuffer(request, fields, flatFilename, productBuffer);
     const editableFields = {
       ...fields,
+      ...this.erpDraftMeta(request),
       _flatPreviewUrl: flat.url,
       _renderSource: flat.renderSource,
       _gptModel: flat.gptModel,
@@ -507,6 +508,7 @@ export class SignsService {
     const flat = await this.writePng(request, fields, flatFilename);
     const editableFields = {
       ...fields,
+      ...this.erpDraftMeta(request),
       _flatPreviewUrl: flat.url,
       _renderSource: flat.renderSource,
       _gptModel: flat.gptModel,
@@ -797,6 +799,15 @@ export class SignsService {
       title,
       body: `${request.requestNo} • ${request.productName}`,
     }).catch(() => undefined);
+  }
+
+  private erpDraftMeta(request: SignRequest): Record<string, unknown> {
+    if (!request.erpCampaignId) return {};
+    return {
+      _erpCampaignId: request.erpCampaignId,
+      _erpCampaignName: request.erpCampaignName,
+      _erpStepText: request.erpStepText,
+    };
   }
 
   private fieldsFromRequest(request: SignRequest, ai: SignAiResult): Record<string, unknown> {

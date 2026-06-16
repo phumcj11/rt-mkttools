@@ -283,8 +283,44 @@ export class ErpSyncService {
 
     for (const product of products) {
       try {
-        const detail = await this.erp.productDetail(product.sku, this);
-        const promotions = detail.promotions ?? [];
+        let promotions: Array<{
+          id: number;
+          name: string;
+          type: string;
+          typeName?: string;
+          promoPrice: number;
+          retailPrice: number;
+          conditions: string;
+          remainingGpPct: number | null;
+        }> = [];
+
+        if (product.productId > 0) {
+          try {
+            const byProduct = await this.erp.promotionsByProductDetail(product.productId);
+            promotions = byProduct.map((p) => ({
+              id: p.id,
+              name: p.name,
+              type: p.type,
+              typeName: p.typeName,
+              promoPrice: p.promoPrice,
+              retailPrice: p.retailPrice,
+              conditions: p.conditions || this.buildPromoStepText({
+                promoPrice: p.promoPrice,
+                minQty: p.minQty,
+                freeItemQty: p.freeItemQty,
+              }),
+              remainingGpPct: p.remainingGpPct,
+            }));
+          } catch {
+            // fall through to productDetail
+          }
+        }
+
+        if (promotions.length === 0) {
+          const detail = await this.erp.productDetail(product.sku, this);
+          promotions = detail.promotions ?? [];
+        }
+
         const promoPrices = promotions.map((p) => p.promoPrice).filter((v) => v > 0);
         const gpValues = promotions
           .map((p) => p.remainingGpPct)
@@ -314,17 +350,21 @@ export class ErpSyncService {
     products: Awaited<ReturnType<ErpSyncService['syncProducts']>>;
     sales: Awaited<ReturnType<ErpSyncService['syncSalesSummary']>>;
     promotions: Awaited<ReturnType<ErpSyncService['syncPromotionSnapshots']>>;
+    campaigns: Awaited<ReturnType<ErpSyncService['syncCampaigns']>>;
   }> {
     const products = await this.syncProducts(source);
     const sales = await this.syncSalesSummary(90);
-    const promotions = await this.syncPromotionSnapshots(1000);
+    const [promotions, campaigns] = await Promise.all([
+      this.syncPromotionSnapshots(1000),
+      this.syncCampaigns(),
+    ]);
     const latestRun = await this.syncRunRepo.findOne({ order: { id: 'DESC' }, where: {} });
     if (latestRun) {
       latestRun.salesCount = sales.synced;
       latestRun.promotionCount = promotions.synced;
       await this.syncRunRepo.save(latestRun);
     }
-    return { products, sales, promotions };
+    return { products, sales, promotions, campaigns };
   }
 
   /** คืนสถานะ cache ปัจจุบัน */
@@ -332,15 +372,17 @@ export class ErpSyncService {
     products: { count: number; syncedAt: Date | null };
     sales: { count: number; syncedAt: Date | null };
     promotions: { count: number; syncedAt: Date | null };
+    campaigns: { count: number; syncedAt: Date | null };
     latestRun: ProductSyncRun | null;
   }> {
-    const [productCount, salesCount, promotionCount] = await Promise.all([
+    const [productCount, salesCount, promotionCount, campaignCount] = await Promise.all([
       this.productCacheRepo.count(),
       this.salesSummaryRepo.count(),
       this.promotionSnapshotRepo.count(),
+      this.campaignCacheRepo.count(),
     ]);
 
-    const [lastProduct, lastSales, lastPromotion, latestRun] = await Promise.all([
+    const [lastProduct, lastSales, lastPromotion, lastCampaign, latestRun] = await Promise.all([
       productCount > 0
         ? this.productCacheRepo.findOne({ order: { syncedAt: 'DESC' }, where: {} })
         : Promise.resolve(null),
@@ -350,6 +392,9 @@ export class ErpSyncService {
       promotionCount > 0
         ? this.promotionSnapshotRepo.findOne({ order: { syncedAt: 'DESC' }, where: {} })
         : Promise.resolve(null),
+      campaignCount > 0
+        ? this.campaignCacheRepo.findOne({ order: { syncedAt: 'DESC' }, where: {} })
+        : Promise.resolve(null),
       this.syncRunRepo.findOne({ order: { id: 'DESC' }, where: {} }),
     ]);
 
@@ -357,13 +402,28 @@ export class ErpSyncService {
       products: { count: productCount, syncedAt: lastProduct?.syncedAt ?? null },
       sales: { count: salesCount, syncedAt: lastSales?.syncedAt ?? null },
       promotions: { count: promotionCount, syncedAt: lastPromotion?.syncedAt ?? null },
+      campaigns: { count: campaignCount, syncedAt: lastCampaign?.syncedAt ?? null },
       latestRun,
     };
   }
 
   // ─── Campaign Cache ──────────────────────────────────────────────────────
 
-  /** Sync active campaigns from ERP promotions/list + promotions/products */
+  /** Build human-readable step label from ERP promo fields */
+  private buildPromoStepText(p: {
+    promoPrice: number;
+    minQty: number;
+    freeItemQty: number;
+    conditions?: string;
+  }): string {
+    if (p.conditions?.trim()) return p.conditions.trim();
+    if (p.freeItemQty > 0 && p.minQty > 0) return `ซื้อ ${p.minQty} แถม ${p.freeItemQty}`;
+    if (p.minQty > 1) return `${p.minQty} ชิ้น ฿${Math.round(p.promoPrice)}`;
+    if (p.promoPrice > 0) return `ราคาโปร ฿${Math.round(p.promoPrice)}`;
+    return 'โปรพิเศษ';
+  }
+
+  /** Sync active campaigns from ERP promotions/list + detail + products + free_items */
   async syncCampaigns(): Promise<{ synced: number; failed: number }> {
     const campaigns = await this.erp.promotions(500, true);
     let synced = 0;
@@ -371,36 +431,43 @@ export class ErpSyncService {
 
     for (const campaign of campaigns) {
       try {
-        let products: Awaited<ReturnType<ErpService['promotionProducts']>> = [];
-        try {
-          products = await this.erp.promotionProducts(campaign.id);
-        } catch {
-          // products are best-effort
-        }
+        const [detail, freeItems, products] = await Promise.all([
+          this.erp.promotionDetail(campaign.id).catch(() => null),
+          this.erp.promotionFreeItems(campaign.id).catch((): Awaited<ReturnType<ErpService['promotionFreeItems']>> => []),
+          this.erp.promotionProducts(campaign.id).catch((): Awaited<ReturnType<ErpService['promotionProducts']>> => []),
+        ]);
 
         const mapped = products.map((p) => {
-          const gp = p.retailPrice > 0
-            ? Math.round(((p.retailPrice - p.promoPrice) / p.retailPrice) * 100 * 10) / 10
-            : null;
-          let stepText = `ราคาโปร ฿${Math.round(p.promoPrice)}`;
-          if (p.minQty > 1) stepText = `ซื้อ ${p.minQty} ชิ้น ฿${Math.round(p.promoPrice)}`;
-          if (p.freeItemQty > 0) stepText = `ซื้อ ${p.minQty} แถม ${p.freeItemQty}`;
-          return { ...p, gp, stepText };
+          const gp = p.costSales > 0 && p.promoPrice > 0
+            ? Math.round(((p.promoPrice - p.costSales) / p.promoPrice) * 1000) / 10
+            : p.retailPrice > 0
+              ? Math.round(((p.retailPrice - p.promoPrice) / p.retailPrice) * 1000) / 10
+              : null;
+          const freeQty = p.freeItemQty || freeItems.reduce((s, f) => s + f.qty, 0);
+          const stepText = this.buildPromoStepText({
+            promoPrice: p.promoPrice,
+            minQty: p.minQty,
+            freeItemQty: freeQty,
+            conditions: p.conditions || detail?.conditions,
+          });
+          return { ...p, freeItemQty: freeQty, gp, stepText };
         });
 
         await this.campaignCacheRepo.save(this.campaignCacheRepo.create({
           campaignId: campaign.id,
-          code: campaign.code || null,
-          name: campaign.name,
-          promotionType: campaign.type || null,
-          promotionTypeName: campaign.typeName || null,
-          dateStart: campaign.dateStart || null,
-          dateStop: campaign.dateStop || null,
-          retailPrice: campaign.retailPrice.toFixed(2),
-          promoPrice: campaign.promoPrice.toFixed(2),
-          discountPct: campaign.discountPct.toFixed(2),
+          code: detail?.code || campaign.code || null,
+          name: detail?.name || campaign.name,
+          promotionType: detail?.type || campaign.type || null,
+          promotionTypeName: detail?.typeName || campaign.typeName || null,
+          dateStart: detail?.dateStart || campaign.dateStart || null,
+          dateStop: detail?.dateStop || campaign.dateStop || null,
+          retailPrice: (detail?.retailPrice ?? campaign.retailPrice).toFixed(2),
+          promoPrice: (detail?.promoPrice ?? campaign.promoPrice).toFixed(2),
+          discountPct: (detail?.discountPct ?? campaign.discountPct).toFixed(2),
           isActive: true,
           productCount: mapped.length || campaign.productCount,
+          conditions: detail?.conditions || null,
+          freeItems: freeItems.length > 0 ? freeItems : null,
           products: mapped.length > 0 ? mapped : null,
         }));
         synced += 1;

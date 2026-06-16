@@ -518,6 +518,8 @@ export interface ErpSyncResult {
 export interface ErpCacheStatus {
   products: { count: number; syncedAt: string | null };
   sales: { count: number; syncedAt: string | null };
+  promotions?: { count: number; syncedAt: string | null };
+  campaigns?: { count: number; syncedAt: string | null };
 }
 
 export interface ErpProductPromotion {
@@ -566,6 +568,13 @@ export interface ErpCampaignCacheItem {
   discountPct: string;
   isActive: boolean;
   productCount: number;
+  conditions: string | null;
+  freeItems: Array<{
+    sku: string;
+    productId: number;
+    name: string;
+    qty: number;
+  }> | null;
   products: Array<{
     sku: string;
     productId: number;

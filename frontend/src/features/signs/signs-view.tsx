@@ -44,7 +44,6 @@ import {
   type SignRequestDetail,
   type SignRequestStatus,
   type SignRequestSummary,
-  type SignRequestSummaryFull,
   type SignSize,
   type SignTemplateRecord,
   type SignType,
@@ -632,6 +631,9 @@ export function SignsView() {
                           ...prev,
                           price: step.promoPrice,
                           promotion: step.stepText,
+                          headline: prev.headline?.trim()
+                            ? prev.headline
+                            : step.campaignName.slice(0, 36),
                           erpCampaignId: step.campaignId,
                           erpCampaignName: step.campaignName,
                           erpStepText: step.stepText,
@@ -911,6 +913,13 @@ function RequestDetail({
   const matchedTemplateName = typeof detail?.latestDraft?.editableFields?._matchedTemplateName === 'string'
     ? detail.latestDraft.editableFields._matchedTemplateName
     : null;
+  const draftFields = detail?.latestDraft?.editableFields ?? {};
+  const erpCampaignId = detail?.erpCampaignId
+    ?? (typeof draftFields._erpCampaignId === 'number' ? draftFields._erpCampaignId : null);
+  const erpCampaignName = detail?.erpCampaignName
+    ?? (typeof draftFields._erpCampaignName === 'string' ? draftFields._erpCampaignName : null);
+  const erpStepText = detail?.erpStepText
+    ?? (typeof draftFields._erpStepText === 'string' ? draftFields._erpStepText : null);
   const hasFlatPreview = typeof flatPreviewUrl === 'string' && flatPreviewUrl.length > 0;
   const previewSrc = detail?.latestDraft
     ? resolveSignUrl(hasFlatPreview ? flatPreviewUrl : detail.latestDraft.previewUrl)
@@ -962,16 +971,16 @@ function RequestDetail({
             )}
           </div>
           {/* ERP Promotion traceability */}
-          {(detail as SignRequestSummaryFull).erpCampaignId && (
+          {erpCampaignId && (
             <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs">
               <Sparkles className="h-3.5 w-3.5 text-amber-600 shrink-0" />
               <span className="text-amber-800 dark:text-amber-300">
                 <span className="font-semibold">โปร ERP:</span>{' '}
-                {(detail as SignRequestSummaryFull).erpCampaignName}
-                {(detail as SignRequestSummaryFull).erpStepText && (
-                  <> · <span className="font-medium">{(detail as SignRequestSummaryFull).erpStepText}</span></>
+                {erpCampaignName}
+                {erpStepText && (
+                  <> · <span className="font-medium">{erpStepText}</span></>
                 )}
-                <span className="ml-2 text-muted-foreground font-mono">#{(detail as SignRequestSummaryFull).erpCampaignId}</span>
+                <span className="ml-2 text-muted-foreground font-mono">#{erpCampaignId}</span>
               </span>
             </div>
           )}

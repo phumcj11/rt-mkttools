@@ -30,6 +30,9 @@ export interface SignRequestSummary {
   notes: string | null;
   status: SignRequestStatus;
   statusNote: string | null;
+  erpCampaignId?: number | null;
+  erpCampaignName?: string | null;
+  erpStepText?: string | null;
   createdAt: string;
   updatedAt: string;
 }

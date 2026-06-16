@@ -15,7 +15,7 @@ export interface SignCopyResult {
   promotion: string;
   benefits: string[];
   model: string;
-  source: 'user_provided' | 'ai_generated' | 'fallback';
+  source: 'user_provided' | 'ai_generated' | 'fallback' | 'erp_promotion';
 }
 
 export interface CopyAiService {
@@ -101,6 +101,21 @@ export async function runCopyPipeline(
 ): Promise<SignCopyResult> {
   const userBenefits = parseBenefits(request.benefits);
   const fallback = defaultCopy(request, userBenefits);
+
+  // ERP promotion locked — use exact price/step from campaign, skip AI for promo text
+  if (request.erpCampaignId && (request.promotion || request.erpStepText)) {
+    const promoText = request.promotion ?? request.erpStepText ?? '';
+    const headline = request.headline
+      || truncate(request.erpCampaignName ?? promoText, MAX_HEADLINE_CHARS);
+    return {
+      headline,
+      ctaText: request.signType === 'promotion' ? 'SPECIAL PRICE' : 'ราคาพิเศษ',
+      promotion: promoText,
+      benefits: userBenefits.length > 0 ? userBenefits : fallback.benefits,
+      model: 'erp',
+      source: 'erp_promotion',
+    };
+  }
 
   // Skip AI if user already filled both headline and benefits
   if (request.headline && (request.signType !== 'benefit_card' || userBenefits.length > 0)) {

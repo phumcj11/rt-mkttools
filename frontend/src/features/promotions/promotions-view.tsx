@@ -1181,9 +1181,28 @@ function CampaignsTab() {
               </button>
 
               {/* Expanded product list */}
-              {expanded === c.campaignId && c.products && c.products.length > 0 && (
-                <div className="border-t bg-muted/30 px-4 py-3">
-                  <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">สินค้าในแคมเปญ</p>
+              {expanded === c.campaignId && (
+                <div className="border-t bg-muted/30 px-4 py-3 space-y-3">
+                  {c.conditions && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">เงื่อนไข:</span> {c.conditions}
+                    </p>
+                  )}
+                  {c.freeItems && c.freeItems.length > 0 && (
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">ของแถม</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {c.freeItems.map((f) => (
+                          <Badge key={`${f.sku}-${f.qty}`} variant="outline" className="text-xs font-normal">
+                            {f.name || f.sku} ×{f.qty}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {c.products && c.products.length > 0 ? (
+                  <>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">สินค้าในแคมเปญ</p>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -1224,11 +1243,12 @@ function CampaignsTab() {
                       </TableBody>
                     </Table>
                   </div>
-                </div>
-              )}
-              {expanded === c.campaignId && (!c.products || c.products.length === 0) && (
-                <div className="border-t bg-muted/30 px-4 py-3 text-center text-xs text-muted-foreground">
-                  ไม่มีข้อมูลสินค้าใน cache — Sync อีกครั้งเพื่อดึงรายการสินค้า
+                  </>
+                  ) : (
+                    <p className="text-center text-xs text-muted-foreground">
+                      ไม่มีข้อมูลสินค้าใน cache — Sync อีกครั้งเพื่อดึงรายการสินค้า
+                    </p>
+                  )}
                 </div>
               )}
             </Card>

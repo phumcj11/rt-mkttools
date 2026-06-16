@@ -40,6 +40,19 @@ export class ErpCampaignCache {
   @Column({ name: 'product_count', type: 'int', unsigned: true, default: 0 })
   productCount: number;
 
+  /** Campaign-level conditions from promotions/detail */
+  @Column({ type: 'text', nullable: true })
+  conditions: string | null;
+
+  /** Free items from promotions/free_items */
+  @Column({ name: 'free_items', type: 'json', nullable: true })
+  freeItems: Array<{
+    sku: string;
+    productId: number;
+    name: string;
+    qty: number;
+  }> | null;
+
   /** Products in this campaign with individual promo prices and step conditions */
   @Column({ type: 'json', nullable: true })
   products: Array<{
