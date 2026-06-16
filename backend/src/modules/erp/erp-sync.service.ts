@@ -246,7 +246,7 @@ export class ErpSyncService {
     const fromStr = fmt(from);
     const toStr = fmt(to);
 
-    const salesRows = await this.erp.skuBranchSales(fromStr, toStr, { limit: 5000 }, true);
+    const salesRows = await this.fetchAllSkuBranchSales(fromStr, toStr);
     if (salesRows.length === 0) {
       this.logger.warn('syncSalesSummary: ERP returned 0 rows');
       return { synced: 0, from: fromStr, to: toStr };
@@ -839,6 +839,40 @@ export class ErpSyncService {
       all.push(...rows);
       if (rows.length < limit) break;
     }
+    return all;
+  }
+
+  /** Paginate sales/by_sku_branch — single large requests often hit ERP timeout (20s). */
+  private async fetchAllSkuBranchSales(from: string, to: string) {
+    type Row = Awaited<ReturnType<ErpService['skuBranchSales']>>[number];
+    const limit = 300;
+    const all: Row[] = [];
+
+    // Chunk date range into ~30-day windows to keep each ERP call fast
+    const start = new Date(from);
+    const end = new Date(to);
+    const chunks: Array<{ from: string; to: string }> = [];
+    let chunkStart = new Date(start);
+    while (chunkStart <= end) {
+      const chunkEnd = new Date(chunkStart);
+      chunkEnd.setDate(chunkEnd.getDate() + 29);
+      if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+      chunks.push({
+        from: chunkStart.toISOString().slice(0, 10),
+        to: chunkEnd.toISOString().slice(0, 10),
+      });
+      chunkStart = new Date(chunkEnd);
+      chunkStart.setDate(chunkStart.getDate() + 1);
+    }
+
+    for (const chunk of chunks) {
+      for (let page = 1; page <= 50; page += 1) {
+        const rows = await this.erp.skuBranchSales(chunk.from, chunk.to, { page, limit }, true);
+        all.push(...rows);
+        if (rows.length < limit) break;
+      }
+    }
+
     return all;
   }
 

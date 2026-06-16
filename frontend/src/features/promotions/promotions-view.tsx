@@ -59,6 +59,8 @@ import type {
   SkuPromotionStep,
   SkuPromotionLookupResult,
 } from '@/lib/types';
+import { ApiError } from '@/lib/api';
+import { showError, showSuccess } from '@/lib/sweetalert';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -450,6 +452,7 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
   const [cacheStatus, setCacheStatus] = useState<ErpCacheStatus | null>(null);
   const [syncing, setSyncing]         = useState(false);
   const [syncingCampaigns, setSyncingCampaigns] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   // Cached campaigns indexed by SKU for planner badges
   const [skuCampaignMap, setSkuCampaignMap] = useState<Map<string, ErpCampaignCacheItem[]>>(new Map());
@@ -460,12 +463,33 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
 
   const handleSync = async () => {
     setSyncing(true);
+    setSyncMsg(null);
     try {
-      await Promise.all([syncErpProducts(), syncErpSales(90)]);
+      const [products, sales] = await Promise.all([
+        syncErpProducts(),
+        syncErpSales(90),
+      ]);
       const status = await getErpSyncStatus();
       setCacheStatus(status);
-    } catch {
-      // silent
+
+      const parts = [
+        `สินค้า ${products.synced.toLocaleString()} รายการ`,
+        `ยอดขาย ${sales.synced.toLocaleString()} SKU`,
+      ];
+      setSyncMsg(`Sync สำเร็จ: ${parts.join(' · ')} — กด "วิเคราะห์สินค้าเข้าร่วม" เพื่อดูรายการ`);
+
+      if (sales.synced === 0) {
+        showError(
+          'ยอดขายยังว่าง',
+          'Sync สินค้าแล้ว แต่ยอดขาย 0 SKU — Planner จะใช้ข้อมูล GP จากทุนแทนยอดขายจริง',
+        );
+      } else {
+        showSuccess('Sync ERP สำเร็จ', parts.join(' · '));
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Sync ไม่สำเร็จ';
+      setSyncMsg(msg);
+      showError('Sync ไม่สำเร็จ', msg);
     } finally {
       setSyncing(false);
     }
@@ -473,13 +497,18 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
 
   const handleSyncCampaigns = async () => {
     setSyncingCampaigns(true);
+    setSyncMsg(null);
     try {
-      await syncErpCampaigns();
+      const res = await syncErpCampaigns();
       const status = await getErpSyncStatus();
       setCacheStatus(status);
       await loadCampaignMap();
-    } catch {
-      // silent
+      setSyncMsg(`Sync Campaigns สำเร็จ: ${res.synced} รายการ`);
+      showSuccess('Sync Campaigns สำเร็จ', `${res.synced} campaigns`);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Sync Campaigns ไม่สำเร็จ';
+      setSyncMsg(msg);
+      showError('Sync Campaigns ไม่สำเร็จ', msg);
     } finally {
       setSyncingCampaigns(false);
     }
@@ -597,6 +626,28 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
           </Button>
         </div>
       </div>
+
+      {syncMsg && (
+        <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+          syncMsg.includes('ไม่สำเร็จ') || syncMsg.includes('ว่าง')
+            ? 'border-amber-300 bg-amber-50 text-amber-800'
+            : 'border-primary/30 bg-primary/10 text-primary'
+        }`}>
+          {syncMsg.includes('ไม่สำเร็จ') ? (
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+          )}
+          {syncMsg}
+        </div>
+      )}
+
+      {cacheStatus && cacheStatus.sales.count === 0 && !syncMsg && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          ยอดขายยังไม่ได้ sync — กด &quot;Sync สินค้า&quot; แล้วรอ ~1 นาที จากนั้นกด &quot;วิเคราะห์สินค้าเข้าร่วม&quot; (Sync ไม่แสดงรายการสินค้าโดยอัตโนมัติ)
+        </div>
+      )}
 
       {/* Form */}
       <Card>

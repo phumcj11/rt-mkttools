@@ -207,7 +207,7 @@ export class ErpController {
   }
 
   @Post('sync/products')
-  @Roles('super_admin', 'admin')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   syncProducts() {
     return this.sync.syncProducts();
   }
@@ -219,7 +219,7 @@ export class ErpController {
   }
 
   @Post('sync/sales')
-  @Roles('super_admin', 'admin')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   syncSales(@Query('days', new DefaultValuePipe(90), ParseIntPipe) days: number) {
     return this.sync.syncSalesSummary(days);
   }
@@ -231,7 +231,7 @@ export class ErpController {
   }
 
   @Post('sync/campaigns')
-  @Roles('super_admin', 'admin')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   syncCampaigns() {
     return this.sync.syncCampaigns();
   }

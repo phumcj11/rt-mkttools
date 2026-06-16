@@ -227,6 +227,7 @@ export class ErpService {
     const q: Query = { from, to };
     if (params.category) q.category_id = params.category;
     if (params.abc)      q.abc = params.abc;
+    if (params.page)     q.page = params.page;
     q.limit = params.limit ?? 100;
     const d = await this.call<any[]>('sales', 'by_sku_branch', q, force, TTL_SALES);
     return (d ?? []).map((r) => ({
