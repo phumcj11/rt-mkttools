@@ -3,20 +3,26 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotFoundAppException } from '../../common/exceptions/app.exception';
 import { AppException } from '../../common/exceptions/app.exception';
-import { ChannelConfig } from '../../database/entities';
+import { ChannelConfig, ContentAsset, ContentPublishJob } from '../../database/entities';
 import { ContentItem } from '../../database/entities';
 import { ChannelService } from '../inbox/channel.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BlotatoService } from './blotato.service';
 import { defaultChannelForType } from './content-types';
 import { CreateContentDto } from './dto/create-content.dto';
+import { ManusContentService } from './manus-content.service';
 
 @Injectable()
 export class ContentService {
   constructor(
     @InjectRepository(ContentItem) private readonly contentRepo: Repository<ContentItem>,
+    @InjectRepository(ContentAsset) private readonly assetRepo: Repository<ContentAsset>,
+    @InjectRepository(ContentPublishJob) private readonly publishJobRepo: Repository<ContentPublishJob>,
     @InjectRepository(ChannelConfig) private readonly channelRepo: Repository<ChannelConfig>,
     private readonly notifications: NotificationsService,
     private readonly channelService: ChannelService,
+    private readonly manus: ManusContentService,
+    private readonly blotato: BlotatoService,
   ) {}
 
   async findAll(tenantId: number) {
@@ -83,6 +89,103 @@ export class ContentService {
     item.scheduledAt = scheduledAt;
     item.status = 'scheduled';
     return this.contentRepo.save(item);
+  }
+
+  async listAssets(tenantId: number, contentItemId: number) {
+    await this.findOne(tenantId, contentItemId);
+    return this.assetRepo.find({
+      where: { tenantId, contentItemId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async generateManusAsset(
+    tenantId: number,
+    userId: number | null,
+    id: number,
+    dto: { sourceImageUrl?: string; prompt?: string; platform?: string },
+  ) {
+    const item = await this.findOne(tenantId, id);
+    const prompt = this.buildManusPrompt(item, dto.prompt, dto.platform);
+    const asset = await this.assetRepo.save(this.assetRepo.create({
+      tenantId,
+      contentItemId: item.id,
+      sku: item.sku,
+      productName: item.productName,
+      source: 'manus',
+      status: 'generating',
+      sourceImageUrl: dto.sourceImageUrl ?? null,
+      prompt,
+      createdBy: userId,
+    }));
+
+    try {
+      const task = await this.manus.createImageTask({
+        title: `Content visual ${item.sku ?? item.id}`,
+        prompt,
+        sourceImageUrl: dto.sourceImageUrl,
+        sku: item.sku,
+      });
+      asset.manusTaskId = task.taskId;
+      asset.manusTaskUrl = task.taskUrl;
+      return this.assetRepo.save(asset);
+    } catch (err) {
+      asset.status = 'failed';
+      asset.errorMessage = err instanceof Error ? err.message : String(err);
+      await this.assetRepo.save(asset);
+      throw err;
+    }
+  }
+
+  async refreshManusAsset(tenantId: number, contentItemId: number, assetId: number) {
+    await this.findOne(tenantId, contentItemId);
+    const asset = await this.assetRepo.findOne({ where: { id: assetId, tenantId, contentItemId } });
+    if (!asset) throw new NotFoundAppException();
+    if (!asset.manusTaskId) return asset;
+
+    const messages = await this.manus.listTaskMessages(asset.manusTaskId);
+    const imageUrl = this.manus.extractImageUrl(messages);
+    if (imageUrl) {
+      asset.imageUrl = imageUrl;
+      asset.status = 'ready';
+      asset.errorMessage = null;
+      return this.assetRepo.save(asset);
+    }
+    return asset;
+  }
+
+  async updateAssetStatus(
+    tenantId: number,
+    contentItemId: number,
+    assetId: number,
+    status: 'approved' | 'rejected',
+  ) {
+    await this.findOne(tenantId, contentItemId);
+    const asset = await this.assetRepo.findOne({ where: { id: assetId, tenantId, contentItemId } });
+    if (!asset) throw new NotFoundAppException();
+    if (status === 'approved' && !asset.imageUrl) {
+      throw new AppException('content.assetImageMissing', HttpStatus.BAD_REQUEST);
+    }
+    asset.status = status;
+    return this.assetRepo.save(asset);
+  }
+
+  async applyManusWebhook(payload: unknown) {
+    const taskId = this.extractTaskId(payload);
+    if (!taskId) return { ok: false, message: 'missing task id' };
+    const asset = await this.assetRepo.findOne({ where: { manusTaskId: taskId } });
+    if (!asset) return { ok: false, message: 'asset not found' };
+    const imageUrl = this.manus.extractImageUrl(payload);
+    if (imageUrl) {
+      asset.imageUrl = imageUrl;
+      asset.status = 'ready';
+      asset.errorMessage = null;
+    } else {
+      const stopReason = JSON.stringify(payload).includes('"ask"') ? 'Manus task needs user input' : null;
+      if (stopReason) asset.errorMessage = stopReason;
+    }
+    await this.assetRepo.save(asset);
+    return { ok: true, assetId: asset.id };
   }
 
   async publishLine(
@@ -162,8 +265,127 @@ export class ContentService {
     };
   }
 
+  async publishBlotato(
+    tenantId: number,
+    userId: number | null,
+    contentItemId: number,
+    dto: { platform: string; assetId?: number; scheduledAt?: string },
+  ) {
+    const item = await this.findOne(tenantId, contentItemId);
+    const text = item.body?.trim();
+    if (!text) throw new AppException('content.emptyBody', HttpStatus.BAD_REQUEST);
+
+    let asset: ContentAsset | null = null;
+    if (dto.assetId) {
+      asset = await this.assetRepo.findOne({ where: { id: dto.assetId, tenantId, contentItemId } });
+    } else {
+      asset = await this.assetRepo.findOne({
+        where: { tenantId, contentItemId, status: 'approved' },
+        order: { updatedAt: 'DESC' },
+      });
+    }
+    if (!asset || asset.status !== 'approved' || !asset.imageUrl) {
+      throw new AppException('content.approvedAssetRequired', HttpStatus.BAD_REQUEST);
+    }
+
+    const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : item.scheduledAt;
+    const request = {
+      text,
+      mediaUrls: [asset.imageUrl],
+      platform: dto.platform,
+      scheduledAt,
+    };
+    const job = await this.publishJobRepo.save(this.publishJobRepo.create({
+      tenantId,
+      contentItemId,
+      assetId: asset.id,
+      provider: 'blotato',
+      platform: dto.platform,
+      status: 'queued',
+      scheduledAt: scheduledAt ?? null,
+      request: request as unknown as Record<string, unknown>,
+      createdBy: userId,
+    }));
+
+    try {
+      const response = await this.blotato.createPost(request);
+      const submissionId = this.extractBlotatoSubmissionId(response);
+      job.status = 'submitted';
+      job.blotatoSubmissionId = submissionId;
+      job.response = response;
+      item.channel = dto.platform;
+      item.status = scheduledAt ? 'scheduled' : 'published';
+      await Promise.all([this.publishJobRepo.save(job), this.contentRepo.save(item)]);
+      return job;
+    } catch (err) {
+      job.status = 'failed';
+      job.errorMessage = err instanceof Error ? err.message : String(err);
+      await this.publishJobRepo.save(job);
+      throw err;
+    }
+  }
+
+  async refreshPublishJob(tenantId: number, jobId: number) {
+    const job = await this.publishJobRepo.findOne({ where: { id: jobId, tenantId } });
+    if (!job) throw new NotFoundAppException();
+    if (!job.blotatoSubmissionId) return job;
+    const response = await this.blotato.getPostStatus(job.blotatoSubmissionId);
+    job.response = response;
+    const status = String(response.status ?? '').toLowerCase();
+    if (status === 'published') {
+      job.status = 'published';
+      job.publicUrl = typeof response.publicUrl === 'string' ? response.publicUrl : job.publicUrl;
+      const item = await this.contentRepo.findOne({ where: { id: job.contentItemId, tenantId } });
+      if (item) {
+        item.status = 'published';
+        await this.contentRepo.save(item);
+      }
+    } else if (status === 'failed') {
+      job.status = 'failed';
+      job.errorMessage = typeof response.errorMessage === 'string' ? response.errorMessage : 'Blotato publish failed';
+    }
+    return this.publishJobRepo.save(job);
+  }
+
+  async listPublishJobs(tenantId: number, contentItemId: number) {
+    await this.findOne(tenantId, contentItemId);
+    return this.publishJobRepo.find({
+      where: { tenantId, contentItemId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async remove(tenantId: number, id: number): Promise<void> {
     const item = await this.findOne(tenantId, id);
     await this.contentRepo.remove(item);
+  }
+
+  private buildManusPrompt(item: ContentItem, customPrompt?: string, platform = 'facebook'): string {
+    return [
+      `Create a polished marketing image for ${platform}.`,
+      `Product: ${item.productName ?? item.sku ?? 'product'}`,
+      item.sku ? `SKU: ${item.sku}` : '',
+      item.campaignName ? `Campaign / promotion: ${item.campaignName}` : '',
+      item.body ? `Caption context: ${item.body.slice(0, 1200)}` : '',
+      'Use the connected Manus Project brand template and visual rules.',
+      'Keep product packaging accurate. Do not invent claims, discounts, or prices.',
+      'Output one final image suitable for approval before publishing.',
+      customPrompt ? `Additional creative direction: ${customPrompt}` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  private extractTaskId(payload: unknown): string | null {
+    const json = payload as Record<string, unknown>;
+    const task = (json.task_detail ?? json.task ?? json) as Record<string, unknown>;
+    const id = task.task_id ?? task.id ?? json.task_id;
+    return typeof id === 'string' ? id : null;
+  }
+
+  private extractBlotatoSubmissionId(response: Record<string, unknown>): string | null {
+    const direct = response.postSubmissionId ?? response.id ?? response.submissionId;
+    if (typeof direct === 'string') return direct;
+    const post = response.post as Record<string, unknown> | undefined;
+    const nested = post?.postSubmissionId ?? post?.id;
+    return typeof nested === 'string' ? nested : null;
   }
 }

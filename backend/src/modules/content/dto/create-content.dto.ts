@@ -73,3 +73,40 @@ export class PublishLineDto {
   @MaxLength(100)
   lineUserId?: string;
 }
+
+export class GenerateManusAssetDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  sourceImageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  prompt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  platform?: string;
+}
+
+export class UpdateAssetStatusDto {
+  @IsIn(['approved', 'rejected'])
+  status: 'approved' | 'rejected';
+}
+
+export class PublishBlotatoDto {
+  @IsString()
+  @MaxLength(50)
+  platform: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  assetId?: number;
+
+  @IsOptional()
+  @IsISO8601()
+  scheduledAt?: string;
+}

@@ -50,6 +50,32 @@ class UpdateVideoSettingsDto {
   grok_api_key?: string;
 }
 
+class UpdateContentAutomationSettingsDto {
+  @IsOptional()
+  @IsString()
+  manus_api_key?: string;
+
+  @IsOptional()
+  @IsString()
+  manus_project_id?: string;
+
+  @IsOptional()
+  @IsString()
+  manus_webhook_secret?: string;
+
+  @IsOptional()
+  @IsString()
+  blotato_api_key?: string;
+
+  @IsOptional()
+  @IsString()
+  blotato_account_id?: string;
+
+  @IsOptional()
+  @IsString()
+  blotato_facebook_page_id?: string;
+}
+
 @Controller('settings/system')
 export class SystemSettingsController {
   constructor(private readonly svc: SystemSettingsService) {}
@@ -203,6 +229,47 @@ export class SystemSettingsController {
     }
     if (body.n8n_sign_cutout_webhook_url !== undefined) {
       await this.svc.set('n8n_sign_cutout_webhook_url', body.n8n_sign_cutout_webhook_url.trim());
+    }
+    return { ok: true };
+  }
+
+  // ────── Content Factory Automation: Manus + Blotato ──────
+
+  @Get('content-automation')
+  async getContentAutomationSettings() {
+    const manusKey = (await this.svc.get('manus_api_key')) ?? '';
+    const blotatoKey = (await this.svc.get('blotato_api_key')) ?? '';
+    const projectId = (await this.svc.get('manus_project_id')) ?? '';
+    const accountId = (await this.svc.get('blotato_account_id')) ?? '';
+    const facebookPageId = (await this.svc.get('blotato_facebook_page_id')) ?? '';
+    return {
+      manus_configured: manusKey.length > 5 && projectId.length > 0,
+      manus_key_preview: manusKey.length > 5 ? `...${manusKey.slice(-4)}` : null,
+      manus_project_id: projectId,
+      manus_webhook_secret_set: ((await this.svc.get('manus_webhook_secret')) ?? '').length > 0,
+      blotato_configured: blotatoKey.length > 5 && accountId.length > 0,
+      blotato_key_preview: blotatoKey.length > 5 ? `...${blotatoKey.slice(-4)}` : null,
+      blotato_account_id: accountId,
+      blotato_facebook_page_id: facebookPageId,
+    };
+  }
+
+  @Patch('content-automation')
+  @HttpCode(HttpStatus.OK)
+  async updateContentAutomationSettings(@Body() body: UpdateContentAutomationSettingsDto) {
+    const allowed = [
+      'manus_api_key',
+      'manus_project_id',
+      'manus_webhook_secret',
+      'blotato_api_key',
+      'blotato_account_id',
+      'blotato_facebook_page_id',
+    ] as const;
+    for (const key of allowed) {
+      const val = body[key];
+      if (val !== undefined) {
+        await this.svc.set(key, val.trim());
+      }
     }
     return { ok: true };
   }

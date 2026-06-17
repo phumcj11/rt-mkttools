@@ -104,6 +104,37 @@ export interface ContentItem {
   createdAt: string;
 }
 
+export interface ContentAsset {
+  id: number;
+  contentItemId: number | null;
+  sku: string | null;
+  productName: string | null;
+  source: string;
+  status: string;
+  imageUrl: string | null;
+  sourceImageUrl: string | null;
+  prompt: string | null;
+  manusTaskId: string | null;
+  manusTaskUrl: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContentPublishJob {
+  id: number;
+  contentItemId: number;
+  assetId: number | null;
+  provider: string;
+  platform: string;
+  status: string;
+  blotatoSubmissionId: string | null;
+  publicUrl: string | null;
+  scheduledAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
 // ---------- Phase 4: marketing modules ----------
 
 export type ProductStatus = 'active' | 'archived';

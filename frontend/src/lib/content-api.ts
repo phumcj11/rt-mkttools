@@ -1,5 +1,5 @@
 import { apiRequest } from './api';
-import type { ContentItem } from './types';
+import type { ContentAsset, ContentItem, ContentPublishJob } from './types';
 
 export interface SaveContentInput {
   type: string;
@@ -42,6 +42,45 @@ export function publishContentGbp(id: number) {
     `/content/${id}/publish/gbp`,
     { method: 'POST', body: {} },
   );
+}
+
+export function listContentAssets(contentId: number) {
+  return apiRequest<ContentAsset[]>(`/content/${contentId}/assets`);
+}
+
+export function generateManusAsset(contentId: number, body: {
+  sourceImageUrl?: string;
+  prompt?: string;
+  platform?: string;
+}) {
+  return apiRequest<ContentAsset>(`/content/${contentId}/assets/manus`, { method: 'POST', body });
+}
+
+export function refreshManusAsset(contentId: number, assetId: number) {
+  return apiRequest<ContentAsset>(`/content/${contentId}/assets/${assetId}/refresh`, { method: 'POST' });
+}
+
+export function updateContentAssetStatus(contentId: number, assetId: number, status: 'approved' | 'rejected') {
+  return apiRequest<ContentAsset>(`/content/${contentId}/assets/${assetId}/status`, {
+    method: 'PATCH',
+    body: { status },
+  });
+}
+
+export function publishContentBlotato(contentId: number, body: {
+  platform: string;
+  assetId?: number;
+  scheduledAt?: string;
+}) {
+  return apiRequest<ContentPublishJob>(`/content/${contentId}/publish/blotato`, { method: 'POST', body });
+}
+
+export function listContentPublishJobs(contentId: number) {
+  return apiRequest<ContentPublishJob[]>(`/content/${contentId}/publish-jobs`);
+}
+
+export function refreshContentPublishJob(jobId: number) {
+  return apiRequest<ContentPublishJob>(`/content/publish-jobs/${jobId}/refresh`, { method: 'POST' });
 }
 
 export function deleteContent(id: number) {

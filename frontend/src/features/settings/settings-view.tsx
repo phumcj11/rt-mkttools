@@ -47,6 +47,17 @@ interface SystemSettings {
   openai_key_preview: string | null;
 }
 
+interface ContentAutomationSettings {
+  manus_configured: boolean;
+  manus_key_preview: string | null;
+  manus_project_id: string;
+  manus_webhook_secret_set: boolean;
+  blotato_configured: boolean;
+  blotato_key_preview: string | null;
+  blotato_account_id: string;
+  blotato_facebook_page_id: string;
+}
+
 export function SettingsView() {
   const t = useTranslations('settingsPage');
   const tc = useTranslations('common');
@@ -54,6 +65,7 @@ export function SettingsView() {
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
   const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [sysSettings, setSysSettings] = useState<SystemSettings | null>(null);
+  const [automationSettings, setAutomationSettings] = useState<ContentAutomationSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +75,16 @@ export function SettingsView() {
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  // Content automation settings
+  const [manusApiKey, setManusApiKey] = useState('');
+  const [manusProjectId, setManusProjectId] = useState('');
+  const [manusWebhookSecret, setManusWebhookSecret] = useState('');
+  const [blotatoApiKey, setBlotatoApiKey] = useState('');
+  const [blotatoAccountId, setBlotatoAccountId] = useState('');
+  const [blotatoFacebookPageId, setBlotatoFacebookPageId] = useState('');
+  const [automationSaving, setAutomationSaving] = useState(false);
+  const [automationMsg, setAutomationMsg] = useState<string | null>(null);
 
   // Google credentials form
   const [googleConfigured, setGoogleConfigured] = useState(false);
@@ -79,11 +101,12 @@ export function SettingsView() {
       setLoading(true);
       setError(null);
       try {
-        const [tenantData, usageData, sysData, googleData] = await Promise.all([
+        const [tenantData, usageData, sysData, googleData, automationData] = await Promise.all([
           apiRequest<TenantInfo>('/tenants/me'),
           apiRequest<AiUsage>('/ai/usage').catch(() => null),
           apiRequest<SystemSettings>('/settings/system').catch(() => null),
           getGoogleSettings().catch(() => null),
+          apiRequest<ContentAutomationSettings>('/settings/system/content-automation').catch(() => null),
         ]);
         setTenant(tenantData);
         setAiUsage(usageData);
@@ -92,6 +115,12 @@ export function SettingsView() {
         if (googleData) {
           setGoogleConfigured(googleData.google_configured);
           setGoogleRedirectUri(googleData.google_redirect_uri);
+        }
+        if (automationData) {
+          setAutomationSettings(automationData);
+          setManusProjectId(automationData.manus_project_id ?? '');
+          setBlotatoAccountId(automationData.blotato_account_id ?? '');
+          setBlotatoFacebookPageId(automationData.blotato_facebook_page_id ?? '');
         }
       } catch {
         setError('ไม่สามารถโหลดข้อมูลได้');
@@ -118,6 +147,32 @@ export function SettingsView() {
       setSaveMsg('บันทึกไม่สำเร็จ — กรุณาลองใหม่');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveAutomation = async () => {
+    setAutomationSaving(true);
+    setAutomationMsg(null);
+    try {
+      const body: Record<string, string> = {
+        manus_project_id: manusProjectId.trim(),
+        blotato_account_id: blotatoAccountId.trim(),
+        blotato_facebook_page_id: blotatoFacebookPageId.trim(),
+      };
+      if (manusApiKey.trim()) body.manus_api_key = manusApiKey.trim();
+      if (manusWebhookSecret.trim()) body.manus_webhook_secret = manusWebhookSecret.trim();
+      if (blotatoApiKey.trim()) body.blotato_api_key = blotatoApiKey.trim();
+      await apiRequest('/settings/system/content-automation', { method: 'PATCH', body });
+      setAutomationMsg('บันทึก Manus / Blotato สำเร็จ');
+      setManusApiKey('');
+      setManusWebhookSecret('');
+      setBlotatoApiKey('');
+      const updated = await apiRequest<ContentAutomationSettings>('/settings/system/content-automation').catch(() => null);
+      if (updated) setAutomationSettings(updated);
+    } catch {
+      setAutomationMsg('บันทึกไม่สำเร็จ — ตรวจสอบค่าแล้วลองใหม่');
+    } finally {
+      setAutomationSaving(false);
     }
   };
 
@@ -309,6 +364,126 @@ export function SettingsView() {
           <Button onClick={handleSaveAi} disabled={saving} className="gap-2">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             บันทึกการตั้งค่า AI
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Content Factory Automation */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-purple-500" />
+            ตั้งค่า AI Content Factory Automation
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="mb-2 text-sm font-medium">Manus Project</p>
+              <div className="mb-3 flex items-center gap-2 text-sm">
+                {automationSettings?.manus_configured ? (
+                  <span className="flex items-center gap-1 text-green-600">
+                    <CheckCircle2 className="h-4 w-4" />
+                    เชื่อมต่อแล้ว ({automationSettings.manus_key_preview})
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-amber-600">
+                    <XCircle className="h-4 w-4" />
+                    ยังไม่ได้ตั้งค่า
+                  </span>
+                )}
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <Label>Manus API Key</Label>
+                  <Input
+                    type="password"
+                    placeholder={automationSettings?.manus_key_preview ? 'กรอก key ใหม่เพื่อเปลี่ยน' : 'x-manus-api-key'}
+                    value={manusApiKey}
+                    onChange={(e) => setManusApiKey(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+                <div>
+                  <Label>Manus Project ID</Label>
+                  <Input
+                    placeholder="proj_xxxxx"
+                    value={manusProjectId}
+                    onChange={(e) => setManusProjectId(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Webhook Secret (optional)</Label>
+                  <Input
+                    type="password"
+                    placeholder={automationSettings?.manus_webhook_secret_set ? 'ตั้งค่าแล้ว' : 'ใช้สำหรับ verify webhook ภายหลัง'}
+                    value={manusWebhookSecret}
+                    onChange={(e) => setManusWebhookSecret(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="mb-2 text-sm font-medium">Blotato Publish</p>
+              <div className="mb-3 flex items-center gap-2 text-sm">
+                {automationSettings?.blotato_configured ? (
+                  <span className="flex items-center gap-1 text-green-600">
+                    <CheckCircle2 className="h-4 w-4" />
+                    เชื่อมต่อแล้ว ({automationSettings.blotato_key_preview})
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-amber-600">
+                    <XCircle className="h-4 w-4" />
+                    ยังไม่ได้ตั้งค่า
+                  </span>
+                )}
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <Label>Blotato API Key</Label>
+                  <Input
+                    type="password"
+                    placeholder={automationSettings?.blotato_key_preview ? 'กรอก key ใหม่เพื่อเปลี่ยน' : 'blotato-api-key'}
+                    value={blotatoApiKey}
+                    onChange={(e) => setBlotatoApiKey(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+                <div>
+                  <Label>Blotato Account ID</Label>
+                  <Input
+                    placeholder="accountId จาก GET /v2/users/me/accounts"
+                    value={blotatoAccountId}
+                    onChange={(e) => setBlotatoAccountId(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Facebook Page ID (optional)</Label>
+                  <Input
+                    placeholder="pageId สำหรับ Facebook"
+                    value={blotatoFacebookPageId}
+                    onChange={(e) => setBlotatoFacebookPageId(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            ระบบจะส่งรูปสินค้าเข้า Manus Project ด้วย Project ID นี้ แล้วเก็บผลลัพธ์กลับมาให้ approve ก่อนส่งไป Blotato
+          </p>
+
+          {automationMsg && (
+            <p className={`text-sm ${automationMsg.includes('ไม่สำเร็จ') ? 'text-destructive' : 'text-green-600'}`}>
+              {automationMsg}
+            </p>
+          )}
+
+          <Button onClick={handleSaveAutomation} disabled={automationSaving} className="gap-2">
+            {automationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            บันทึก Manus / Blotato
           </Button>
         </CardContent>
       </Card>

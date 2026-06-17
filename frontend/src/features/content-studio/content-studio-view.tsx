@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   Copy,
   Download,
+  ExternalLink,
+  ImageIcon,
   Loader2,
   Save,
   Send,
@@ -31,15 +33,22 @@ import { fetchTemplates, fetchUsage, generateContent, generateContentBatch } fro
 import {
   deleteContent,
   exportContentCsv,
+  generateManusAsset,
   listContent,
+  listContentAssets,
+  listContentPublishJobs,
+  publishContentBlotato,
   publishContentGbp,
   publishContentLine,
+  refreshContentPublishJob,
+  refreshManusAsset,
   saveContent,
   scheduleContent,
+  updateContentAssetStatus,
   updateContentStatus,
 } from '@/lib/content-api';
 import { getProductCatalogDetail } from '@/lib/products-api';
-import type { ContentItem } from '@/lib/types';
+import type { ContentAsset, ContentItem, ContentPublishJob } from '@/lib/types';
 import type {
   ContentTemplate,
   ContentTone,
@@ -105,6 +114,10 @@ export function ContentStudioView() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [copiedLibId, setCopiedLibId] = useState<number | null>(null);
   const [actionId, setActionId] = useState<number | null>(null);
+  const [assetActionId, setAssetActionId] = useState<number | null>(null);
+  const [assetsByContent, setAssetsByContent] = useState<Record<number, ContentAsset[]>>({});
+  const [jobsByContent, setJobsByContent] = useState<Record<number, ContentPublishJob[]>>({});
+  const [publishPlatform, setPublishPlatform] = useState<Record<number, string>>({});
 
   // Batch
   const [batchSkus, setBatchSkus] = useState('');
@@ -275,6 +288,82 @@ export function ContentStudioView() {
       refreshLibrary();
     } catch { /* silent */ }
     finally { setActionId(null); }
+  }
+
+  async function loadAssets(item: ContentItem) {
+    const [assets, jobs] = await Promise.all([
+      listContentAssets(item.id).catch(() => []),
+      listContentPublishJobs(item.id).catch(() => []),
+    ]);
+    setAssetsByContent((prev) => ({ ...prev, [item.id]: assets }));
+    setJobsByContent((prev) => ({ ...prev, [item.id]: jobs }));
+  }
+
+  async function onGenerateManusImage(item: ContentItem) {
+    setAssetActionId(item.id);
+    try {
+      let sourceImageUrl: string | undefined;
+      if (item.sku) {
+        const product = await getProductCatalogDetail(item.sku).catch(() => null);
+        sourceImageUrl = product?.imageUrl || undefined;
+      }
+      await generateManusAsset(item.id, {
+        sourceImageUrl,
+        platform: publishPlatform[item.id] ?? 'facebook',
+        prompt: item.campaignName ? `Use promotion: ${item.campaignName}` : undefined,
+      });
+      await loadAssets(item);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'ส่งงานไป Manus ไม่สำเร็จ');
+    } finally {
+      setAssetActionId(null);
+    }
+  }
+
+  async function onRefreshAsset(item: ContentItem, asset: ContentAsset) {
+    setAssetActionId(asset.id);
+    try {
+      await refreshManusAsset(item.id, asset.id);
+      await loadAssets(item);
+    } catch { /* silent */ }
+    finally { setAssetActionId(null); }
+  }
+
+  async function onAssetStatus(item: ContentItem, asset: ContentAsset, status: 'approved' | 'rejected') {
+    setAssetActionId(asset.id);
+    try {
+      await updateContentAssetStatus(item.id, asset.id, status);
+      await loadAssets(item);
+    } catch { /* silent */ }
+    finally { setAssetActionId(null); }
+  }
+
+  async function onPublishBlotato(item: ContentItem, asset: ContentAsset) {
+    const platform = publishPlatform[item.id] ?? 'facebook';
+    setAssetActionId(asset.id);
+    try {
+      await publishContentBlotato(item.id, {
+        platform,
+        assetId: asset.id,
+        scheduledAt: item.scheduledAt ?? undefined,
+      });
+      await loadAssets(item);
+      refreshLibrary();
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'ส่งไป Blotato ไม่สำเร็จ');
+    } finally {
+      setAssetActionId(null);
+    }
+  }
+
+  async function onRefreshPublishJob(item: ContentItem, job: ContentPublishJob) {
+    setAssetActionId(job.id);
+    try {
+      await refreshContentPublishJob(job.id);
+      await loadAssets(item);
+      refreshLibrary();
+    } catch { /* silent */ }
+    finally { setAssetActionId(null); }
   }
 
   async function onBatchGenerate() {
@@ -663,6 +752,70 @@ export function ContentStudioView() {
                               {new Date(item.scheduledAt).toLocaleString('th-TH')}
                             </p>
                           )}
+                          {(assetsByContent[item.id]?.length ?? 0) > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {assetsByContent[item.id].map((asset) => (
+                                <div key={asset.id} className="w-44 rounded-md border bg-muted/20 p-2">
+                                  {asset.imageUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={asset.imageUrl} alt="Manus asset" className="mb-2 h-24 w-full rounded object-cover" />
+                                  ) : (
+                                    <div className="mb-2 flex h-24 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+                                      {asset.status === 'generating' ? 'กำลังสร้าง...' : 'ยังไม่มีรูป'}
+                                    </div>
+                                  )}
+                                  <div className="mb-2 flex items-center justify-between gap-1">
+                                    <Badge variant={asset.status === 'approved' ? 'default' : 'outline'} className="text-[10px]">
+                                      {asset.status}
+                                    </Badge>
+                                    {asset.manusTaskUrl && (
+                                      <a href={asset.manusTaskUrl} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" disabled={assetActionId === asset.id} onClick={() => void onRefreshAsset(item, asset)}>
+                                      Refresh
+                                    </Button>
+                                    {asset.imageUrl && asset.status !== 'approved' && (
+                                      <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" disabled={assetActionId === asset.id} onClick={() => void onAssetStatus(item, asset, 'approved')}>
+                                        Approve
+                                      </Button>
+                                    )}
+                                    {asset.status !== 'rejected' && (
+                                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" disabled={assetActionId === asset.id} onClick={() => void onAssetStatus(item, asset, 'rejected')}>
+                                        Reject
+                                      </Button>
+                                    )}
+                                    {asset.status === 'approved' && (
+                                      <Button size="sm" variant="default" className="h-6 px-2 text-[10px]" disabled={assetActionId === asset.id} onClick={() => void onPublishBlotato(item, asset)}>
+                                        Blotato
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {(jobsByContent[item.id]?.length ?? 0) > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {jobsByContent[item.id].slice(0, 2).map((job) => (
+                                <div key={job.id} className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                  <Badge variant="outline" className="text-[10px]">{job.platform}</Badge>
+                                  <span>{job.status}</span>
+                                  {job.publicUrl && (
+                                    <a href={job.publicUrl} target="_blank" rel="noreferrer" className="underline">public url</a>
+                                  )}
+                                  {job.blotatoSubmissionId && job.status !== 'published' && (
+                                    <button type="button" className="underline" onClick={() => void onRefreshPublishJob(item, job)}>
+                                      check
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-col gap-1 shrink-0">
                           <div className="flex gap-1">
@@ -683,6 +836,23 @@ export function ContentStudioView() {
                               ตั้งเวลา
                             </Button>
                           )}
+                          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" disabled={assetActionId === item.id} onClick={() => void onGenerateManusImage(item)}>
+                            <ImageIcon className="h-3 w-3 mr-0.5" /> Manus
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={() => void loadAssets(item)}>
+                            โหลดรูป
+                          </Button>
+                          <NativeSelect
+                            className="h-6 text-[10px] px-1"
+                            value={publishPlatform[item.id] ?? 'facebook'}
+                            onChange={(e) => setPublishPlatform((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                          >
+                            <option value="facebook">Facebook</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="tiktok">TikTok</option>
+                            <option value="threads">Threads</option>
+                            <option value="twitter">X/Twitter</option>
+                          </NativeSelect>
                           {item.type === 'line_broadcast' && item.status !== 'published' && (
                             <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" disabled={actionId === item.id} onClick={() => void onPublishLine(item)}>
                               <Send className="h-3 w-3 mr-0.5" /> LINE

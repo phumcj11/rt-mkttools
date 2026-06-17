@@ -7,6 +7,8 @@ export * from './ai-template.entity';
 export * from './ai-request.entity';
 export * from './ai-usage.entity';
 export * from './content-item.entity';
+export * from './content-asset.entity';
+export * from './content-publish-job.entity';
 export * from './category.entity';
 export * from './product.entity';
 export * from './campaign.entity';
