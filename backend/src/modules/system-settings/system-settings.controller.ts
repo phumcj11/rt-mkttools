@@ -242,15 +242,25 @@ export class SystemSettingsController {
     const projectId = (await this.svc.get('manus_project_id')) ?? '';
     const accountId = (await this.svc.get('blotato_account_id')) ?? '';
     const facebookPageId = (await this.svc.get('blotato_facebook_page_id')) ?? '';
+    const missingManus = [
+      !manusKey ? 'Manus API Key' : '',
+      !projectId ? 'Manus Project ID' : '',
+    ].filter(Boolean);
+    const missingBlotato = [
+      !blotatoKey ? 'Blotato API Key' : '',
+      !accountId ? 'Blotato Account ID' : '',
+    ].filter(Boolean);
     return {
       manus_configured: manusKey.length > 5 && projectId.length > 0,
       manus_key_preview: manusKey.length > 5 ? `...${manusKey.slice(-4)}` : null,
       manus_project_id: projectId,
+      manus_missing: missingManus,
       manus_webhook_secret_set: ((await this.svc.get('manus_webhook_secret')) ?? '').length > 0,
       blotato_configured: blotatoKey.length > 5 && accountId.length > 0,
       blotato_key_preview: blotatoKey.length > 5 ? `...${blotatoKey.slice(-4)}` : null,
       blotato_account_id: accountId,
       blotato_facebook_page_id: facebookPageId,
+      blotato_missing: missingBlotato,
     };
   }
 
@@ -272,5 +282,75 @@ export class SystemSettingsController {
       }
     }
     return { ok: true };
+  }
+
+  @Get('content-automation/manus/test')
+  async testManusProject() {
+    const apiKey = ((await this.svc.get('manus_api_key')) ?? '').trim();
+    const projectId = ((await this.svc.get('manus_project_id')) ?? '').trim();
+    if (!apiKey || !projectId) {
+      return { ok: false, message: 'ต้องมี Manus API Key และ Project ID ก่อน' };
+    }
+    const res = await fetch('https://api.manus.ai/v2/project.list', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-manus-api-key': apiKey,
+      },
+      body: JSON.stringify({}),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json?.ok === false) {
+      return {
+        ok: false,
+        message: `Manus API ไม่สำเร็จ (HTTP ${res.status})`,
+        details: json,
+      };
+    }
+    const projects = Array.isArray(json.projects)
+      ? json.projects
+      : Array.isArray(json.data)
+        ? json.data
+        : Array.isArray(json.items)
+          ? json.items
+          : [];
+    const project = projects.find((p: Record<string, unknown>) => p.id === projectId);
+    return {
+      ok: !!project,
+      message: project ? 'พบ Manus Project นี้แล้ว' : 'API key ใช้ได้ แต่ไม่พบ Project ID นี้',
+      project: project ?? null,
+      count: projects.length,
+    };
+  }
+
+  @Get('content-automation/blotato/accounts')
+  async getBlotatoAccounts() {
+    const apiKey = ((await this.svc.get('blotato_api_key')) ?? '').trim();
+    if (!apiKey) {
+      return { ok: false, message: 'ต้องมี Blotato API Key ก่อน', accounts: [] };
+    }
+    const res = await fetch('https://backend.blotato.com/v2/users/me/accounts', {
+      headers: {
+        'Content-Type': 'application/json',
+        'blotato-api-key': apiKey,
+      },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: `Blotato API ไม่สำเร็จ (HTTP ${res.status})`,
+        accounts: [],
+        details: json,
+      };
+    }
+    const accounts = Array.isArray(json.accounts)
+      ? json.accounts
+      : Array.isArray(json.data)
+        ? json.data
+        : Array.isArray(json)
+          ? json
+          : [];
+    return { ok: true, message: `พบ ${accounts.length} accounts`, accounts };
   }
 }

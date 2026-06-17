@@ -51,11 +51,21 @@ interface ContentAutomationSettings {
   manus_configured: boolean;
   manus_key_preview: string | null;
   manus_project_id: string;
+  manus_missing: string[];
   manus_webhook_secret_set: boolean;
   blotato_configured: boolean;
   blotato_key_preview: string | null;
   blotato_account_id: string;
   blotato_facebook_page_id: string;
+  blotato_missing: string[];
+}
+
+interface BlotatoAccount {
+  id?: string;
+  accountId?: string;
+  name?: string;
+  platform?: string;
+  targetType?: string;
 }
 
 export function SettingsView() {
@@ -85,6 +95,9 @@ export function SettingsView() {
   const [blotatoFacebookPageId, setBlotatoFacebookPageId] = useState('');
   const [automationSaving, setAutomationSaving] = useState(false);
   const [automationMsg, setAutomationMsg] = useState<string | null>(null);
+  const [testingManus, setTestingManus] = useState(false);
+  const [fetchingBlotato, setFetchingBlotato] = useState(false);
+  const [blotatoAccounts, setBlotatoAccounts] = useState<BlotatoAccount[]>([]);
 
   // Google credentials form
   const [googleConfigured, setGoogleConfigured] = useState(false);
@@ -173,6 +186,51 @@ export function SettingsView() {
       setAutomationMsg('บันทึกไม่สำเร็จ — ตรวจสอบค่าแล้วลองใหม่');
     } finally {
       setAutomationSaving(false);
+    }
+  };
+
+  const refreshAutomationSettings = async () => {
+    const updated = await apiRequest<ContentAutomationSettings>('/settings/system/content-automation').catch(() => null);
+    if (updated) {
+      setAutomationSettings(updated);
+      setManusProjectId(updated.manus_project_id ?? '');
+      setBlotatoAccountId(updated.blotato_account_id ?? '');
+      setBlotatoFacebookPageId(updated.blotato_facebook_page_id ?? '');
+    }
+    return updated;
+  };
+
+  const handleTestManus = async () => {
+    setTestingManus(true);
+    setAutomationMsg(null);
+    try {
+      await refreshAutomationSettings();
+      const res = await apiRequest<{ ok: boolean; message: string }>('/settings/system/content-automation/manus/test');
+      setAutomationMsg(res.message);
+    } catch {
+      setAutomationMsg('Test Manus ไม่สำเร็จ — ตรวจ API Key / Project ID');
+    } finally {
+      setTestingManus(false);
+    }
+  };
+
+  const handleFetchBlotatoAccounts = async () => {
+    setFetchingBlotato(true);
+    setAutomationMsg(null);
+    try {
+      await refreshAutomationSettings();
+      const res = await apiRequest<{ ok: boolean; message: string; accounts: BlotatoAccount[] }>(
+        '/settings/system/content-automation/blotato/accounts',
+      );
+      setAutomationMsg(res.message);
+      setBlotatoAccounts(res.accounts ?? []);
+      const first = res.accounts?.[0];
+      const firstId = first?.accountId ?? first?.id;
+      if (firstId && !blotatoAccountId) setBlotatoAccountId(firstId);
+    } catch {
+      setAutomationMsg('ดึง Blotato accounts ไม่สำเร็จ — ตรวจ API Key');
+    } finally {
+      setFetchingBlotato(false);
     }
   };
 
@@ -393,6 +451,11 @@ export function SettingsView() {
                   </span>
                 )}
               </div>
+              {!automationSettings?.manus_configured && (
+                <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  ยังขาด: {(automationSettings?.manus_missing ?? ['Manus API Key', 'Manus Project ID']).join(', ')}
+                </div>
+              )}
               <div className="space-y-3">
                 <div>
                   <Label>Manus API Key</Label>
@@ -423,6 +486,17 @@ export function SettingsView() {
                   />
                 </div>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={handleTestManus}
+                disabled={testingManus || automationSaving}
+              >
+                {testingManus ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Test Manus Project
+              </Button>
             </div>
 
             <div className="rounded-lg border bg-muted/30 p-3">
@@ -440,6 +514,11 @@ export function SettingsView() {
                   </span>
                 )}
               </div>
+              {!automationSettings?.blotato_configured && (
+                <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  ยังขาด: {(automationSettings?.blotato_missing ?? ['Blotato API Key', 'Blotato Account ID']).join(', ')}
+                </div>
+              )}
               <div className="space-y-3">
                 <div>
                   <Label>Blotato API Key</Label>
@@ -468,6 +547,38 @@ export function SettingsView() {
                   />
                 </div>
               </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleFetchBlotatoAccounts}
+                  disabled={fetchingBlotato || automationSaving}
+                >
+                  {fetchingBlotato ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Fetch Blotato Accounts
+                </Button>
+              </div>
+              {blotatoAccounts.length > 0 && (
+                <div className="mt-3 space-y-1 rounded-md border bg-background p-2 text-xs">
+                  <p className="font-medium">Accounts ที่พบ:</p>
+                  {blotatoAccounts.slice(0, 5).map((account, idx) => {
+                    const id = account.accountId ?? account.id ?? '';
+                    return (
+                      <button
+                        key={`${id}-${idx}`}
+                        type="button"
+                        className="block w-full rounded px-2 py-1 text-left hover:bg-muted"
+                        onClick={() => setBlotatoAccountId(id)}
+                      >
+                        <span className="font-mono">{id || '-'}</span>
+                        {account.name ? ` · ${account.name}` : ''}
+                        {account.platform || account.targetType ? ` · ${account.platform ?? account.targetType}` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
