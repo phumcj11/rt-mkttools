@@ -95,6 +95,11 @@ export interface ContentItem {
   channel: string | null;
   locale: string;
   status: string;
+  sku: string | null;
+  campaignId: number | null;
+  campaignName: string | null;
+  productName: string | null;
+  scheduledAt: string | null;
   aiRequestId: number | null;
   createdAt: string;
 }

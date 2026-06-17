@@ -978,7 +978,9 @@ function CampaignPlannerTab({ router }: { router: ReturnType<typeof useRouter> }
                               </Button>
                               <Button
                                 size="sm" variant="outline" className="h-7 px-2 text-xs"
-                                onClick={() => router.push(`/content?product=${encodeURIComponent(c.name)}&promo=${encodeURIComponent(campaignName)}`)}
+                                onClick={() => router.push(
+                                  `/content?sku=${encodeURIComponent(c.sku)}&product=${encodeURIComponent(c.name)}&promo=${encodeURIComponent(campaignName)}&price=${c.retailPrice || c.minSellPrice || ''}`,
+                                )}
                               >
                                 <Sparkles className="mr-1 h-3 w-3" />Caption
                               </Button>

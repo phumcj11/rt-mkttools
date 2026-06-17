@@ -8,14 +8,14 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { ContentTone, GenerateContentType } from '../templates';
+import { GENERATE_CONTENT_TYPES } from '../../content/content-types';
+import { ContentTone } from '../templates';
 
-const TYPES: GenerateContentType[] = ['caption', 'post', 'ad', 'line_broadcast'];
 const TONES: ContentTone[] = ['friendly', 'fun', 'professional', 'urgent'];
 
 export class GenerateContentDto {
-  @IsIn(TYPES)
-  type: GenerateContentType;
+  @IsIn(GENERATE_CONTENT_TYPES)
+  type: (typeof GENERATE_CONTENT_TYPES)[number];
 
   @IsString()
   @MinLength(1)
@@ -30,7 +30,7 @@ export class GenerateContentDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(2000)
   details?: string;
 
   @IsOptional()

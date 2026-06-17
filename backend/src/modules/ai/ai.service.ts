@@ -6,6 +6,7 @@ import { AppException } from '../../common/exceptions/app.exception';
 import { AiConfig } from '../../config/configuration';
 import { AiRequest, AiUsage } from '../../database/entities';
 import { GenerateContentDto } from './dto/generate-content.dto';
+import { GenerateBatchDto } from './dto/generate-batch.dto';
 import { OpenAiService } from './openai.service';
 import {
   CONTENT_TEMPLATES,
@@ -117,6 +118,85 @@ export class AiService {
       });
       throw new AppException('ai.generationFailed', HttpStatus.BAD_GATEWAY);
     }
+  }
+
+  async generateBatch(
+    tenantId: number,
+    userId: number | null,
+    dto: GenerateBatchDto,
+  ): Promise<{
+    results: Array<{
+      sku: string | null;
+      productName: string;
+      type: string;
+      ok: boolean;
+      content?: string;
+      aiRequestId?: number;
+      tokens?: { prompt: number; completion: number; total: number };
+      error?: string;
+    }>;
+    succeeded: number;
+    failed: number;
+    totalTokens: number;
+  }> {
+    const results: Array<{
+      sku: string | null;
+      productName: string;
+      type: string;
+      ok: boolean;
+      content?: string;
+      aiRequestId?: number;
+      tokens?: { prompt: number; completion: number; total: number };
+      error?: string;
+    }> = [];
+    let totalTokens = 0;
+
+    for (const product of dto.products) {
+      const promoDetails = [
+        product.details,
+        dto.campaignName ? `Campaign: ${dto.campaignName}` : '',
+        product.campaignName ? `โปร ERP: ${product.campaignName}` : '',
+      ].filter(Boolean).join('\n');
+
+      for (const type of dto.types) {
+        try {
+          const result = await this.generate(tenantId, userId, {
+            type,
+            productName: product.productName,
+            price: product.price,
+            details: promoDetails || undefined,
+            tone: dto.tone,
+            locale: dto.locale,
+          });
+          totalTokens += result.tokens.total;
+          results.push({
+            sku: product.sku ?? null,
+            productName: product.productName,
+            type,
+            ok: true,
+            content: result.content,
+            aiRequestId: result.aiRequestId,
+            tokens: result.tokens,
+          });
+        } catch (err) {
+          results.push({
+            sku: product.sku ?? null,
+            productName: product.productName,
+            type,
+            ok: false,
+            error: err instanceof Error ? err.message : 'generation failed',
+          });
+        }
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+
+    return {
+      results,
+      succeeded: results.filter((r) => r.ok).length,
+      failed: results.filter((r) => !r.ok).length,
+      totalTokens,
+    };
   }
 
   // ---------- helpers (public: shared with chat) ----------

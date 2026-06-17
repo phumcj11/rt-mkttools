@@ -1,11 +1,17 @@
-import { IsIn, IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
-import { ContentType } from '../../../database/entities';
-
-const TYPES: ContentType[] = ['caption', 'post', 'ad', 'line_broadcast', 'blog'];
+import { Type } from 'class-transformer';
+import {
+  IsIn,
+  IsInt,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import { ALL_CONTENT_TYPES } from '../content-types';
 
 export class CreateContentDto {
-  @IsIn(TYPES)
-  type: ContentType;
+  @IsIn(ALL_CONTENT_TYPES as unknown as string[])
+  type: string;
 
   @IsOptional()
   @IsString()
@@ -29,4 +35,41 @@ export class CreateContentDto {
   @IsOptional()
   @IsInt()
   aiRequestId?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  sku?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  campaignId?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  campaignName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  productName?: string;
+}
+
+export class UpdateContentStatusDto {
+  @IsIn(['draft', 'approved', 'scheduled', 'published'])
+  status: 'draft' | 'approved' | 'scheduled' | 'published';
+}
+
+export class ScheduleContentDto {
+  @IsISO8601()
+  scheduledAt: string;
+}
+
+export class PublishLineDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  lineUserId?: string;
 }
