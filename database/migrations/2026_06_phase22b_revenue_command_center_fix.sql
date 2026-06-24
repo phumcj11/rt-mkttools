@@ -1,17 +1,17 @@
--- Phase 22: Revenue Command Center — targets, traffic, customer mix
+-- Phase 22b: Revenue Command Center tables (fix reserved word year_month)
 
 CREATE TABLE IF NOT EXISTS sales_targets (
-  id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  tenant_id         BIGINT UNSIGNED NOT NULL,
+  id                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tenant_id           BIGINT UNSIGNED NOT NULL,
   `year_month`        CHAR(7)         NOT NULL COMMENT 'YYYY-MM',
-  branch_id         INT             NULL COMMENT 'NULL = company-wide',
-  branch_code       VARCHAR(50)     NULL,
-  target_revenue    DECIMAL(16, 2)  NOT NULL DEFAULT 0,
-  target_transactions INT UNSIGNED  NULL,
-  target_avg_ticket DECIMAL(12, 2)  NULL,
-  notes             TEXT            NULL,
-  created_at        DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-  updated_at        DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  branch_id           INT             NULL COMMENT 'NULL = company-wide',
+  branch_code         VARCHAR(50)     NULL,
+  target_revenue      DECIMAL(16, 2)  NOT NULL DEFAULT 0,
+  target_transactions INT UNSIGNED    NULL,
+  target_avg_ticket   DECIMAL(12, 2)  NULL,
+  notes               TEXT            NULL,
+  created_at          DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at          DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (id),
   UNIQUE KEY uq_sales_target (tenant_id, `year_month`, branch_id),
   INDEX idx_sales_target_tenant (tenant_id),
