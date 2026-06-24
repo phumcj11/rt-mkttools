@@ -77,9 +77,14 @@ export class ErpSyncService {
     const fmt = (d: Date) => d.toISOString().slice(0, 10);
     const fromStr = fmt(from);
     const toStr = fmt(to);
+    const synced = await this.syncDateRange(fromStr, toStr);
+    return { synced, from: fromStr, to: toStr };
+  }
 
-    const series = await this.erp.timeseries(fromStr, toStr, 'day');
-    if (series.length === 0) return { synced: 0, from: fromStr, to: toStr };
+  /** ดึง timeseries ช่วงวันที่กำหนด แล้ว upsert ลง erp_sales_daily */
+  async syncDateRange(fromStr: string, toStr: string, force = true): Promise<number> {
+    const series = await this.erp.timeseries(fromStr, toStr, 'day', undefined, force);
+    if (series.length === 0) return 0;
 
     const rows = series.map((p) =>
       this.dailyRepo.create({
@@ -90,7 +95,20 @@ export class ErpSyncService {
     );
     await this.dailyRepo.upsert(rows, ['saleDate']);
     this.logger.log(`Synced ${rows.length} ERP daily rows (${fromStr} → ${toStr})`);
-    return { synced: rows.length, from: fromStr, to: toStr };
+    return rows.length;
+  }
+
+  /** รวมยอดจาก erp_sales_daily ในช่วงวันที่ */
+  async aggregateDailyRange(fromStr: string, toStr: string): Promise<{ revenue: number; orders: number; days: number }> {
+    const rows = await this.dailyRepo
+      .createQueryBuilder('d')
+      .where('d.sale_date >= :from AND d.sale_date <= :to', { from: fromStr, to: toStr })
+      .getMany();
+    return {
+      revenue: rows.reduce((s, r) => s + Number(r.revenue), 0),
+      orders: rows.reduce((s, r) => s + Number(r.orders), 0),
+      days: rows.length,
+    };
   }
 
   /** อ่านประวัติยอดขายรายวันที่เก็บไว้ (ใหม่ → เก่า แล้วกลับลำดับให้เก่า → ใหม่) */

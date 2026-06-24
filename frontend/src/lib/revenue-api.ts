@@ -17,11 +17,12 @@ export interface BranchHealthRow {
   prevAvgTicket: number;
   avgTicketGrowthPct: number;
   yoyRevenue: number;
-  yoyRevenueGrowthPct: number;
+  yoyRevenueGrowthPct: number | null;
   yoyOrders: number;
-  yoyOrdersGrowthPct: number;
+  yoyOrdersGrowthPct: number | null;
   yoyAvgTicket: number;
-  yoyAvgTicketGrowthPct: number;
+  yoyAvgTicketGrowthPct: number | null;
+  yoyReliable: boolean;
   status: BranchHealthStatus;
   concernScore: number;
 }
@@ -67,9 +68,12 @@ export interface CommandCenterData {
     revenueGrowthPct: number;
     ordersGrowthPct: number;
     avgTicketGrowthPct: number;
-    yoyRevenueGrowthPct: number;
-    yoyOrdersGrowthPct: number;
-    yoyAvgTicketGrowthPct: number;
+    yoyRevenueGrowthPct: number | null;
+    yoyOrdersGrowthPct: number | null;
+    yoyAvgTicketGrowthPct: number | null;
+    yoyReliable: boolean;
+    yoyMessage: string;
+    yoySource: 'erp_live' | 'daily_cache';
     targetConfigured: boolean;
     targetRevenue: number | null;
     targetGap: number | null;

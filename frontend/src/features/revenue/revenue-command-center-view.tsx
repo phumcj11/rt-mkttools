@@ -64,7 +64,10 @@ function pctText(value: number): string {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-function GrowthChip({ value }: { value: number }) {
+function GrowthChip({ value }: { value: number | null }) {
+  if (value === null) {
+    return <span className="text-xs text-muted-foreground">ไม่มีข้อมูล</span>;
+  }
   if (value > 0)
     return (
       <span className="inline-flex items-center gap-0.5 text-xs font-medium text-emerald-600">
@@ -89,13 +92,23 @@ function CompareRow({
   pct,
   formatFn = baht,
   labelClass = 'text-muted-foreground',
+  unavailable = false,
 }: {
   label: string;
   prevValue: number;
-  pct: number;
+  pct: number | null;
   formatFn?: (v: number) => string;
   labelClass?: string;
+  unavailable?: boolean;
 }) {
+  if (unavailable || (prevValue <= 0 && pct === null)) {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span className={labelClass}>{label}</span>
+        <span>ไม่มีข้อมูล</span>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-1.5 text-[11px]">
       <span className={labelClass}>{label}</span>
@@ -334,6 +347,17 @@ export function RevenueCommandCenterView() {
         </div>
       </div>
 
+      {/* ── YoY data warning ── */}
+      {(compareMode === 'yoy' || compareMode === 'both') && data && !data.kpi.yoyReliable && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+          <div className="text-sm text-amber-900">
+            <p className="font-medium">ข้อมูลเทียบปีที่แล้วอาจไม่ครบ</p>
+            <p className="mt-0.5 text-xs">{data.kpi.yoyMessage || 'ERP อาจไม่คืนยอดย้อนหลังครบ 1 ปี — ลอง sync ยอดขายรายวันใน ERP หรือใช้ MoM แทน'}</p>
+          </div>
+        </div>
+      )}
+
       {/* ── High-severity alert banner ── */}
       {highDiagnosis.length > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50/60 p-4">
@@ -442,15 +466,25 @@ export function RevenueCommandCenterView() {
                 <CompareRow label="MoM" prevValue={data.kpi.prevPeriod.revenue} pct={data.kpi.revenueGrowthPct} />
               )}
               {(compareMode === 'yoy' || compareMode === 'both') && (
-                <CompareRow label="YoY" prevValue={data.kpi.yoyPeriod.revenue} pct={data.kpi.yoyRevenueGrowthPct} labelClass="text-amber-700" />
+                <CompareRow
+                  label="YoY"
+                  prevValue={data.kpi.yoyPeriod.revenue}
+                  pct={data.kpi.yoyRevenueGrowthPct}
+                  labelClass="text-amber-700"
+                  unavailable={!data.kpi.yoyReliable}
+                />
               )}
             </div>
           }
           icon={TrendingUp}
           accent={
-            (compareMode === 'yoy' ? data.kpi.yoyRevenueGrowthPct : data.kpi.revenueGrowthPct) >= 0
-              ? 'text-emerald-600'
-              : 'text-red-600'
+            compareMode === 'yoy'
+              ? (data.kpi.yoyRevenueGrowthPct ?? 0) >= 0
+                ? 'text-emerald-600'
+                : 'text-red-600'
+              : data.kpi.revenueGrowthPct >= 0
+                ? 'text-emerald-600'
+                : 'text-red-600'
           }
         />
         <KpiCard
@@ -480,7 +514,13 @@ export function RevenueCommandCenterView() {
                 <CompareRow label="MoM" prevValue={data.kpi.prevPeriod.avgTicket} pct={data.kpi.avgTicketGrowthPct} />
               )}
               {(compareMode === 'yoy' || compareMode === 'both') && (
-                <CompareRow label="YoY" prevValue={data.kpi.yoyPeriod.avgTicket} pct={data.kpi.yoyAvgTicketGrowthPct} labelClass="text-amber-700" />
+                <CompareRow
+                  label="YoY"
+                  prevValue={data.kpi.yoyPeriod.avgTicket}
+                  pct={data.kpi.yoyAvgTicketGrowthPct}
+                  labelClass="text-amber-700"
+                  unavailable={!data.kpi.yoyReliable}
+                />
               )}
             </div>
           }
@@ -507,6 +547,7 @@ export function RevenueCommandCenterView() {
                   pct={data.kpi.yoyOrdersGrowthPct}
                   formatFn={(v) => v.toLocaleString('th-TH')}
                   labelClass="text-amber-700"
+                  unavailable={!data.kpi.yoyReliable}
                 />
               )}
             </div>
@@ -562,7 +603,7 @@ export function RevenueCommandCenterView() {
                   {data.branchHealth.worstBranch.shortcode || data.branchHealth.worstBranch.code} — {data.branchHealth.worstBranch.name}
                   <span className="ml-2 font-medium text-red-700">
                     MoM {pctText(data.branchHealth.worstBranch.revenueGrowthPct)}
-                    {compareMode !== 'mom' && (
+                    {compareMode !== 'mom' && data.branchHealth.worstBranch.yoyReliable && data.branchHealth.worstBranch.yoyRevenueGrowthPct !== null && (
                       <span className="ml-1 text-red-600">
                         · YoY {pctText(data.branchHealth.worstBranch.yoyRevenueGrowthPct)}
                       </span>
@@ -613,8 +654,14 @@ export function RevenueCommandCenterView() {
                       )}
                       {(compareMode === 'yoy' || compareMode === 'both') && (
                         <TableCell className="text-right">
-                          <div className="text-[11px] tabular-nums text-amber-700/80">{baht(b.yoyRevenue)}</div>
-                          <GrowthChip value={b.yoyRevenueGrowthPct} />
+                          {b.yoyReliable ? (
+                            <>
+                              <div className="text-[11px] tabular-nums text-amber-700/80">{baht(b.yoyRevenue)}</div>
+                              <GrowthChip value={b.yoyRevenueGrowthPct} />
+                            </>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">ไม่มีข้อมูล</span>
+                          )}
                         </TableCell>
                       )}
                       <TableCell className="text-right tabular-nums">{baht(b.avgTicket)}</TableCell>

@@ -8,7 +8,9 @@ import {
   ErpSalesSummary,
   SalesTarget,
 } from '../../database/entities';
+import { fmtLocalDate } from '../../common/utils/local-date';
 import { ErpService } from '../erp/erp.service';
+import { ErpSyncService } from '../erp/erp-sync.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import {
   branchMatchesActive,
@@ -39,11 +41,12 @@ export interface BranchHealthRow {
   avgTicketGrowthPct: number;
   // YoY
   yoyRevenue: number;
-  yoyRevenueGrowthPct: number;
+  yoyRevenueGrowthPct: number | null;
   yoyOrders: number;
-  yoyOrdersGrowthPct: number;
+  yoyOrdersGrowthPct: number | null;
   yoyAvgTicket: number;
-  yoyAvgTicketGrowthPct: number;
+  yoyAvgTicketGrowthPct: number | null;
+  yoyReliable: boolean;
   status: BranchHealthStatus;
   concernScore: number;
 }
@@ -66,11 +69,56 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const fmt = (d: Date) => d.toISOString().slice(0, 10);
+const fmt = fmtLocalDate;
 
 const pctChange = (current: number, previous: number): number => {
   if (previous <= 0) return current > 0 ? 100 : 0;
   return Math.round(((current - previous) / previous) * 1000) / 10;
+};
+
+const pctChangeOrNull = (current: number, previous: number): number | null => {
+  if (previous <= 0) return null;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+};
+
+/** ERP มักคืนยอดย้อนหลัง 1 ปีไม่ครบ — ตรวจว่า YoY น่าเชื่อถือหรือไม่ */
+const assessYoyReliability = (
+  mtdRevenue: number,
+  yoyRevenue: number,
+  branches: Array<{ revenue: number; yoyRevenue: number }>,
+): { reliable: boolean; message: string } => {
+  if (mtdRevenue <= 0) {
+    return { reliable: false, message: 'ยังไม่มียอด MTD' };
+  }
+  if (yoyRevenue <= 0) {
+    return {
+      reliable: false,
+      message: 'ERP ไม่คืนยอดช่วงปีที่แล้ว — อาจยังไม่มีข้อมูลย้อนหลังครบ 1 ปี',
+    };
+  }
+  const ratio = yoyRevenue / mtdRevenue;
+  if (ratio < 0.25) {
+    return {
+      reliable: false,
+      message: `ยอดปีที่แล้ว (฿${Math.round(yoyRevenue).toLocaleString('th-TH')}) ต่ำผิดปกติเทียบ MTD — ERP อาจส่งข้อมูลไม่ครบ`,
+    };
+  }
+  const activeWithMtd = branches.filter((b) => b.revenue >= 100_000);
+  if (activeWithMtd.length >= 3) {
+    const missingYoy = activeWithMtd.filter((b) => b.yoyRevenue < b.revenue * 0.05).length;
+    if (missingYoy / activeWithMtd.length >= 0.5) {
+      return {
+        reliable: false,
+        message: 'ยอดรายสาขาปีที่แล้วไม่ครบ — แสดงเฉพาะสาขาที่มีข้อมูล',
+      };
+    }
+  }
+  return { reliable: true, message: '' };
+};
+
+const branchYoyReliable = (revenue: number, yoyRevenue: number, globalReliable: boolean): boolean => {
+  if (!globalReliable) return yoyRevenue > 0 && yoyRevenue >= revenue * 0.05;
+  return yoyRevenue > 0 || revenue < 100_000;
 };
 
 const branchStatus = (growthPct: number): BranchHealthStatus => {
@@ -85,6 +133,7 @@ export class RevenueService {
 
   constructor(
     private readonly erp: ErpService,
+    private readonly erpSync: ErpSyncService,
     private readonly settings: SystemSettingsService,
     @InjectRepository(SalesTarget)
     private readonly targetRepo: Repository<SalesTarget>,
@@ -222,12 +271,60 @@ export class RevenueService {
     const revenueGrowthPct = pctChange(mtdRevenue, prevSummary.revenue);
     const ordersGrowthPct = pctChange(mtdSummary.orders, prevSummary.orders);
     const avgTicketGrowthPct = pctChange(mtdSummary.avgTicket, prevSummary.avgTicket);
-    const yoyRevenueGrowthPct = pctChange(mtdRevenue, yoySummary.revenue);
-    const yoyOrdersGrowthPct = pctChange(mtdSummary.orders, yoySummary.orders);
-    const yoyAvgTicketGrowthPct = pctChange(mtdSummary.avgTicket, yoySummary.avgTicket);
 
     const prevBranchMap = new Map(prevBranches.map((b) => [b.id, b]));
     const yoyBranchMap = new Map(yoyBranches.map((b) => [b.id, b]));
+
+    // Resolve YoY company totals — ERP มักคืนยอดย้อนหลังไม่ครบ
+    let yoyPeriodRevenue = yoySummary.revenue;
+    let yoyPeriodOrders = yoySummary.orders;
+    let yoyPeriodAvgTicket = yoySummary.avgTicket;
+    let yoySource: 'erp_live' | 'daily_cache' = 'erp_live';
+
+    const prelimYoyBranches = mtdBranches.map((b) => ({
+      revenue: b.revenue,
+      yoyRevenue: yoyBranchMap.get(b.id)?.revenue ?? 0,
+    }));
+    let yoyAssessment = assessYoyReliability(mtdRevenue, yoyPeriodRevenue, prelimYoyBranches);
+
+    if (!yoyAssessment.reliable) {
+      try {
+        const expectedDays = new Date().getDate();
+        await this.erpSync.syncDateRange(yoy.from, yoy.to, force);
+        const dailyAgg = await this.erpSync.aggregateDailyRange(yoy.from, yoy.to);
+        const coverageOk = dailyAgg.days >= Math.max(3, Math.floor(expectedDays * 0.5));
+        const ratioOk = dailyAgg.revenue >= mtdRevenue * 0.25;
+        if (coverageOk && ratioOk) {
+          yoyPeriodRevenue = dailyAgg.revenue;
+          yoyPeriodOrders = dailyAgg.orders;
+          yoyPeriodAvgTicket = dailyAgg.orders > 0 ? dailyAgg.revenue / dailyAgg.orders : 0;
+          yoySource = 'daily_cache';
+          yoyAssessment = assessYoyReliability(mtdRevenue, yoyPeriodRevenue, prelimYoyBranches);
+          this.logger.log(
+            `YoY company totals from daily cache: ${yoy.from}→${yoy.to} revenue=${Math.round(yoyPeriodRevenue)} (${dailyAgg.days} days)`,
+          );
+        } else {
+          this.logger.warn(
+            `YoY daily cache insufficient: ${dailyAgg.days}/${expectedDays} days, revenue=${Math.round(dailyAgg.revenue)} vs mtd=${Math.round(mtdRevenue)}`,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(`YoY daily backfill failed: ${(err as Error).message}`);
+      }
+    }
+
+    const yoyReliable = yoyAssessment.reliable;
+    const yoyMessage = yoyAssessment.message;
+    const yoyRevenueGrowthPct = yoyReliable
+      ? pctChangeOrNull(mtdRevenue, yoyPeriodRevenue)
+      : null;
+    const yoyOrdersGrowthPct = yoyReliable
+      ? pctChangeOrNull(mtdSummary.orders, yoyPeriodOrders)
+      : null;
+    const yoyAvgTicketGrowthPct = yoyReliable
+      ? pctChangeOrNull(mtdSummary.avgTicket, yoyPeriodAvgTicket)
+      : null;
+
     const branches: BranchHealthRow[] = mtdBranches.map((b) => {
       const prevB = prevBranchMap.get(b.id);
       const prevRev = prevB?.revenue ?? 0;
@@ -240,10 +337,11 @@ export class RevenueService {
       const yoyRev = yoyB?.revenue ?? 0;
       const yoyOrd = yoyB?.orders ?? 0;
       const yoyAvg = yoyB?.avgTicket ?? 0;
+      const branchReliable = yoyReliable && branchYoyReliable(b.revenue, yoyRev, yoyReliable);
       const concernScore =
-        Math.max(0, -revGrowth) * 2 +
-        Math.max(0, -ordGrowth) +
-        Math.max(0, -avgGrowth);
+        Math.max(0, -(revGrowth ?? 0)) * 2 +
+        Math.max(0, -(ordGrowth ?? 0)) +
+        Math.max(0, -(avgGrowth ?? 0));
       return {
         id: b.id,
         code: b.code,
@@ -259,11 +357,12 @@ export class RevenueService {
         prevAvgTicket: prevAvg,
         avgTicketGrowthPct: avgGrowth,
         yoyRevenue: yoyRev,
-        yoyRevenueGrowthPct: pctChange(b.revenue, yoyRev),
+        yoyRevenueGrowthPct: branchReliable ? pctChangeOrNull(b.revenue, yoyRev) : null,
         yoyOrders: yoyOrd,
-        yoyOrdersGrowthPct: pctChange(b.orders, yoyOrd),
+        yoyOrdersGrowthPct: branchReliable ? pctChangeOrNull(b.orders, yoyOrd) : null,
         yoyAvgTicket: yoyAvg,
-        yoyAvgTicketGrowthPct: pctChange(b.avgTicket, yoyAvg),
+        yoyAvgTicketGrowthPct: branchReliable ? pctChangeOrNull(b.avgTicket, yoyAvg) : null,
+        yoyReliable: branchReliable,
         status: branchStatus(revGrowth),
         concernScore,
       };
@@ -337,9 +436,9 @@ export class RevenueService {
           avgTicket: prevSummary.avgTicket,
         },
         yoyPeriod: {
-          revenue: yoySummary.revenue,
-          orders: yoySummary.orders,
-          avgTicket: yoySummary.avgTicket,
+          revenue: yoyPeriodRevenue,
+          orders: yoyPeriodOrders,
+          avgTicket: yoyPeriodAvgTicket,
         },
         revenueGrowthPct,
         ordersGrowthPct,
@@ -347,6 +446,9 @@ export class RevenueService {
         yoyRevenueGrowthPct,
         yoyOrdersGrowthPct,
         yoyAvgTicketGrowthPct,
+        yoyReliable,
+        yoyMessage,
+        yoySource,
         targetConfigured,
         targetRevenue,
         targetGap,
