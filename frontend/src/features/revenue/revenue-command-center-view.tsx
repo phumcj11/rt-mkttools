@@ -82,6 +82,29 @@ function GrowthChip({ value }: { value: number }) {
   return <span className="text-xs text-muted-foreground">—</span>;
 }
 
+/** แสดงตัวเลขเทียบ + % ในบรรทัดเดียว เช่น "MoM ฿4.8M (+9%)" */
+function CompareRow({
+  label,
+  prevValue,
+  pct,
+  formatFn = baht,
+  labelClass = 'text-muted-foreground',
+}: {
+  label: string;
+  prevValue: number;
+  pct: number;
+  formatFn?: (v: number) => string;
+  labelClass?: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 text-[11px]">
+      <span className={labelClass}>{label}</span>
+      <span className="text-muted-foreground">{formatFn(prevValue)}</span>
+      <GrowthChip value={pct} />
+    </div>
+  );
+}
+
 function BranchStatusDot({ status }: { status: BranchHealthRow['status'] }) {
   if (status === 'green')
     return <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" title="โต" />;
@@ -414,18 +437,12 @@ export function RevenueCommandCenterView() {
           label={t('kpi.mtd')}
           value={baht(data.kpi.mtd.revenue)}
           sub={
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 mt-0.5">
               {(compareMode === 'mom' || compareMode === 'both') && (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">MoM</span>
-                  <GrowthChip value={data.kpi.revenueGrowthPct} />
-                </div>
+                <CompareRow label="MoM" prevValue={data.kpi.prevPeriod.revenue} pct={data.kpi.revenueGrowthPct} />
               )}
               {(compareMode === 'yoy' || compareMode === 'both') && (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">YoY</span>
-                  <GrowthChip value={data.kpi.yoyRevenueGrowthPct} />
-                </div>
+                <CompareRow label="YoY" prevValue={data.kpi.yoyPeriod.revenue} pct={data.kpi.yoyRevenueGrowthPct} labelClass="text-amber-700" />
               )}
             </div>
           }
@@ -458,18 +475,12 @@ export function RevenueCommandCenterView() {
           label={t('kpi.avgBill')}
           value={baht(data.kpi.mtd.avgTicket)}
           sub={
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 mt-0.5">
               {(compareMode === 'mom' || compareMode === 'both') && (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">MoM</span>
-                  <GrowthChip value={data.kpi.avgTicketGrowthPct} />
-                </div>
+                <CompareRow label="MoM" prevValue={data.kpi.prevPeriod.avgTicket} pct={data.kpi.avgTicketGrowthPct} />
               )}
               {(compareMode === 'yoy' || compareMode === 'both') && (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">YoY</span>
-                  <GrowthChip value={data.kpi.yoyAvgTicketGrowthPct} />
-                </div>
+                <CompareRow label="YoY" prevValue={data.kpi.yoyPeriod.avgTicket} pct={data.kpi.yoyAvgTicketGrowthPct} labelClass="text-amber-700" />
               )}
             </div>
           }
@@ -480,18 +491,23 @@ export function RevenueCommandCenterView() {
           label={t('kpi.transactions')}
           value={data.kpi.mtd.orders.toLocaleString('th-TH')}
           sub={
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 mt-0.5">
               {(compareMode === 'mom' || compareMode === 'both') && (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">MoM</span>
-                  <GrowthChip value={data.kpi.ordersGrowthPct} />
-                </div>
+                <CompareRow
+                  label="MoM"
+                  prevValue={data.kpi.prevPeriod.orders}
+                  pct={data.kpi.ordersGrowthPct}
+                  formatFn={(v) => v.toLocaleString('th-TH')}
+                />
               )}
               {(compareMode === 'yoy' || compareMode === 'both') && (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">YoY</span>
-                  <GrowthChip value={data.kpi.yoyOrdersGrowthPct} />
-                </div>
+                <CompareRow
+                  label="YoY"
+                  prevValue={data.kpi.yoyPeriod.orders}
+                  pct={data.kpi.yoyOrdersGrowthPct}
+                  formatFn={(v) => v.toLocaleString('th-TH')}
+                  labelClass="text-amber-700"
+                />
               )}
             </div>
           }
@@ -566,12 +582,12 @@ export function RevenueCommandCenterView() {
                     <TableHead className="text-right">{t('branch.revenue')}</TableHead>
                     {(compareMode === 'mom' || compareMode === 'both') && (
                       <TableHead className="text-right text-xs">
-                        <span className="text-muted-foreground">MoM</span>
+                        <span className="text-muted-foreground">เดือนก่อน → %</span>
                       </TableHead>
                     )}
                     {(compareMode === 'yoy' || compareMode === 'both') && (
                       <TableHead className="text-right text-xs">
-                        <span className="text-amber-700">YoY</span>
+                        <span className="text-amber-700">ปีที่แล้ว → %</span>
                       </TableHead>
                     )}
                     <TableHead className="text-right">{t('kpi.avgBill')}</TableHead>
@@ -591,11 +607,13 @@ export function RevenueCommandCenterView() {
                       <TableCell className="text-right tabular-nums">{baht(b.revenue)}</TableCell>
                       {(compareMode === 'mom' || compareMode === 'both') && (
                         <TableCell className="text-right">
+                          <div className="text-[11px] tabular-nums text-muted-foreground">{baht(b.prevRevenue)}</div>
                           <GrowthChip value={b.revenueGrowthPct} />
                         </TableCell>
                       )}
                       {(compareMode === 'yoy' || compareMode === 'both') && (
                         <TableCell className="text-right">
+                          <div className="text-[11px] tabular-nums text-amber-700/80">{baht(b.yoyRevenue)}</div>
                           <GrowthChip value={b.yoyRevenueGrowthPct} />
                         </TableCell>
                       )}
