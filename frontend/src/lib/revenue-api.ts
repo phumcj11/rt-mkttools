@@ -16,6 +16,12 @@ export interface BranchHealthRow {
   avgTicket: number;
   prevAvgTicket: number;
   avgTicketGrowthPct: number;
+  yoyRevenue: number;
+  yoyRevenueGrowthPct: number;
+  yoyOrders: number;
+  yoyOrdersGrowthPct: number;
+  yoyAvgTicket: number;
+  yoyAvgTicketGrowthPct: number;
   status: BranchHealthStatus;
   concernScore: number;
 }
@@ -48,6 +54,8 @@ export interface CommandCenterData {
     mtdTo: string;
     prevFrom: string;
     prevTo: string;
+    yoyFrom: string;
+    yoyTo: string;
     yesterday: string;
   };
   kpi: {
@@ -55,9 +63,13 @@ export interface CommandCenterData {
     yesterday: { revenue: number; orders: number; avgTicket: number };
     mtd: { revenue: number; orders: number; avgTicket: number };
     prevPeriod: { revenue: number; orders: number; avgTicket: number };
+    yoyPeriod: { revenue: number; orders: number; avgTicket: number };
     revenueGrowthPct: number;
     ordersGrowthPct: number;
     avgTicketGrowthPct: number;
+    yoyRevenueGrowthPct: number;
+    yoyOrdersGrowthPct: number;
+    yoyAvgTicketGrowthPct: number;
     targetConfigured: boolean;
     targetRevenue: number | null;
     targetGap: number | null;

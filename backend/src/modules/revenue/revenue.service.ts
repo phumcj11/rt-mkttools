@@ -37,6 +37,13 @@ export interface BranchHealthRow {
   avgTicket: number;
   prevAvgTicket: number;
   avgTicketGrowthPct: number;
+  // YoY
+  yoyRevenue: number;
+  yoyRevenueGrowthPct: number;
+  yoyOrders: number;
+  yoyOrdersGrowthPct: number;
+  yoyAvgTicket: number;
+  yoyAvgTicketGrowthPct: number;
   status: BranchHealthStatus;
   concernScore: number;
 }
@@ -107,6 +114,16 @@ export class RevenueService {
     return { from: fmt(prevMonthStart), to: fmt(prevEnd) };
   }
 
+  private prevYearSamePeriod(): { from: string; to: string } {
+    const today = new Date();
+    const dayOfMonth = today.getDate();
+    const yoyStart = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+    const lastDayYoy = new Date(today.getFullYear() - 1, today.getMonth() + 1, 0).getDate();
+    const endDay = Math.min(dayOfMonth, lastDayYoy);
+    const yoyEnd = new Date(today.getFullYear() - 1, today.getMonth(), endDay);
+    return { from: fmt(yoyStart), to: fmt(yoyEnd) };
+  }
+
   private yesterdayStr(): string {
     const d = new Date();
     d.setDate(d.getDate() - 1);
@@ -134,6 +151,7 @@ export class RevenueService {
     const activeSet = new Set(activeCodes);
     const mtd = this.mtdRange();
     const prev = this.prevMonthSamePeriod();
+    const yoy = this.prevYearSamePeriod();
     const yday = this.yesterdayStr();
     const rangeFrom = from ?? mtd.from;
     const rangeTo = to ?? mtd.to;
@@ -143,8 +161,10 @@ export class RevenueService {
       yesterdaySummary,
       mtdSummary,
       prevSummary,
+      yoySummary,
       mtdBranchesRaw,
       prevBranchesRaw,
+      yoyBranchesRaw,
       erpBranches,
       timeseries,
       topProducts,
@@ -157,8 +177,10 @@ export class RevenueService {
       this.erp.salesSummary(yday, yday, undefined, force),
       this.erp.salesSummary(mtd.from, mtd.to, undefined, force),
       this.erp.salesSummary(prev.from, prev.to, undefined, force),
+      this.erp.salesSummary(yoy.from, yoy.to, undefined, force),
       this.erp.salesByBranch(mtd.from, mtd.to, force),
       this.erp.salesByBranch(prev.from, prev.to, force),
+      this.erp.salesByBranch(yoy.from, yoy.to, force),
       this.erp.branches(force),
       this.erp.timeseries(rangeFrom, rangeTo, 'day', undefined, force),
       this.erp.topProducts(mtd.from, mtd.to, 20, undefined, force),
@@ -180,6 +202,7 @@ export class RevenueService {
 
     const mtdBranches = mtdBranchesRaw.filter((b) => branchMatchesActive(b, activeSet));
     const prevBranches = prevBranchesRaw.filter((b) => branchMatchesActive(b, activeSet));
+    const yoyBranches = yoyBranchesRaw.filter((b) => branchMatchesActive(b, activeSet));
     const activeBranches = erpBranches
       .filter((b) => branchMatchesActive(b, activeSet))
       .map((b) => ({
@@ -199,8 +222,12 @@ export class RevenueService {
     const revenueGrowthPct = pctChange(mtdRevenue, prevSummary.revenue);
     const ordersGrowthPct = pctChange(mtdSummary.orders, prevSummary.orders);
     const avgTicketGrowthPct = pctChange(mtdSummary.avgTicket, prevSummary.avgTicket);
+    const yoyRevenueGrowthPct = pctChange(mtdRevenue, yoySummary.revenue);
+    const yoyOrdersGrowthPct = pctChange(mtdSummary.orders, yoySummary.orders);
+    const yoyAvgTicketGrowthPct = pctChange(mtdSummary.avgTicket, yoySummary.avgTicket);
 
     const prevBranchMap = new Map(prevBranches.map((b) => [b.id, b]));
+    const yoyBranchMap = new Map(yoyBranches.map((b) => [b.id, b]));
     const branches: BranchHealthRow[] = mtdBranches.map((b) => {
       const prevB = prevBranchMap.get(b.id);
       const prevRev = prevB?.revenue ?? 0;
@@ -209,6 +236,10 @@ export class RevenueService {
       const revGrowth = pctChange(b.revenue, prevRev);
       const ordGrowth = pctChange(b.orders, prevOrd);
       const avgGrowth = pctChange(b.avgTicket, prevAvg);
+      const yoyB = yoyBranchMap.get(b.id);
+      const yoyRev = yoyB?.revenue ?? 0;
+      const yoyOrd = yoyB?.orders ?? 0;
+      const yoyAvg = yoyB?.avgTicket ?? 0;
       const concernScore =
         Math.max(0, -revGrowth) * 2 +
         Math.max(0, -ordGrowth) +
@@ -227,6 +258,12 @@ export class RevenueService {
         avgTicket: b.avgTicket,
         prevAvgTicket: prevAvg,
         avgTicketGrowthPct: avgGrowth,
+        yoyRevenue: yoyRev,
+        yoyRevenueGrowthPct: pctChange(b.revenue, yoyRev),
+        yoyOrders: yoyOrd,
+        yoyOrdersGrowthPct: pctChange(b.orders, yoyOrd),
+        yoyAvgTicket: yoyAvg,
+        yoyAvgTicketGrowthPct: pctChange(b.avgTicket, yoyAvg),
         status: branchStatus(revGrowth),
         concernScore,
       };
@@ -275,6 +312,8 @@ export class RevenueService {
         mtdTo: mtd.to,
         prevFrom: prev.from,
         prevTo: prev.to,
+        yoyFrom: yoy.from,
+        yoyTo: yoy.to,
         yesterday: yday,
       },
       kpi: {
@@ -297,9 +336,17 @@ export class RevenueService {
           orders: prevSummary.orders,
           avgTicket: prevSummary.avgTicket,
         },
+        yoyPeriod: {
+          revenue: yoySummary.revenue,
+          orders: yoySummary.orders,
+          avgTicket: yoySummary.avgTicket,
+        },
         revenueGrowthPct,
         ordersGrowthPct,
         avgTicketGrowthPct,
+        yoyRevenueGrowthPct,
+        yoyOrdersGrowthPct,
+        yoyAvgTicketGrowthPct,
         targetConfigured,
         targetRevenue,
         targetGap,
