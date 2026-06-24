@@ -160,6 +160,56 @@ export interface CustomerMixEntryInput {
   pct?: number | null;
 }
 
+export interface CountryAnalyticsData {
+  generatedAt: string;
+  period: { from: string; to: string };
+  selectedCountry: string;
+  dataQuality: {
+    reliable: boolean;
+    countrySource: string | null;
+    receiptLineSource: string | null;
+    missingFields: string[];
+    warnings: string[];
+  };
+  countries: Array<{
+    country: string;
+    orders: number;
+    revenue: number;
+    avgTicket: number;
+    customers: number;
+    revenueSharePct: number;
+  }>;
+  selectedCountrySummary: {
+    country: string;
+    orders: number;
+    revenue: number;
+    avgTicket: number;
+    receiptCount: number;
+  };
+  topProducts: Array<{
+    sku: string;
+    name: string;
+    category: string;
+    qty: number;
+    revenue: number;
+    receiptCount: number;
+  }>;
+  basketPairs: Array<{
+    leftSku: string;
+    leftName: string;
+    rightSku: string;
+    rightName: string;
+    receiptCount: number;
+    supportPct: number;
+    revenue: number;
+  }>;
+  aiSummary: {
+    available: boolean;
+    source: 'openai' | 'heuristic' | 'none';
+    text: string;
+  };
+}
+
 export function getCommandCenter(opts?: { from?: string; to?: string; force?: boolean }) {
   const params = new URLSearchParams();
   if (opts?.from) params.set('from', opts.from);
@@ -167,6 +217,21 @@ export function getCommandCenter(opts?: { from?: string; to?: string; force?: bo
   if (opts?.force) params.set('force', 'true');
   const q = params.toString();
   return apiRequest<CommandCenterData>(`/revenue/command-center${q ? `?${q}` : ''}`);
+}
+
+export function getCountryAnalytics(opts?: {
+  from?: string;
+  to?: string;
+  country?: string;
+  force?: boolean;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.from) params.set('from', opts.from);
+  if (opts?.to) params.set('to', opts.to);
+  if (opts?.country) params.set('country', opts.country);
+  if (opts?.force) params.set('force', 'true');
+  const q = params.toString();
+  return apiRequest<CountryAnalyticsData>(`/revenue/country-analytics${q ? `?${q}` : ''}`);
 }
 
 export function getSalesTargets(yearMonth?: string) {

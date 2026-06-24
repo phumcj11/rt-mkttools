@@ -33,6 +33,17 @@ export class RevenueController {
     return this.revenue.commandCenter(user.tenantId, from, to, isForce(force));
   }
 
+  @Get('country-analytics')
+  countryAnalytics(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('country') country?: string,
+    @Query('force') force?: string,
+  ) {
+    return this.revenue.countryAnalytics(user.tenantId, from, to, country ?? 'Thailand', isForce(force));
+  }
+
   @Get('targets')
   listTargets(
     @CurrentUser() user: AuthUser,

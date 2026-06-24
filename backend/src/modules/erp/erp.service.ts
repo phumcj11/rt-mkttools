@@ -13,9 +13,46 @@ interface ErpEnvelope<T> {
 
 interface CacheEntry<T> { data: T; expiry: number }
 
+export interface ErpProbeResult<T> {
+  supported: boolean;
+  source: string | null;
+  data: T[];
+  missingFields: string[];
+  message: string | null;
+}
+
+export interface ErpCountrySalesRow {
+  country: string;
+  orders: number;
+  revenue: number;
+  avgTicket: number;
+  customers: number;
+}
+
+export interface ErpReceiptLineRow {
+  receiptNo: string;
+  saleDate: string;
+  customerCountry: string;
+  branchId: number;
+  branchCode: string;
+  sku: string;
+  productName: string;
+  category: string;
+  qty: number;
+  revenue: number;
+}
+
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? 0));
   return Number.isFinite(n) ? n : 0;
+};
+
+const str = (...values: unknown[]): string => {
+  for (const v of values) {
+    const s = String(v ?? '').trim();
+    if (s) return s;
+  }
+  return '';
 };
 
 // Default TTLs (ms)
@@ -163,6 +200,133 @@ export class ErpService {
       revenue: num(c.revenue),
       avgTicket: num(c.avg_ticket),
     }));
+  }
+
+  async customerCountrySales(
+    from: string,
+    to: string,
+    limit = 30,
+    force = false,
+  ): Promise<ErpProbeResult<ErpCountrySalesRow>> {
+    const candidates = [
+      ['customers', 'by_country'],
+      ['customers', 'country_summary'],
+      ['customers', 'by_nationality'],
+      ['sales', 'by_country'],
+      ['sales', 'customer_country'],
+      ['sales', 'by_customer_country'],
+    ] as const;
+
+    for (const [resource, action] of candidates) {
+      try {
+        const raw = await this.call<any[]>(resource, action, { from, to, limit }, force, TTL_SALES);
+        const rows = (raw ?? [])
+          .map((r) => {
+            const country = str(
+              r.country,
+              r.country_name,
+              r.customer_country,
+              r.nationality,
+              r.nationality_name,
+              r.nation,
+            );
+            const orders = num(r.orders ?? r.bill_count ?? r.receipts ?? r.transactions);
+            const revenue = num(r.revenue ?? r.amount ?? r.total_amount ?? r.net_sales);
+            return {
+              country,
+              orders,
+              revenue,
+              avgTicket: num(r.avg_ticket ?? (orders > 0 ? revenue / orders : 0)),
+              customers: num(r.customers ?? r.customer_count),
+            };
+          })
+          .filter((r) => r.country && (r.revenue > 0 || r.orders > 0))
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, limit);
+
+        return {
+          supported: true,
+          source: `${resource}/${action}`,
+          data: rows,
+          missingFields: rows.length ? [] : ['country', 'revenue'],
+          message: rows.length ? null : 'ERP endpoint exists but returned no country sales rows',
+        };
+      } catch {
+        // Try the next known ERP endpoint shape.
+      }
+    }
+
+    return {
+      supported: false,
+      source: null,
+      data: [],
+      missingFields: ['customer_country_or_nationality'],
+      message: 'ERP does not expose customer country/nationality aggregation via known endpoints',
+    };
+  }
+
+  async receiptLines(
+    from: string,
+    to: string,
+    params: { country?: string; limit?: number } = {},
+    force = false,
+  ): Promise<ErpProbeResult<ErpReceiptLineRow>> {
+    const limit = params.limit ?? 5000;
+    const q: Query = { from, to, limit };
+    if (params.country) q.country = params.country;
+
+    const candidates = [
+      ['sales', 'receipt_lines'],
+      ['sales', 'invoice_lines'],
+      ['sales', 'basket_lines'],
+      ['sales', 'order_lines'],
+      ['invoices', 'lines'],
+      ['receipts', 'lines'],
+    ] as const;
+
+    for (const [resource, action] of candidates) {
+      try {
+        const raw = await this.call<any[]>(resource, action, q, force, TTL_SALES);
+        const requestedCountry = (params.country ?? '').trim().toLowerCase();
+        const rows = (raw ?? [])
+          .map((r) => ({
+            receiptNo: str(r.receipt_no, r.receipt, r.invoice_no, r.bill_no, r.order_no, r.doc_no, r.document_no),
+            saleDate: str(r.sale_date, r.date, r.d, r.sold_at, r.created_at).slice(0, 10),
+            customerCountry: str(r.customer_country, r.country, r.country_name, r.nationality, r.nationality_name),
+            branchId: num(r.branch_id),
+            branchCode: str(r.branch_code, r.branch_shortcode, r.branch),
+            sku: str(r.sku, r.product_sku, r.product_code, r.item_code),
+            productName: str(r.product_name, r.name, r.item_name),
+            category: str(r.category, r.category_name),
+            qty: num(r.qty ?? r.quantity ?? r.qty_sold),
+            revenue: num(r.revenue ?? r.amount ?? r.total_amount ?? r.net_amount),
+          }))
+          .filter((r) => r.receiptNo && r.sku)
+          .filter((r) => {
+            if (!requestedCountry) return true;
+            return r.customerCountry.trim().toLowerCase() === requestedCountry;
+          })
+          .slice(0, limit);
+
+        return {
+          supported: true,
+          source: `${resource}/${action}`,
+          data: rows,
+          missingFields: rows.length ? [] : ['receipt_no', 'sku'],
+          message: rows.length ? null : 'ERP endpoint exists but returned no receipt line rows',
+        };
+      } catch {
+        // Try the next known ERP endpoint shape.
+      }
+    }
+
+    return {
+      supported: false,
+      source: null,
+      data: [],
+      missingFields: ['receipt_lines'],
+      message: 'ERP does not expose receipt/invoice line items via known endpoints',
+    };
   }
 
   async promotions(limit = 50, force = false) {

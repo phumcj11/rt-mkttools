@@ -7,6 +7,7 @@ import {
   ErpSalesSummary,
   SalesTarget,
 } from '../../database/entities';
+import { AiModule } from '../ai/ai.module';
 import { ErpModule } from '../erp/erp.module';
 import { SystemSettingsModule } from '../system-settings/system-settings.module';
 import { RevenueController } from './revenue.controller';
@@ -14,6 +15,7 @@ import { RevenueService } from './revenue.service';
 
 @Module({
   imports: [
+    AiModule,
     ErpModule,
     SystemSettingsModule,
     TypeOrmModule.forFeature([

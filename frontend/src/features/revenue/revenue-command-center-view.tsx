@@ -9,12 +9,15 @@ import {
   ArrowRight,
   Banknote,
   BarChart2,
+  BrainCircuit,
   Building2,
   CheckCircle2,
   ChevronRight,
   Footprints,
   Gift,
+  Globe2,
   Info,
+  Link2,
   Loader2,
   Package,
   PackageX,
@@ -47,11 +50,13 @@ import {
 import { ApiError } from '@/lib/api';
 import {
   getCommandCenter,
+  getCountryAnalytics,
   upsertCustomerMix,
   upsertSalesTargets,
   upsertTraffic,
   type BranchHealthRow,
   type CommandCenterData,
+  type CountryAnalyticsData,
 } from '@/lib/revenue-api';
 import { showError, showSuccess } from '@/lib/sweetalert';
 
@@ -169,12 +174,50 @@ function KpiCard({ label, value, sub, icon: Icon, accent = 'text-primary', alert
 }
 
 type CompareMode = 'mom' | 'yoy' | 'both';
+type CountryRangePreset = 'mtd' | 'prevMonth' | 'last7' | 'last30' | 'custom';
 
 const COMPARE_OPTIONS: { id: CompareMode; label: string }[] = [
   { id: 'mom', label: 'vs เดือนก่อน' },
   { id: 'yoy', label: 'vs ปีที่แล้ว' },
   { id: 'both', label: 'ทั้งคู่' },
 ];
+
+const COUNTRY_RANGE_OPTIONS: { id: CountryRangePreset; label: string }[] = [
+  { id: 'mtd', label: 'เดือนนี้' },
+  { id: 'prevMonth', label: 'เดือนที่แล้ว' },
+  { id: 'last7', label: '7 วัน' },
+  { id: 'last30', label: '30 วัน' },
+  { id: 'custom', label: 'กำหนดเอง' },
+];
+
+function localDateInput(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function countryRange(preset: CountryRangePreset, customFrom: string, customTo: string) {
+  const today = new Date();
+  if (preset === 'custom') {
+    return { from: customFrom || localDateInput(today), to: customTo || localDateInput(today) };
+  }
+  if (preset === 'prevMonth') {
+    const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const to = new Date(today.getFullYear(), today.getMonth(), 0);
+    return { from: localDateInput(from), to: localDateInput(to) };
+  }
+  if (preset === 'last7' || preset === 'last30') {
+    const days = preset === 'last7' ? 7 : 30;
+    const from = new Date(today);
+    from.setDate(today.getDate() - (days - 1));
+    return { from: localDateInput(from), to: localDateInput(today) };
+  }
+  return {
+    from: localDateInput(new Date(today.getFullYear(), today.getMonth(), 1)),
+    to: localDateInput(today),
+  };
+}
 
 export function RevenueCommandCenterView() {
   const t = useTranslations('revenue');
@@ -194,6 +237,14 @@ export function RevenueCommandCenterView() {
   const [mixDate, setMixDate] = useState('');
   const [mixType, setMixType] = useState('family');
   const [mixCount, setMixCount] = useState('');
+  const [countryData, setCountryData] = useState<CountryAnalyticsData | null>(null);
+  const [countryLoading, setCountryLoading] = useState(false);
+  const [countryError, setCountryError] = useState<string | null>(null);
+  const [countryInput, setCountryInput] = useState('Thailand');
+  const [countryQuery, setCountryQuery] = useState('Thailand');
+  const [countryPreset, setCountryPreset] = useState<CountryRangePreset>('mtd');
+  const [countryFrom, setCountryFrom] = useState('');
+  const [countryTo, setCountryTo] = useState('');
 
   const yearMonth = useMemo(() => {
     const d = new Date();
@@ -216,7 +267,26 @@ export function RevenueCommandCenterView() {
     }
   }, [t]);
 
+  const loadCountryAnalytics = useCallback(async (force = false, countryOverride?: string) => {
+    setCountryLoading(true);
+    setCountryError(null);
+    try {
+      const range = countryRange(countryPreset, countryFrom, countryTo);
+      const res = await getCountryAnalytics({
+        ...range,
+        country: countryOverride || countryQuery || 'Thailand',
+        force,
+      });
+      setCountryData(res);
+    } catch (err) {
+      setCountryError(err instanceof ApiError ? err.message : 'โหลด Country Analytics ไม่สำเร็จ');
+    } finally {
+      setCountryLoading(false);
+    }
+  }, [countryFrom, countryPreset, countryQuery, countryTo]);
+
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadCountryAnalytics(); }, [loadCountryAnalytics]);
 
   const handleSaveTarget = async () => {
     const amount = parseFloat(targetInput.replace(/,/g, ''));
@@ -732,6 +802,222 @@ export function RevenueCommandCenterView() {
             <span>{trendDays[Math.floor(trendDays.length / 2)]?.date.slice(5)}</span>
             <span>{trendDays[trendDays.length - 1]?.date.slice(5)}</span>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Country & Basket Analytics ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Globe2 className="h-4 w-4 text-muted-foreground" />
+                Country & Basket Analytics
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                ดูประเทศลูกค้าที่ทำยอดสูงสุด สินค้าขายดีรายประเทศ และสินค้าที่ซื้อคู่กันในบิลเดียวกัน
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const nextCountry = countryInput || 'Thailand';
+                setCountryQuery(nextCountry);
+                void loadCountryAnalytics(true, nextCountry);
+              }}
+              disabled={countryLoading}
+            >
+              <RefreshCw className={`mr-1.5 h-4 w-4 ${countryLoading ? 'animate-spin' : ''}`} />
+              รีเฟรช
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              className="h-9 w-[180px]"
+              placeholder="Thailand"
+              value={countryInput}
+              onChange={(e) => setCountryInput(e.target.value)}
+              onBlur={() => setCountryQuery(countryInput || 'Thailand')}
+            />
+            <div className="flex overflow-hidden rounded-lg border text-xs font-medium">
+              {COUNTRY_RANGE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setCountryPreset(opt.id)}
+                  className={`px-3 py-1.5 transition-colors ${
+                    countryPreset === opt.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {countryPreset === 'custom' && (
+              <div className="flex items-center gap-2">
+                <Input type="date" className="h-9 w-[150px]" value={countryFrom} onChange={(e) => setCountryFrom(e.target.value)} />
+                <span className="text-xs text-muted-foreground">ถึง</span>
+                <Input type="date" className="h-9 w-[150px]" value={countryTo} onChange={(e) => setCountryTo(e.target.value)} />
+              </div>
+            )}
+            {countryData && (
+              <span className="text-xs text-muted-foreground">
+                {countryData.period.from} → {countryData.period.to}
+              </span>
+            )}
+          </div>
+
+          {countryError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {countryError}
+            </div>
+          )}
+
+          {countryData?.dataQuality.warnings.length ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm text-amber-900">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                <div className="space-y-1">
+                  {countryData.dataQuality.warnings.slice(0, 3).map((w) => (
+                    <p key={w}>{w}</p>
+                  ))}
+                  <p className="text-xs text-amber-800">
+                    Country source: {countryData.dataQuality.countrySource ?? 'ไม่พบ'} · Receipt source:{' '}
+                    {countryData.dataQuality.receiptLineSource ?? 'ไม่พบ'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {countryLoading && !countryData ? (
+            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              กำลังโหลด Country Analytics…
+            </div>
+          ) : countryData ? (
+            <div className="grid gap-5 xl:grid-cols-3">
+              <div className="space-y-4 xl:col-span-1">
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs text-muted-foreground">ประเทศที่เลือก</p>
+                  <p className="mt-1 text-lg font-bold">{countryData.selectedCountrySummary.country}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">ยอดขาย</p>
+                      <p className="font-semibold">{baht(countryData.selectedCountrySummary.revenue)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">บิล</p>
+                      <p className="font-semibold">{countryData.selectedCountrySummary.orders.toLocaleString('th-TH')}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Avg bill</p>
+                      <p className="font-semibold">{baht(countryData.selectedCountrySummary.avgTicket)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Receipt lines</p>
+                      <p className="font-semibold">{countryData.selectedCountrySummary.receiptCount.toLocaleString('th-TH')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <p className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                    <Globe2 className="h-4 w-4 text-muted-foreground" />
+                    ประเทศยอดขายสูงสุด
+                  </p>
+                  <div className="space-y-2">
+                    {countryData.countries.slice(0, 6).map((c, i) => (
+                      <button
+                        key={c.country}
+                        className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-muted"
+                        onClick={() => {
+                          setCountryInput(c.country);
+                          setCountryQuery(c.country);
+                        }}
+                      >
+                        <span className="w-5 text-right text-xs font-semibold text-muted-foreground">{i + 1}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.country}</span>
+                        <span className="text-right text-xs text-muted-foreground">
+                          {baht(c.revenue)} · {c.revenueSharePct}%
+                        </span>
+                      </button>
+                    ))}
+                    {countryData.countries.length === 0 && (
+                      <p className="text-sm text-muted-foreground">ยังไม่มีข้อมูลประเทศจาก ERP ในช่วงนี้</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 xl:col-span-2">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-lg border p-4">
+                    <p className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                      {countryData.selectedCountrySummary.country} ซื้ออะไรเยอะสุด
+                    </p>
+                    <div className="space-y-2">
+                      {countryData.topProducts.slice(0, 8).map((p) => (
+                        <div key={p.sku} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium">{p.name}</div>
+                            <div className="text-[11px] text-muted-foreground">{p.sku} · {p.category || 'ไม่ระบุหมวด'}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold">{baht(p.revenue)}</div>
+                            <div className="text-[11px] text-muted-foreground">{p.qty.toLocaleString('th-TH')} ชิ้น</div>
+                          </div>
+                        </div>
+                      ))}
+                      {countryData.topProducts.length === 0 && (
+                        <p className="text-sm text-muted-foreground">ต้องมี receipt line จาก ERP เพื่อแสดงสินค้ารายประเทศ</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border p-4">
+                    <p className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                      <Link2 className="h-4 w-4 text-muted-foreground" />
+                      มักซื้อคู่กับอะไร
+                    </p>
+                    <div className="space-y-2">
+                      {countryData.basketPairs.slice(0, 8).map((p) => (
+                        <div key={`${p.leftSku}-${p.rightSku}`} className="rounded-md border px-3 py-2">
+                          <div className="text-sm font-medium leading-snug">
+                            {p.leftName} + {p.rightName}
+                          </div>
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            {p.receiptCount.toLocaleString('th-TH')} บิล · support {p.supportPct}% · {baht(p.revenue)}
+                          </div>
+                        </div>
+                      ))}
+                      {countryData.basketPairs.length === 0 && (
+                        <p className="text-sm text-muted-foreground">ต้องมีรายการสินค้าในบิลเดียวกันเพื่อวิเคราะห์ basket pair</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                    <BrainCircuit className="h-4 w-4 text-muted-foreground" />
+                    AI Insight จากตัวเลขที่คำนวณแล้ว
+                    <Badge variant="outline" className="ml-auto text-[10px]">
+                      {countryData.aiSummary.source}
+                    </Badge>
+                  </p>
+                  <div className="whitespace-pre-line text-sm text-muted-foreground">
+                    {countryData.aiSummary.text || 'ยังไม่มีข้อมูลเพียงพอสำหรับสรุป insight'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
