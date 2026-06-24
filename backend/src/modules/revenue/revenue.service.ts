@@ -9,6 +9,12 @@ import {
   SalesTarget,
 } from '../../database/entities';
 import { ErpService } from '../erp/erp.service';
+import { SystemSettingsService } from '../system-settings/system-settings.service';
+import {
+  branchMatchesActive,
+  parseBranchCodes,
+  REVENUE_ACTIVE_BRANCH_CODES_KEY,
+} from './revenue-active-branches';
 import {
   BulkUpsertCustomerMixDto,
   BulkUpsertTargetsDto,
@@ -72,6 +78,7 @@ export class RevenueService {
 
   constructor(
     private readonly erp: ErpService,
+    private readonly settings: SystemSettingsService,
     @InjectRepository(SalesTarget)
     private readonly targetRepo: Repository<SalesTarget>,
     @InjectRepository(BranchTrafficDaily)
@@ -111,7 +118,20 @@ export class RevenueService {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
 
+  async getActiveBranchCodes(): Promise<string[]> {
+    const raw = await this.settings.get(REVENUE_ACTIVE_BRANCH_CODES_KEY);
+    return parseBranchCodes(raw);
+  }
+
+  async setActiveBranchCodes(codes: string[]): Promise<string[]> {
+    const normalized = [...new Set(codes.map((c) => c.trim().toUpperCase()).filter(Boolean))];
+    await this.settings.set(REVENUE_ACTIVE_BRANCH_CODES_KEY, normalized.join(','));
+    return normalized;
+  }
+
   async commandCenter(tenantId: number, from?: string, to?: string, force = false) {
+    const activeCodes = await this.getActiveBranchCodes();
+    const activeSet = new Set(activeCodes);
     const mtd = this.mtdRange();
     const prev = this.prevMonthSamePeriod();
     const yday = this.yesterdayStr();
@@ -123,8 +143,9 @@ export class RevenueService {
       yesterdaySummary,
       mtdSummary,
       prevSummary,
-      mtdBranches,
-      prevBranches,
+      mtdBranchesRaw,
+      prevBranchesRaw,
+      erpBranches,
       timeseries,
       topProducts,
       categories,
@@ -138,6 +159,7 @@ export class RevenueService {
       this.erp.salesSummary(prev.from, prev.to, undefined, force),
       this.erp.salesByBranch(mtd.from, mtd.to, force),
       this.erp.salesByBranch(prev.from, prev.to, force),
+      this.erp.branches(force),
       this.erp.timeseries(rangeFrom, rangeTo, 'day', undefined, force),
       this.erp.topProducts(mtd.from, mtd.to, 20, undefined, force),
       this.erp.categoryPerformance(mtd.from, mtd.to, force),
@@ -155,6 +177,18 @@ export class RevenueService {
         take: 500,
       }),
     ]);
+
+    const mtdBranches = mtdBranchesRaw.filter((b) => branchMatchesActive(b, activeSet));
+    const prevBranches = prevBranchesRaw.filter((b) => branchMatchesActive(b, activeSet));
+    const activeBranches = erpBranches
+      .filter((b) => branchMatchesActive(b, activeSet))
+      .map((b) => ({
+        id: b.id,
+        code: b.code,
+        shortcode: b.shortcode,
+        name: b.name,
+      }))
+      .sort((a, b) => a.shortcode.localeCompare(b.shortcode));
 
     const targetConfigured = !!companyTarget;
     const targetRevenue = companyTarget ? num(companyTarget.targetRevenue) : null;
@@ -305,6 +339,8 @@ export class RevenueService {
           'ต้องมีข้อมูลรายบิลจาก ERP (bucket เช่น 800-898, 900-998) — ยังไม่เชื่อม endpoint',
         buckets: [] as Array<{ label: string; count: number }>,
       },
+      activeBranchCodes: activeCodes,
+      activeBranches,
     };
   }
 

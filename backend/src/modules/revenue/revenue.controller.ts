@@ -13,6 +13,7 @@ import {
   BulkUpsertCustomerMixDto,
   BulkUpsertTargetsDto,
   BulkUpsertTrafficDto,
+  UpdateActiveBranchesDto,
 } from './dto/revenue.dto';
 import { RevenueService } from './revenue.service';
 
@@ -78,5 +79,16 @@ export class RevenueController {
   @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff')
   upsertCustomerMix(@CurrentUser() user: AuthUser, @Body() dto: BulkUpsertCustomerMixDto) {
     return this.revenue.upsertCustomerMix(user.tenantId, dto);
+  }
+
+  @Get('active-branches')
+  getActiveBranches() {
+    return this.revenue.getActiveBranchCodes();
+  }
+
+  @Patch('active-branches')
+  @Roles('super_admin', 'admin', 'marketing_manager')
+  updateActiveBranches(@Body() dto: UpdateActiveBranchesDto) {
+    return this.revenue.setActiveBranchCodes(dto.codes);
   }
 }

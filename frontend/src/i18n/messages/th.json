@@ -414,6 +414,9 @@
   "revenue": {
     "title": "Revenue Command Center",
     "subtitle": "วิเคราะห์ยอดขาย วางเกม Offline + Online และส่งต่อทำแคมเปญ",
+    "activeBranches": {
+      "count": "สาขาที่เปิดอยู่ {count} แห่ง"
+    },
     "unavailable": "ไม่สามารถโหลดข้อมูลได้",
     "retry": "ลองใหม่",
     "refresh": "รีเฟรช",
@@ -480,6 +483,7 @@
       "traffic": "Foot Traffic (manual)",
       "customerMix": "Customer Mix (manual)",
       "branchId": "Branch ID (ERP)",
+      "selectBranch": "เลือกสาขา",
       "footTraffic": "Foot traffic",
       "transactions": "Transactions (optional)",
       "customerType": "ประเภทลูกค้า (family, solo, tourist...)",

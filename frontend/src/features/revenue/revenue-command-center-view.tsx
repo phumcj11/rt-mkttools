@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -187,6 +188,13 @@ export function RevenueCommandCenterView() {
 
   if (!data) return null;
 
+  const branchOptions = data.activeBranches.length > 0 ? data.activeBranches : data.branchHealth.branches.map((b) => ({
+    id: b.id,
+    code: b.code,
+    shortcode: b.shortcode,
+    name: b.name,
+  }));
+
   const maxTrend = Math.max(1, ...data.timeseries.map((p) => p.revenue));
 
   return (
@@ -195,6 +203,12 @@ export function RevenueCommandCenterView() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
           <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
+          {data?.activeBranchCodes && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('activeBranches.count', { count: data.activeBranchCodes.length })}:{' '}
+              {data.activeBranchCodes.join(', ')}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => void load(true)} disabled={loading}>
@@ -228,7 +242,14 @@ export function RevenueCommandCenterView() {
             </div>
             <div className="space-y-3">
               <Label>{t('setup.traffic')}</Label>
-              <Input placeholder={t('setup.branchId')} value={trafficBranchId} onChange={(e) => setTrafficBranchId(e.target.value)} />
+              <NativeSelect value={trafficBranchId} onChange={(e) => setTrafficBranchId(e.target.value)}>
+                <option value="">{t('setup.selectBranch')}</option>
+                {branchOptions.map((b) => (
+                  <option key={b.id} value={String(b.id)}>
+                    {b.shortcode || b.code} — {b.name} (ID {b.id})
+                  </option>
+                ))}
+              </NativeSelect>
               <Input type="date" value={trafficDate} onChange={(e) => setTrafficDate(e.target.value)} />
               <Input placeholder={t('setup.footTraffic')} value={trafficFoot} onChange={(e) => setTrafficFoot(e.target.value)} />
               <Input placeholder={t('setup.transactions')} value={trafficTx} onChange={(e) => setTrafficTx(e.target.value)} />
@@ -238,7 +259,14 @@ export function RevenueCommandCenterView() {
             </div>
             <div className="space-y-3">
               <Label>{t('setup.customerMix')}</Label>
-              <Input placeholder={t('setup.branchId')} value={mixBranchId} onChange={(e) => setMixBranchId(e.target.value)} />
+              <NativeSelect value={mixBranchId} onChange={(e) => setMixBranchId(e.target.value)}>
+                <option value="">{t('setup.selectBranch')}</option>
+                {branchOptions.map((b) => (
+                  <option key={b.id} value={String(b.id)}>
+                    {b.shortcode || b.code} — {b.name} (ID {b.id})
+                  </option>
+                ))}
+              </NativeSelect>
               <Input type="date" value={mixDate} onChange={(e) => setMixDate(e.target.value)} />
               <Input placeholder={t('setup.customerType')} value={mixType} onChange={(e) => setMixType(e.target.value)} />
               <Input placeholder={t('setup.count')} value={mixCount} onChange={(e) => setMixCount(e.target.value)} />
@@ -354,7 +382,10 @@ export function RevenueCommandCenterView() {
                 <TableBody>
                   {data.branchHealth.branches.slice(0, 15).map((b) => (
                     <TableRow key={b.id}>
-                      <TableCell className="font-medium">{b.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div>{b.name}</div>
+                        <div className="text-xs text-muted-foreground">{b.shortcode || b.code}</div>
+                      </TableCell>
                       <TableCell className="text-right">{baht(b.revenue)}</TableCell>
                       <TableCell className={`text-right ${b.revenueGrowthPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         {pct(b.revenueGrowthPct)}

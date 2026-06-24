@@ -105,6 +105,13 @@ export interface CommandCenterData {
     message: string;
     buckets: Array<{ label: string; count: number }>;
   };
+  activeBranchCodes: string[];
+  activeBranches: Array<{
+    id: number;
+    code: string;
+    shortcode: string;
+    name: string;
+  }>;
 }
 
 export interface SalesTargetRow {

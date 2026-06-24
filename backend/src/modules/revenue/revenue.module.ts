@@ -8,12 +8,14 @@ import {
   SalesTarget,
 } from '../../database/entities';
 import { ErpModule } from '../erp/erp.module';
+import { SystemSettingsModule } from '../system-settings/system-settings.module';
 import { RevenueController } from './revenue.controller';
 import { RevenueService } from './revenue.service';
 
 @Module({
   imports: [
     ErpModule,
+    SystemSettingsModule,
     TypeOrmModule.forFeature([
       SalesTarget,
       BranchTrafficDaily,

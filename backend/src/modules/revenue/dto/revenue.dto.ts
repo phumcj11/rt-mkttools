@@ -128,3 +128,9 @@ export class BulkUpsertCustomerMixDto {
   @Type(() => UpsertCustomerMixEntryDto)
   entries: UpsertCustomerMixEntryDto[];
 }
+
+export class UpdateActiveBranchesDto {
+  @IsArray()
+  @IsString({ each: true })
+  codes: string[];
+}

@@ -414,6 +414,9 @@
   "revenue": {
     "title": "Revenue Command Center",
     "subtitle": "Analyze sales, plan offline + online strategy, and launch campaigns",
+    "activeBranches": {
+      "count": "{count} active branches"
+    },
     "unavailable": "Unable to load data",
     "retry": "Retry",
     "refresh": "Refresh",
@@ -480,6 +483,7 @@
       "traffic": "Foot traffic (manual)",
       "customerMix": "Customer mix (manual)",
       "branchId": "Branch ID (ERP)",
+      "selectBranch": "Select branch",
       "footTraffic": "Foot traffic",
       "transactions": "Transactions (optional)",
       "customerType": "Customer type (family, solo, tourist...)",
