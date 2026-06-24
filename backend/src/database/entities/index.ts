@@ -40,3 +40,6 @@ export * from './sign-request-asset.entity';
 export * from './sign-request.entity';
 export * from './sign-review.entity';
 export * from './sign-template.entity';
+export * from './sales-target.entity';
+export * from './branch-traffic-daily.entity';
+export * from './branch-customer-mix-daily.entity';

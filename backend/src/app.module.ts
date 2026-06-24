@@ -27,6 +27,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { PosmModule } from './modules/posm/posm.module';
 import { ProductsModule } from './modules/products/products.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { RevenueModule } from './modules/revenue/revenue.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SignsModule } from './modules/signs/signs.module';
 import { SocialModule } from './modules/social/social.module';
@@ -57,6 +58,7 @@ import { UsersModule } from './modules/users/users.module';
     CampaignsModule,
     BranchesModule,
     ErpModule,
+    RevenueModule,
     NotificationsModule,
     ChatModule,
     RealtimeModule,

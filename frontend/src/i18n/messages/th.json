@@ -17,6 +17,7 @@
   },
   "nav": {
     "dashboard": "แดชบอร์ดผู้บริหาร",
+    "revenue": "Revenue Command Center",
     "promotions": "Promotion Center",
     "signs": "AI Sign Generator",
     "posm": "AI POSM Generator",
@@ -408,6 +409,87 @@
       "type": "ประเภท",
       "period": "ช่วงเวลา",
       "products": "สินค้า"
+    }
+  },
+  "revenue": {
+    "title": "Revenue Command Center",
+    "subtitle": "วิเคราะห์ยอดขาย วางเกม Offline + Online และส่งต่อทำแคมเปญ",
+    "unavailable": "ไม่สามารถโหลดข้อมูลได้",
+    "retry": "ลองใหม่",
+    "refresh": "รีเฟรช",
+    "kpi": {
+      "yesterday": "ยอดเมื่อวาน",
+      "mtd": "ยอดสะสมเดือนนี้ (MTD)",
+      "prevPeriod": "ช่วงเดือนก่อน",
+      "gapToTarget": "ขาด/เกินเป้า",
+      "target": "เป้าเดือนนี้",
+      "noTarget": "ยังไม่ได้ตั้งเป้า",
+      "benchmarkMode": "ใช้ช่วงเดือนก่อนเป็น benchmark",
+      "onTrack": "ถึงเป้าแล้ว",
+      "avgBill": "ค่าเฉลี่ย/บิล",
+      "transactions": "จำนวนบิล MTD",
+      "bills": "บิล"
+    },
+    "uplift": {
+      "message": "ต้องดันยอดเฉลี่ยต่อบิล +฿{amount} จาก {bills} บิลที่คาดว่าเหลือในเดือนนี้"
+    },
+    "branch": {
+      "title": "สุขภาพสาขา",
+      "green": "โต",
+      "yellow": "ทรงตัว",
+      "red": "ยอดตก",
+      "worst": "สาขาน่าห่วงที่สุด",
+      "name": "สาขา",
+      "revenue": "ยอดขาย",
+      "growth": "เติบโต",
+      "status": "สถานะ"
+    },
+    "diagnosis": {
+      "title": "วินิจฉัยยอดขาย",
+      "conversion": "Conversion rate"
+    },
+    "trend": {
+      "title": "แนวโน้มรายวัน"
+    },
+    "products": {
+      "top": "Top Products",
+      "slow": "Slow Moving / Clearance",
+      "frontStore": "สินค้าหน้าร้าน (ขายดี + GP ดี)",
+      "name": "สินค้า",
+      "qty": "ขาย (ชิ้น)"
+    },
+    "billPromo": {
+      "title": "Bill Near Promo (placeholder)"
+    },
+    "actions": {
+      "title": "Action Shortcuts",
+      "planner": "Campaign Planner",
+      "content": "Content Factory",
+      "posm": "POSM Generator",
+      "clearance": "จัดโปรระบาย"
+    },
+    "target": {
+      "monthly": "เป้ายอดขายรวมเดือนนี้ (บาท)",
+      "save": "บันทึกเป้า",
+      "saved": "บันทึกเป้าเรียบร้อย",
+      "failed": "บันทึกเป้าไม่สำเร็จ",
+      "invalid": "กรุณากรอกเป้ายอดขายที่ถูกต้อง"
+    },
+    "setup": {
+      "title": "ตั้งค่าเป้า / Traffic / Customer Mix",
+      "traffic": "Foot Traffic (manual)",
+      "customerMix": "Customer Mix (manual)",
+      "branchId": "Branch ID (ERP)",
+      "footTraffic": "Foot traffic",
+      "transactions": "Transactions (optional)",
+      "customerType": "ประเภทลูกค้า (family, solo, tourist...)",
+      "count": "จำนวน",
+      "saveTraffic": "บันทึก Traffic",
+      "saveMix": "บันทึก Customer Mix",
+      "trafficSaved": "บันทึก traffic เรียบร้อย",
+      "mixSaved": "บันทึก customer mix เรียบร้อย",
+      "invalid": "กรุณากรอกข้อมูลให้ครบ",
+      "failed": "บันทึกไม่สำเร็จ"
     }
   }
 }

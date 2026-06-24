@@ -1,6 +1,6 @@
 import {
-  Bot,
   BarChart3,
+  Bot,
   Clapperboard,
   FileImage,
   FileText,
@@ -22,6 +22,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard',     href: '/dashboard',   icon: LayoutDashboard },
+  { key: 'revenue',       href: '/revenue',     icon: BarChart3       },
   { key: 'promotions',    href: '/promotions',  icon: Gift            },
   { key: 'signs',         href: '/signs',       icon: FileText        },
   { key: 'posm',          href: '/posm',        icon: FileImage       },

@@ -17,6 +17,7 @@
   },
   "nav": {
     "dashboard": "Executive Dashboard",
+    "revenue": "Revenue Command Center",
     "promotions": "Promotion Center",
     "signs": "AI Sign Generator",
     "posm": "AI POSM Generator",
@@ -408,6 +409,87 @@
       "type": "Type",
       "period": "Period",
       "products": "Products"
+    }
+  },
+  "revenue": {
+    "title": "Revenue Command Center",
+    "subtitle": "Analyze sales, plan offline + online strategy, and launch campaigns",
+    "unavailable": "Unable to load data",
+    "retry": "Retry",
+    "refresh": "Refresh",
+    "kpi": {
+      "yesterday": "Yesterday",
+      "mtd": "Month-to-date (MTD)",
+      "prevPeriod": "prev. month same period",
+      "gapToTarget": "Gap to target",
+      "target": "Monthly target",
+      "noTarget": "No target set",
+      "benchmarkMode": "Using previous period as benchmark",
+      "onTrack": "On track",
+      "avgBill": "Avg / bill",
+      "transactions": "MTD transactions",
+      "bills": "bills"
+    },
+    "uplift": {
+      "message": "Need +฿{amount} avg bill uplift across ~{bills} expected remaining bills this month"
+    },
+    "branch": {
+      "title": "Branch health",
+      "green": "Growing",
+      "yellow": "Flat",
+      "red": "Declining",
+      "worst": "Most concerning branch",
+      "name": "Branch",
+      "revenue": "Revenue",
+      "growth": "Growth",
+      "status": "Status"
+    },
+    "diagnosis": {
+      "title": "Sales diagnosis",
+      "conversion": "Conversion rate"
+    },
+    "trend": {
+      "title": "Daily trend"
+    },
+    "products": {
+      "top": "Top products",
+      "slow": "Slow moving / clearance",
+      "frontStore": "Front-store candidates (high sales + GP)",
+      "name": "Product",
+      "qty": "Qty sold"
+    },
+    "billPromo": {
+      "title": "Bill near promo (placeholder)"
+    },
+    "actions": {
+      "title": "Action shortcuts",
+      "planner": "Campaign Planner",
+      "content": "Content Factory",
+      "posm": "POSM Generator",
+      "clearance": "Run clearance promo"
+    },
+    "target": {
+      "monthly": "Company monthly revenue target (THB)",
+      "save": "Save target",
+      "saved": "Target saved",
+      "failed": "Failed to save target",
+      "invalid": "Enter a valid revenue target"
+    },
+    "setup": {
+      "title": "Targets / traffic / customer mix",
+      "traffic": "Foot traffic (manual)",
+      "customerMix": "Customer mix (manual)",
+      "branchId": "Branch ID (ERP)",
+      "footTraffic": "Foot traffic",
+      "transactions": "Transactions (optional)",
+      "customerType": "Customer type (family, solo, tourist...)",
+      "count": "Count",
+      "saveTraffic": "Save traffic",
+      "saveMix": "Save customer mix",
+      "trafficSaved": "Traffic saved",
+      "mixSaved": "Customer mix saved",
+      "invalid": "Fill in all required fields",
+      "failed": "Save failed"
     }
   }
 }
