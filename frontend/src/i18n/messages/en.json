@@ -474,6 +474,29 @@
     "billPromo": {
       "title": "Campaign-qualified bills"
     },
+    "tabHero": {
+      "overview": "MTD KPI, diagnosis, and daily trend",
+      "branchSales": "Branch revenue and daily trends",
+      "branchTable": "MoM / YoY comparison by branch",
+      "billsAvg": "Bill count and average ticket",
+      "billsAvgTable": "Sortable by bills or avg ticket",
+      "campaign": "Bills near promo thresholds 899 / 999 / 3999",
+      "campaignTable": "Promo bucket counts by branch",
+      "declining": "Branches that need attention",
+      "decliningList": "Declining and flat branches only",
+      "products": "Top sellers, clearance, and front-store picks",
+      "slowProducts": "Slow movers — run clearance promos",
+      "frontStore": "High-GP items for front-store display",
+      "customer": "Customer countries and purchase behavior",
+      "reviews": "Google review summary by branch",
+      "reviewsTable": "Ratings and negative reviews per branch",
+      "field": "Storefront activities and branch photos",
+      "fieldByBranch": "Logged activities per branch",
+      "fieldAdd": "Log a new activity with photos",
+      "fieldGallery": "Latest photos from branches",
+      "diagnosis": "Issues and recommended actions",
+      "trend": "Company revenue — last 30 days"
+    },
     "tabs": {
       "loading": "Loading ERP data…",
       "overview": "Overview",

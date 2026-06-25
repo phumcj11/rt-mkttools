@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Settings2,
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api';
 import {
@@ -28,6 +27,7 @@ import {
 import { showError, showSuccess } from '@/lib/sweetalert';
 import { COMPARE_OPTIONS, branchChartRange, countryRange, type BranchChartPreset, type CompareMode, type CountryRangePreset } from './revenue-constants';
 import { REVENUE_TABS, parseRevenueTab, type RevenueTabId } from './revenue-tabs';
+import { ChipToggleGroup, RevenueTabBar } from './revenue-ui';
 import { OverviewTab } from './tabs/overview-tab';
 import { BranchSalesTab } from './tabs/branch-sales-tab';
 import { BillsAvgTab } from './tabs/bills-avg-tab';
@@ -228,68 +228,74 @@ export function RevenueCommandCenterView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <BarChart2 className="h-5 w-5" />
-          </span>
-          <div>
-            <h1 className="text-xl font-bold leading-tight">{t('title')}</h1>
-            <p className="text-xs text-muted-foreground">
-              MTD {data.period.mtdFrom} → {data.period.mtdTo}
-            </p>
+      <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-900 via-slate-800 to-violet-900 p-4 text-white shadow-md sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm">
+              <BarChart2 className="h-6 w-6" />
+            </span>
+            <div>
+              <h1 className="text-xl font-bold leading-tight sm:text-2xl">{t('title')}</h1>
+              <p className="mt-0.5 text-sm text-white/75">
+                MTD {data.period.mtdFrom} → {data.period.mtdTo}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ChipToggleGroup
+              options={COMPARE_OPTIONS}
+              value={compareMode}
+              onChange={setCompareMode}
+              tone="violet"
+            />
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-white/70" />}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+              onClick={() => { void load(true); if (loadedTabs.has('branch-sales')) void loadBranchChart(true); if (loadedTabs.has('customer')) void loadCountryAnalytics(true); }}
+              disabled={loading}
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span className="ml-1.5 hidden sm:inline">{t('refresh')}</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className={showSetup ? 'bg-white text-slate-900 hover:bg-white/90' : 'border-white/20 bg-white/10 text-white hover:bg-white/20'}
+              onClick={() => setShowSetup((v) => !v)}
+            >
+              <Settings2 className="h-4 w-4" />
+              <span className="ml-1.5 hidden sm:inline">{t('setup.title')}</span>
+            </Button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex overflow-hidden rounded-lg border text-xs font-medium">
-            {COMPARE_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setCompareMode(opt.id)}
-                className={`px-3 py-1.5 transition-colors ${compareMode === opt.id ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          <Button variant="ghost" size="sm" onClick={() => { void load(true); if (loadedTabs.has('branch-sales')) void loadBranchChart(true); if (loadedTabs.has('customer')) void loadCountryAnalytics(true); }} disabled={loading}>
-            <RefreshCw className="h-4 w-4" />
-            <span className="ml-1.5 hidden sm:inline">{t('refresh')}</span>
-          </Button>
-          <Button variant={showSetup ? 'secondary' : 'outline'} size="sm" onClick={() => setShowSetup((v) => !v)}>
-            <Settings2 className="h-4 w-4" />
-            <span className="ml-1.5 hidden sm:inline">{t('setup.title')}</span>
-          </Button>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: t('branch.green'), value: data.branchHealth.green, cls: 'bg-emerald-500/20 text-emerald-100' },
+            { label: t('branch.yellow'), value: data.branchHealth.yellow, cls: 'bg-amber-500/20 text-amber-100' },
+            { label: t('branch.red'), value: data.branchHealth.red, cls: 'bg-rose-500/20 text-rose-100' },
+            { label: t('kpi.mtd'), value: `฿${Math.round(data.kpi.mtd.revenue).toLocaleString('th-TH')}`, cls: 'bg-violet-500/20 text-violet-100' },
+          ].map((item) => (
+            <div key={item.label} className={`rounded-xl px-3 py-2 ${item.cls}`}>
+              <p className="text-[10px] font-medium uppercase tracking-wide opacity-80">{item.label}</p>
+              <p className="mt-0.5 text-sm font-bold tabular-nums">{item.value}</p>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="sticky top-0 z-20 -mx-1 border-b bg-background/95 px-1 pb-0 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="flex gap-1 overflow-x-auto pb-2 scrollbar-thin">
-          {REVENUE_TABS.map((tab) => {
-            const badge =
-              tab.id === 'declining' && decliningCount > 0 ? String(decliningCount)
-              : tab.id === 'campaign' && !data.billNearPromo.available ? 'ERP'
-              : tabBadge(data, tab.id);
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => selectTab(tab.id)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${activeTab === tab.id ? 'bg-primary text-primary-foreground' : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'}`}
-              >
-                {t(tab.labelKey)}
-                {badge && (
-                  <Badge variant={activeTab === tab.id ? 'secondary' : 'outline'} className="h-4 px-1 text-[10px]">
-                    {badge}
-                  </Badge>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <RevenueTabBar
+        tabs={REVENUE_TABS}
+        activeTab={activeTab}
+        onSelect={selectTab}
+        labelFn={(key) => t(key)}
+        badgeFn={(tabId) =>
+          tabId === 'declining' && decliningCount > 0 ? String(decliningCount)
+          : tabId === 'campaign' && !data.billNearPromo.available ? 'ERP'
+          : tabBadge(data, tabId)
+        }
+      />
 
       {activeTab === 'overview' && (
         <OverviewTab

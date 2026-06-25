@@ -1,12 +1,12 @@
 'use client';
 
-import { Receipt } from 'lucide-react';
+import { Calculator, Receipt, ShoppingCart, Wallet } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CommandCenterData } from '@/lib/revenue-api';
 import { BranchHealthTable } from '../branch-health-table';
-import { baht, KpiCard } from '../revenue-shared';
+import { baht } from '../revenue-shared';
 import type { CompareMode } from '../revenue-constants';
+import { SectionCard, StatTile, TabHero } from '../revenue-ui';
 
 interface BillsAvgTabProps {
   data: CommandCenterData;
@@ -19,23 +19,16 @@ export function BillsAvgTab({ data, compareMode }: BillsAvgTabProps) {
   const avgAll = totalOrders > 0 ? data.kpi.mtd.revenue / totalOrders : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <TabHero tabId="bills-avg" title={t('tabs.billsAvg')} subtitle={t('tabHero.billsAvg')} />
       <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard label={t('kpi.transactions')} value={data.kpi.mtd.orders.toLocaleString('th-TH')} icon={Receipt} accent="text-primary" />
-        <KpiCard label={t('kpi.avgBill')} value={baht(data.kpi.mtd.avgTicket)} icon={Receipt} accent="text-slate-600" />
-        <KpiCard label={t('tabs.billsAvgWeighted')} value={baht(avgAll)} sub={<span className="text-xs text-muted-foreground">{t('tabs.billsAvgHint')}</span>} icon={Receipt} accent="text-emerald-600" />
+        <StatTile tone="cyan" icon={ShoppingCart} label={t('kpi.transactions')} value={data.kpi.mtd.orders.toLocaleString('th-TH')} />
+        <StatTile tone="blue" icon={Wallet} label={t('kpi.avgBill')} value={baht(data.kpi.mtd.avgTicket)} />
+        <StatTile tone="emerald" icon={Calculator} label={t('tabs.billsAvgWeighted')} value={baht(avgAll)} hint={t('tabs.billsAvgHint')} />
       </div>
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-            {t('tabs.billsAvgTable')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <BranchHealthTable branches={data.branchHealth.branches} compareMode={compareMode} defaultSort="orders" emphasize="bills" />
-        </CardContent>
-      </Card>
+      <SectionCard tone="cyan" icon={Receipt} title={t('tabs.billsAvgTable')} subtitle={t('tabHero.billsAvgTable')}>
+        <BranchHealthTable branches={data.branchHealth.branches} compareMode={compareMode} defaultSort="orders" emphasize="bills" />
+      </SectionCard>
     </div>
   );
 }

@@ -3,6 +3,8 @@
 import { AlertCircle, AlertTriangle, Info, TrendingDown, TrendingUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import type { BranchHealthRow } from '@/lib/revenue-api';
+import { cn } from '@/lib/utils';
+import { TONE_STYLES, type TabTone } from './revenue-ui';
 
 export function baht(value: number): string {
   return `฿${Math.round(value).toLocaleString('th-TH')}`;
@@ -66,10 +68,25 @@ export function CompareRow({
 
 export function BranchStatusDot({ status }: { status: BranchHealthRow['status'] }) {
   if (status === 'green')
-    return <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" title="โต" />;
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        โต
+      </span>
+    );
   if (status === 'yellow')
-    return <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" title="ทรงตัว" />;
-  return <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" title="ยอดตก" />;
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+        ทรงตัว
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+      ยอดตก
+    </span>
+  );
 }
 
 export function DiagnosisIcon({ severity }: { severity: string }) {
@@ -90,6 +107,7 @@ export function KpiCard({
   sub,
   icon: Icon,
   accent = 'text-primary',
+  tone,
   alert,
 }: {
   label: string;
@@ -97,18 +115,23 @@ export function KpiCard({
   sub?: React.ReactNode;
   icon: React.ElementType;
   accent?: string;
+  tone?: TabTone;
   alert?: boolean;
 }) {
+  const s = tone ? TONE_STYLES[tone] : null;
   return (
-    <Card className={alert ? 'border-red-200' : ''}>
+    <Card className={cn('overflow-hidden transition-shadow hover:shadow-md', alert ? 'border-red-200 bg-red-50/30' : s?.tileBorder, s && s.tileBg)}>
       <CardContent className="pt-5 pb-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="mt-1 text-xl font-bold leading-tight">{value}</p>
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className={cn('mt-1 text-xl font-bold leading-tight tabular-nums', s?.tileText)}>{value}</p>
             {sub && <div className="mt-0.5">{sub}</div>}
           </div>
-          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted ${accent}`}>
+          <span className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm',
+            s ? cn(s.iconBg, 'text-white') : cn('bg-muted', accent),
+          )}>
             <Icon className="h-4 w-4" />
           </span>
         </div>

@@ -1,10 +1,9 @@
 'use client';
 
-import { Camera, Loader2, Store } from 'lucide-react';
+import { Camera, Image, Loader2, MapPin, Plus, Store } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -13,6 +12,7 @@ import { createStorefrontActivity, listStorefrontActivities } from '@/lib/revenu
 import { ApiError } from '@/lib/api';
 import { showError, showSuccess } from '@/lib/sweetalert';
 import { localDateInput } from '../revenue-shared';
+import { SectionCard, StatTile, TabHero } from '../revenue-ui';
 
 interface FieldTabProps {
   data: CommandCenterData;
@@ -108,36 +108,30 @@ export function FieldTab({ data }: FieldTabProps) {
     .slice(0, 24);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <TabHero tabId="field" title={t('tabs.field')} subtitle={t('tabHero.field')} />
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card><CardContent className="pt-5 pb-4"><p className="text-xs text-muted-foreground">{t('tabs.fieldTotal')}</p><p className="mt-1 text-2xl font-bold">{activities.length}</p></CardContent></Card>
-        <Card><CardContent className="pt-5 pb-4"><p className="text-xs text-muted-foreground">{t('tabs.fieldBranches')}</p><p className="mt-1 text-2xl font-bold">{summaryByBranch.filter((b) => b.count > 0).length}</p></CardContent></Card>
-        <Card><CardContent className="pt-5 pb-4"><p className="text-xs text-muted-foreground">{t('tabs.fieldPhotos')}</p><p className="mt-1 text-2xl font-bold">{recentPhotos.length}</p></CardContent></Card>
+        <StatTile tone="teal" icon={Camera} label={t('tabs.fieldTotal')} value={activities.length} />
+        <StatTile tone="cyan" icon={Store} label={t('tabs.fieldBranches')} value={summaryByBranch.filter((b) => b.count > 0).length} />
+        <StatTile tone="blue" icon={Image} label={t('tabs.fieldPhotos')} value={recentPhotos.length} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Store className="h-4 w-4 text-muted-foreground" />
-              {t('tabs.fieldByBranch')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
+      <div className="grid gap-5 lg:grid-cols-2">
+        <SectionCard tone="teal" icon={MapPin} title={t('tabs.fieldByBranch')} subtitle={t('tabHero.fieldByBranch')}>
+          <div className="space-y-2">
             {summaryByBranch.map((b) => (
-              <div key={b.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-                <span>{b.shortcode || b.code} — {b.name}</span>
-                <span className="font-semibold tabular-nums">{b.count}</span>
+              <div key={b.id} className="flex items-center justify-between rounded-xl border border-teal-100 bg-teal-50/40 px-3 py-2.5 text-sm transition-colors hover:bg-teal-50">
+                <span className="font-medium">{b.shortcode || b.code} — {b.name}</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${b.count > 0 ? 'bg-teal-500 text-white' : 'bg-muted text-muted-foreground'}`}>
+                  {b.count}
+                </span>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">{t('tabs.fieldAdd')}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <SectionCard tone="cyan" icon={Plus} title={t('tabs.fieldAdd')} subtitle={t('tabHero.fieldAdd')}>
+          <div className="space-y-3">
             <NativeSelect value={branchId} onChange={(e) => setBranchId(e.target.value)}>
               <option value="">{t('setup.selectBranch')}</option>
               {branchOptions.map((b) => (
@@ -148,44 +142,41 @@ export function FieldTab({ data }: FieldTabProps) {
             <Input placeholder={t('tabs.fieldTitle')} value={title} onChange={(e) => setTitle(e.target.value)} />
             <Input placeholder={t('tabs.fieldDesc')} value={description} onChange={(e) => setDescription(e.target.value)} />
             <div>
-              <Label className="text-xs text-muted-foreground">{t('tabs.fieldUpload')}</Label>
-              <Input type="file" accept="image/*" multiple className="mt-1" onChange={(e) => handlePhotoChange(e.target.files)} />
+              <Label className="text-xs font-medium text-muted-foreground">{t('tabs.fieldUpload')}</Label>
+              <Input type="file" accept="image/*" multiple className="mt-1 border-dashed" onChange={(e) => handlePhotoChange(e.target.files)} />
             </div>
-            <Button className="w-full" onClick={() => void handleSubmit()} disabled={saving}>
+            <Button className="w-full bg-teal-600 hover:bg-teal-700" onClick={() => void handleSubmit()} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : t('tabs.fieldSave')}
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Camera className="h-4 w-4 text-muted-foreground" />
-            {t('tabs.fieldGallery')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {t('tabs.fieldLoading')}
-            </div>
-          ) : recentPhotos.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t('tabs.fieldEmpty')}</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-              {recentPhotos.map((p, i) => (
-                <div key={`${p.url}-${i}`} className="overflow-hidden rounded-lg border">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={resolvePhotoUrl(p.url)} alt={p.title} className="aspect-square w-full object-cover" />
-                  <div className="px-2 py-1.5 text-[10px] text-muted-foreground">{p.date}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SectionCard tone="blue" icon={Camera} title={t('tabs.fieldGallery')} subtitle={t('tabHero.fieldGallery')}>
+        {loading ? (
+          <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin text-teal-500" />
+            {t('tabs.fieldLoading')}
+          </div>
+        ) : recentPhotos.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-100 text-teal-600">
+              <Image className="h-7 w-7" />
+            </span>
+            <p className="text-sm text-muted-foreground">{t('tabs.fieldEmpty')}</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {recentPhotos.map((p, i) => (
+              <div key={`${p.url}-${i}`} className="group overflow-hidden rounded-xl border shadow-sm transition-shadow hover:shadow-md">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={resolvePhotoUrl(p.url)} alt={p.title} className="aspect-square w-full object-cover transition-transform group-hover:scale-105" />
+                <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-2 py-1.5 text-[10px] font-medium text-teal-800">{p.date}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }

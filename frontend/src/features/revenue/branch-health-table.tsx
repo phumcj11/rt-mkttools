@@ -93,7 +93,7 @@ export function BranchHealthTable({
         </TableHeader>
         <TableBody>
           {rows.map((b) => (
-            <TableRow key={b.id}>
+            <TableRow key={b.id} className="transition-colors hover:bg-muted/40">
               <TableCell>
                 <BranchStatusDot status={b.status} />
               </TableCell>
