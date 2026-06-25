@@ -454,6 +454,11 @@
     "trend": {
       "title": "Daily trend"
     },
+    "branchChart": {
+      "title": "Storefront sales by branch",
+      "subtitle": "Daily revenue per branch — hover for values (ERP timeseries)",
+      "failed": "Failed to load branch chart"
+    },
     "products": {
       "top": "Top products",
       "slow": "Slow moving / clearance",

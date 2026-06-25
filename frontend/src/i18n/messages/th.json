@@ -454,6 +454,11 @@
     "trend": {
       "title": "แนวโน้มรายวัน"
     },
+    "branchChart": {
+      "title": "ยอดขายหน้าร้านแยกตามสาขา",
+      "subtitle": "กราฟรายวันแต่ละสาขา — hover เพื่อดูยอด (ข้อมูลจาก ERP timeseries)",
+      "failed": "โหลดกราฟสาขาไม่สำเร็จ"
+    },
     "products": {
       "top": "Top Products",
       "slow": "Slow Moving / Clearance",

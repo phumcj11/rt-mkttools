@@ -33,6 +33,15 @@ export class RevenueController {
     return this.revenue.commandCenter(user.tenantId, from, to, isForce(force));
   }
 
+  @Get('branch-daily-sales')
+  branchDailySales(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('force') force?: string,
+  ) {
+    return this.revenue.branchDailySales(from, to, isForce(force));
+  }
+
   @Get('country-analytics')
   countryAnalytics(
     @CurrentUser() user: AuthUser,

@@ -49,15 +49,18 @@ import {
 } from '@/components/ui/table';
 import { ApiError } from '@/lib/api';
 import {
+  getBranchDailySales,
   getCommandCenter,
   getCountryAnalytics,
   upsertCustomerMix,
   upsertSalesTargets,
   upsertTraffic,
+  type BranchDailySalesData,
   type BranchHealthRow,
   type CommandCenterData,
   type CountryAnalyticsData,
 } from '@/lib/revenue-api';
+import { BranchDailySalesChart } from './branch-daily-sales-chart';
 import { showError, showSuccess } from '@/lib/sweetalert';
 
 function baht(value: number): string {
@@ -175,6 +178,7 @@ function KpiCard({ label, value, sub, icon: Icon, accent = 'text-primary', alert
 
 type CompareMode = 'mom' | 'yoy' | 'both';
 type CountryRangePreset = 'mtd' | 'prevMonth' | 'last7' | 'last30' | 'custom';
+type BranchChartPreset = 'last15' | 'last7' | 'last30' | 'mtd';
 
 const COMPARE_OPTIONS: { id: CompareMode; label: string }[] = [
   { id: 'mom', label: 'vs เดือนก่อน' },
@@ -188,6 +192,13 @@ const COUNTRY_RANGE_OPTIONS: { id: CountryRangePreset; label: string }[] = [
   { id: 'last7', label: '7 วัน' },
   { id: 'last30', label: '30 วัน' },
   { id: 'custom', label: 'กำหนดเอง' },
+];
+
+const BRANCH_CHART_RANGE_OPTIONS: { id: BranchChartPreset; label: string }[] = [
+  { id: 'last15', label: '15 วัน' },
+  { id: 'last7', label: '7 วัน' },
+  { id: 'last30', label: '30 วัน' },
+  { id: 'mtd', label: 'เดือนนี้' },
 ];
 
 function localDateInput(d: Date): string {
@@ -219,6 +230,21 @@ function countryRange(preset: CountryRangePreset, customFrom: string, customTo: 
   };
 }
 
+function branchChartRange(preset: BranchChartPreset) {
+  const today = new Date();
+  const to = localDateInput(today);
+  if (preset === 'mtd') {
+    return {
+      from: localDateInput(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to,
+    };
+  }
+  const days = preset === 'last7' ? 7 : preset === 'last30' ? 30 : 15;
+  const from = new Date(today);
+  from.setDate(today.getDate() - (days - 1));
+  return { from: localDateInput(from), to };
+}
+
 export function RevenueCommandCenterView() {
   const t = useTranslations('revenue');
 
@@ -245,6 +271,10 @@ export function RevenueCommandCenterView() {
   const [countryPreset, setCountryPreset] = useState<CountryRangePreset>('mtd');
   const [countryFrom, setCountryFrom] = useState('');
   const [countryTo, setCountryTo] = useState('');
+  const [branchChartData, setBranchChartData] = useState<BranchDailySalesData | null>(null);
+  const [branchChartLoading, setBranchChartLoading] = useState(false);
+  const [branchChartError, setBranchChartError] = useState<string | null>(null);
+  const [branchChartPreset, setBranchChartPreset] = useState<BranchChartPreset>('last15');
 
   const yearMonth = useMemo(() => {
     const d = new Date();
@@ -285,8 +315,23 @@ export function RevenueCommandCenterView() {
     }
   }, [countryFrom, countryPreset, countryQuery, countryTo]);
 
+  const loadBranchChart = useCallback(async (force = false) => {
+    setBranchChartLoading(true);
+    setBranchChartError(null);
+    try {
+      const range = branchChartRange(branchChartPreset);
+      const res = await getBranchDailySales({ ...range, force });
+      setBranchChartData(res);
+    } catch (err) {
+      setBranchChartError(err instanceof ApiError ? err.message : t('branchChart.failed'));
+    } finally {
+      setBranchChartLoading(false);
+    }
+  }, [branchChartPreset, t]);
+
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadCountryAnalytics(); }, [loadCountryAnalytics]);
+  useEffect(() => { void loadBranchChart(); }, [loadBranchChart]);
 
   const handleSaveTarget = async () => {
     const amount = parseFloat(targetInput.replace(/,/g, ''));
@@ -402,7 +447,7 @@ export function RevenueCommandCenterView() {
             ))}
           </div>
           {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          <Button variant="ghost" size="sm" onClick={() => void load(true)} disabled={loading}>
+          <Button variant="ghost" size="sm" onClick={() => { void load(true); void loadBranchChart(true); }} disabled={loading}>
             <RefreshCw className="h-4 w-4" />
             <span className="ml-1.5 hidden sm:inline">{t('refresh')}</span>
           </Button>
@@ -802,6 +847,46 @@ export function RevenueCommandCenterView() {
             <span>{trendDays[Math.floor(trendDays.length / 2)]?.date.slice(5)}</span>
             <span>{trendDays[trendDays.length - 1]?.date.slice(5)}</span>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Branch Daily Sales Chart (ERP-style) ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Store className="h-4 w-4 text-muted-foreground" />
+                {t('branchChart.title')}
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">{t('branchChart.subtitle')}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex overflow-hidden rounded-lg border text-xs font-medium">
+                {BRANCH_CHART_RANGE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setBranchChartPreset(opt.id)}
+                    className={`px-2.5 py-1.5 transition-colors ${
+                      branchChartPreset === opt.id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {branchChartLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {branchChartError && (
+            <p className="mb-3 text-sm text-destructive">{branchChartError}</p>
+          )}
+          <BranchDailySalesChart data={branchChartData} loading={branchChartLoading} />
         </CardContent>
       </Card>
 

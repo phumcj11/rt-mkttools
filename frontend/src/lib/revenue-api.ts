@@ -210,6 +210,26 @@ export interface CountryAnalyticsData {
   };
 }
 
+export interface BranchDailySalesData {
+  generatedAt: string;
+  period: { from: string; to: string };
+  dates: string[];
+  branches: Array<{
+    id: number;
+    code: string;
+    shortcode: string;
+    name: string;
+    points: Array<{ date: string; revenue: number; orders: number }>;
+    totalRevenue: number;
+  }>;
+  verification: {
+    date: string;
+    branchSum: number;
+    erpByBranch: number;
+    match: boolean;
+  } | null;
+}
+
 export function getCommandCenter(opts?: { from?: string; to?: string; force?: boolean }) {
   const params = new URLSearchParams();
   if (opts?.from) params.set('from', opts.from);
@@ -217,6 +237,15 @@ export function getCommandCenter(opts?: { from?: string; to?: string; force?: bo
   if (opts?.force) params.set('force', 'true');
   const q = params.toString();
   return apiRequest<CommandCenterData>(`/revenue/command-center${q ? `?${q}` : ''}`);
+}
+
+export function getBranchDailySales(opts?: { from?: string; to?: string; force?: boolean }) {
+  const params = new URLSearchParams();
+  if (opts?.from) params.set('from', opts.from);
+  if (opts?.to) params.set('to', opts.to);
+  if (opts?.force) params.set('force', 'true');
+  const q = params.toString();
+  return apiRequest<BranchDailySalesData>(`/revenue/branch-daily-sales${q ? `?${q}` : ''}`);
 }
 
 export function getCountryAnalytics(opts?: {

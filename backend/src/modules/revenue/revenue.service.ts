@@ -545,6 +545,111 @@ export class RevenueService {
     };
   }
 
+  /** ยอดขายรายวันแยกสาขา — ใช้ ERP timeseries ต่อสาขา (เทียบกราฟ ERP dashboard) */
+  async branchDailySales(from?: string, to?: string, force = false) {
+    const activeCodes = await this.getActiveBranchCodes();
+    const activeSet = new Set(activeCodes);
+    const today = new Date();
+    const rangeTo = to ?? fmt(today);
+    const rangeFrom =
+      from ??
+      (() => {
+        const d = new Date(today);
+        d.setDate(d.getDate() - 14);
+        return fmt(d);
+      })();
+
+    const erpBranches = await this.erp.branches(force);
+    const activeBranches = erpBranches
+      .filter((b) => branchMatchesActive(b, activeSet))
+      .sort((a, b) =>
+        (a.shortcode || a.code).localeCompare(b.shortcode || b.code, 'th'),
+      );
+
+    const branchSeries = await Promise.all(
+      activeBranches.map(async (b) => {
+        try {
+          const series = await this.erp.timeseries(rangeFrom, rangeTo, 'day', b.id, force);
+          return {
+            id: b.id,
+            code: b.code,
+            shortcode: b.shortcode || b.code,
+            name: b.name,
+            series,
+          };
+        } catch (err) {
+          this.logger.warn(`branch timeseries failed for ${b.shortcode || b.code}: ${err}`);
+          return {
+            id: b.id,
+            code: b.code,
+            shortcode: b.shortcode || b.code,
+            name: b.name,
+            series: [] as Array<{ date: string; revenue: number; orders: number }>,
+          };
+        }
+      }),
+    );
+
+    const dateSet = new Set<string>();
+    for (const br of branchSeries) {
+      for (const p of br.series) dateSet.add(p.date);
+    }
+    const dates = [...dateSet].sort();
+
+    const branches = branchSeries.map((b) => {
+      const byDate = new Map(b.series.map((p) => [p.date, p]));
+      return {
+        id: b.id,
+        code: b.code,
+        shortcode: b.shortcode,
+        name: b.name,
+        points: dates.map((d) => {
+          const row = byDate.get(d);
+          return { date: d, revenue: row?.revenue ?? 0, orders: row?.orders ?? 0 };
+        }),
+        totalRevenue: b.series.reduce((s, p) => s + p.revenue, 0),
+      };
+    });
+
+    // ตรวจยอดวันล่าสุดที่มีข้อมูล — เทียบ sum สาขา vs ERP by_branch วันเดียว
+    let verification: {
+      date: string;
+      branchSum: number;
+      erpByBranch: number;
+      match: boolean;
+    } | null = null;
+
+    if (dates.length > 0) {
+      const verifyDate = dates[dates.length - 1];
+      const branchSum = branches.reduce(
+        (s, b) => s + (b.points.find((p) => p.date === verifyDate)?.revenue ?? 0),
+        0,
+      );
+      try {
+        const erpDay = await this.erp.salesByBranch(verifyDate, verifyDate, force);
+        const erpFiltered = erpDay.filter((b) => branchMatchesActive(b, activeSet));
+        const erpByBranch = erpFiltered.reduce((s, b) => s + b.revenue, 0);
+        const diff = Math.abs(branchSum - erpByBranch);
+        verification = {
+          date: verifyDate,
+          branchSum: Math.round(branchSum * 100) / 100,
+          erpByBranch: Math.round(erpByBranch * 100) / 100,
+          match: diff < 1 || (erpByBranch > 0 && diff / erpByBranch < 0.01),
+        };
+      } catch {
+        verification = null;
+      }
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      period: { from: rangeFrom, to: rangeTo },
+      dates,
+      branches,
+      verification,
+    };
+  }
+
   private buildDiagnosis(ctx: {
     revenueGrowthPct: number;
     ordersGrowthPct: number;
