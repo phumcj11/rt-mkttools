@@ -6,7 +6,7 @@ import type { CommandCenterData } from '@/lib/revenue-api';
 import { BranchHealthTable } from '../branch-health-table';
 import { pctText } from '../revenue-shared';
 import type { CompareMode } from '../revenue-constants';
-import { SectionCard, StatTile, TabHero } from '../revenue-ui';
+import { ComparePeriodBar, SectionCard, StatTile, TabHero } from '../revenue-ui';
 
 interface DecliningTabProps {
   data: CommandCenterData;
@@ -20,6 +20,7 @@ export function DecliningTab({ data, compareMode }: DecliningTabProps) {
   return (
     <div className="space-y-5">
       <TabHero tabId="declining" title={t('tabs.declining')} subtitle={t('tabHero.declining')} />
+      <ComparePeriodBar compareMode={compareMode} period={data.period} />
       <div className="grid gap-3 sm:grid-cols-3">
         <StatTile tone="rose" icon={TrendingDown} label={t('branch.red')} value={data.branchHealth.red} valueClassName="text-red-600" />
         <StatTile tone="amber" icon={Minus} label={t('branch.yellow')} value={data.branchHealth.yellow} valueClassName="text-amber-600" />

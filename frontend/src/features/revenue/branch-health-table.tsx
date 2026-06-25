@@ -25,6 +25,32 @@ interface BranchHealthTableProps {
   limit?: number;
 }
 
+function CompareCell({
+  prevValue,
+  pct,
+  formatFn = baht,
+  reliable = true,
+  emphasize = false,
+}: {
+  prevValue: number;
+  pct: number | null;
+  formatFn?: (v: number) => string;
+  reliable?: boolean;
+  emphasize?: boolean;
+}) {
+  if (!reliable) {
+    return <span className="text-sm text-muted-foreground">ไม่มีข้อมูล</span>;
+  }
+  return (
+    <div className={emphasize ? 'space-y-0.5' : ''}>
+      <div className={`tabular-nums text-muted-foreground ${emphasize ? 'text-sm' : 'text-xs'}`}>
+        {formatFn(prevValue)}
+      </div>
+      <GrowthChip value={pct} size={emphasize ? 'md' : 'sm'} />
+    </div>
+  );
+}
+
 export function BranchHealthTable({
   branches,
   compareMode,
@@ -36,6 +62,10 @@ export function BranchHealthTable({
   const t = useTranslations('revenue');
   const [sortKey, setSortKey] = useState<SortKey>(defaultSort);
   const [sortAsc, setSortAsc] = useState(false);
+
+  const showMom = compareMode === 'mom' || compareMode === 'both';
+  const showYoy = compareMode === 'yoy' || compareMode === 'both';
+  const billsMode = emphasize === 'bills';
 
   const rows = useMemo(() => {
     let list = filter ? branches.filter(filter) : [...branches];
@@ -59,36 +89,58 @@ export function BranchHealthTable({
   const sortLabel = (key: SortKey, label: string) => (
     <button
       type="button"
-      className="inline-flex items-center gap-1 hover:text-foreground"
+      className="inline-flex items-center gap-1 text-sm font-semibold hover:text-foreground"
       onClick={() => toggleSort(key)}
     >
       {label}
-      {sortKey === key && <span className="text-[10px]">{sortAsc ? '↑' : '↓'}</span>}
+      {sortKey === key && <span className="text-xs">{sortAsc ? '↑' : '↓'}</span>}
     </button>
   );
+
+  const numCls = billsMode ? 'text-base font-bold tabular-nums sm:text-lg' : 'text-right tabular-nums';
 
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-8" />
-            <TableHead>{t('branch.name')}</TableHead>
-            {emphasize !== 'bills' && (
+            <TableHead className="w-24" />
+            <TableHead className="min-w-[140px]">{t('branch.name')}</TableHead>
+            {!billsMode && (
               <TableHead className="text-right">{sortLabel('revenue', t('branch.revenue'))}</TableHead>
             )}
-            {(compareMode === 'mom' || compareMode === 'both') && emphasize !== 'bills' && (
-              <TableHead className="text-right text-xs">
-                <span className="text-muted-foreground">MoM</span>
+            {!billsMode && showMom && (
+              <TableHead className="text-right text-sm">
+                <span className="text-blue-600">MoM ยอด</span>
               </TableHead>
             )}
-            {(compareMode === 'yoy' || compareMode === 'both') && emphasize !== 'bills' && (
-              <TableHead className="text-right text-xs">
-                <span className="text-amber-700">YoY</span>
+            {!billsMode && showYoy && (
+              <TableHead className="text-right text-sm">
+                <span className="text-amber-700">YoY ยอด</span>
               </TableHead>
             )}
             <TableHead className="text-right">{sortLabel('avgTicket', t('kpi.avgBill'))}</TableHead>
+            {billsMode && showMom && (
+              <TableHead className="text-right text-sm">
+                <span className="text-blue-600">MoM avg</span>
+              </TableHead>
+            )}
+            {billsMode && showYoy && (
+              <TableHead className="text-right text-sm">
+                <span className="text-amber-700">YoY avg</span>
+              </TableHead>
+            )}
             <TableHead className="text-right">{sortLabel('orders', t('kpi.bills'))}</TableHead>
+            {billsMode && showMom && (
+              <TableHead className="text-right text-sm">
+                <span className="text-blue-600">MoM บิล</span>
+              </TableHead>
+            )}
+            {billsMode && showYoy && (
+              <TableHead className="text-right text-sm">
+                <span className="text-amber-700">YoY บิล</span>
+              </TableHead>
+            )}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -98,43 +150,74 @@ export function BranchHealthTable({
                 <BranchStatusDot status={b.status} />
               </TableCell>
               <TableCell>
-                <div className="font-medium leading-tight">{b.name}</div>
-                <div className="text-[11px] text-muted-foreground">{b.shortcode || b.code}</div>
+                <div className="text-sm font-semibold leading-tight sm:text-base">{b.name}</div>
+                <div className="text-xs text-muted-foreground">{b.shortcode || b.code}</div>
               </TableCell>
-              {emphasize !== 'bills' && (
-                <TableCell className="text-right tabular-nums">{baht(b.revenue)}</TableCell>
+              {!billsMode && (
+                <TableCell className={`text-right ${numCls}`}>{baht(b.revenue)}</TableCell>
               )}
-              {(compareMode === 'mom' || compareMode === 'both') && emphasize !== 'bills' && (
+              {!billsMode && showMom && (
                 <TableCell className="text-right">
-                  <div className="text-[11px] tabular-nums text-muted-foreground">{baht(b.prevRevenue)}</div>
-                  <GrowthChip value={b.revenueGrowthPct} />
+                  <CompareCell prevValue={b.prevRevenue} pct={b.revenueGrowthPct} emphasize={billsMode} />
                 </TableCell>
               )}
-              {(compareMode === 'yoy' || compareMode === 'both') && emphasize !== 'bills' && (
+              {!billsMode && showYoy && (
                 <TableCell className="text-right">
-                  {b.yoyReliable ? (
-                    <>
-                      <div className="text-[11px] tabular-nums text-amber-700/80">{baht(b.yoyRevenue)}</div>
-                      <GrowthChip value={b.yoyRevenueGrowthPct} />
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">ไม่มีข้อมูล</span>
-                  )}
+                  <CompareCell
+                    prevValue={b.yoyRevenue}
+                    pct={b.yoyRevenueGrowthPct}
+                    reliable={b.yoyReliable}
+                    emphasize={billsMode}
+                  />
                 </TableCell>
               )}
-              <TableCell className={`text-right tabular-nums ${emphasize === 'bills' ? 'font-semibold' : ''}`}>
+              <TableCell className={`text-right ${numCls} ${billsMode ? 'text-cyan-700' : ''}`}>
                 {baht(b.avgTicket)}
               </TableCell>
-              <TableCell
-                className={`text-right tabular-nums text-xs ${emphasize === 'bills' ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}
-              >
+              {billsMode && showMom && (
+                <TableCell className="text-right">
+                  <CompareCell prevValue={b.prevAvgTicket} pct={b.avgTicketGrowthPct} emphasize />
+                </TableCell>
+              )}
+              {billsMode && showYoy && (
+                <TableCell className="text-right">
+                  <CompareCell
+                    prevValue={b.yoyAvgTicket}
+                    pct={b.yoyAvgTicketGrowthPct}
+                    reliable={b.yoyReliable}
+                    emphasize
+                  />
+                </TableCell>
+              )}
+              <TableCell className={`text-right ${numCls} ${billsMode ? 'text-emerald-700' : 'text-muted-foreground'}`}>
                 {b.orders.toLocaleString('th-TH')}
               </TableCell>
+              {billsMode && showMom && (
+                <TableCell className="text-right">
+                  <CompareCell
+                    prevValue={b.prevOrders}
+                    pct={b.ordersGrowthPct}
+                    formatFn={(v) => v.toLocaleString('th-TH')}
+                    emphasize
+                  />
+                </TableCell>
+              )}
+              {billsMode && showYoy && (
+                <TableCell className="text-right">
+                  <CompareCell
+                    prevValue={b.yoyOrders}
+                    pct={b.yoyOrdersGrowthPct}
+                    formatFn={(v) => v.toLocaleString('th-TH')}
+                    reliable={b.yoyReliable}
+                    emphasize
+                  />
+                </TableCell>
+              )}
             </TableRow>
           ))}
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
                 ไม่มีสาขาในช่วงที่เลือก
               </TableCell>
             </TableRow>

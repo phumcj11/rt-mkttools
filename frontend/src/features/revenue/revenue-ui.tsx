@@ -17,6 +17,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { RevenueTabId } from './revenue-tabs';
+import type { CommandCenterData } from '@/lib/revenue-api';
+import type { CompareMode } from './revenue-constants';
 
 export type TabTone =
   | 'violet'
@@ -243,10 +245,12 @@ export function StatTile({
   icon: Icon,
   tone,
   valueClassName,
+  sub,
 }: {
   label: string;
   value: string | number;
   hint?: string;
+  sub?: React.ReactNode;
   icon: LucideIcon;
   tone: TabTone;
   valueClassName?: string;
@@ -256,11 +260,12 @@ export function StatTile({
     <div className={cn('rounded-xl border p-4 transition-shadow hover:shadow-sm', s.tileBg, s.tileBorder)}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
-          <p className={cn('mt-1 text-2xl font-bold tabular-nums leading-tight', s.tileText, valueClassName)}>
-            {value}
-          </p>
-          {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
+            <p className="text-sm font-medium text-muted-foreground">{label}</p>
+            <p className={cn('mt-1 text-3xl font-bold tabular-nums leading-tight sm:text-4xl', s.tileText, valueClassName)}>
+              {value}
+            </p>
+            {sub && <div className="mt-1.5">{sub}</div>}
+            {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
         </div>
         <IconBox icon={Icon} tone={tone} size="sm" />
       </div>
@@ -332,6 +337,41 @@ export function ChipToggleGroup<T extends string>({
           {opt.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+export function ComparePeriodBar({
+  compareMode,
+  period,
+}: {
+  compareMode: CompareMode;
+  period: CommandCenterData['period'];
+}) {
+  if (compareMode === 'mom') {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs text-blue-900">
+        <span className="font-semibold">MoM</span>
+        <span>MTD {period.mtdFrom}→{period.mtdTo}</span>
+        <span className="text-blue-600">เทียบ</span>
+        <span>{period.prevFrom}→{period.prevTo}</span>
+      </div>
+    );
+  }
+  if (compareMode === 'yoy') {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">
+        <span className="font-semibold">YoY</span>
+        <span>MTD {period.mtdFrom}→{period.mtdTo}</span>
+        <span className="text-amber-700">เทียบ</span>
+        <span>{period.yoyFrom}→{period.yoyTo}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-2 text-xs text-violet-900">
+      <span><strong>MoM:</strong> {period.prevFrom}→{period.prevTo}</span>
+      <span><strong>YoY:</strong> {period.yoyFrom}→{period.yoyTo}</span>
     </div>
   );
 }

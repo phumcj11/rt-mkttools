@@ -278,8 +278,8 @@ export function RevenueCommandCenterView() {
             { label: t('kpi.mtd'), value: `฿${Math.round(data.kpi.mtd.revenue).toLocaleString('th-TH')}`, cls: 'bg-violet-500/20 text-violet-100' },
           ].map((item) => (
             <div key={item.label} className={`rounded-xl px-3 py-2 ${item.cls}`}>
-              <p className="text-[10px] font-medium uppercase tracking-wide opacity-80">{item.label}</p>
-              <p className="mt-0.5 text-sm font-bold tabular-nums">{item.value}</p>
+              <p className="text-xs font-medium opacity-80">{item.label}</p>
+              <p className="mt-0.5 text-base font-bold tabular-nums sm:text-lg">{item.value}</p>
             </div>
           ))}
         </div>

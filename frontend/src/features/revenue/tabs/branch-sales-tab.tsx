@@ -8,7 +8,7 @@ import { BranchDailySalesChart } from '../branch-daily-sales-chart';
 import { pctText } from '../revenue-shared';
 import type { BranchChartPreset, CompareMode } from '../revenue-constants';
 import { BRANCH_CHART_RANGE_OPTIONS } from '../revenue-constants';
-import { ChipToggleGroup, SectionCard, StatTile, TabHero } from '../revenue-ui';
+import { ChipToggleGroup, ComparePeriodBar, SectionCard, StatTile, TabHero } from '../revenue-ui';
 
 interface BranchSalesTabProps {
   data: CommandCenterData;
@@ -34,6 +34,7 @@ export function BranchSalesTab({
   return (
     <div className="space-y-5">
       <TabHero tabId="branch-sales" title={t('tabs.branchSales')} subtitle={t('tabHero.branchSales')} />
+      <ComparePeriodBar compareMode={compareMode} period={data.period} />
       <div className="grid grid-cols-3 gap-3">
         <StatTile tone="emerald" icon={TrendingUp} label={t('branch.green')} value={data.branchHealth.green} valueClassName="text-emerald-600" />
         <StatTile tone="amber" icon={Building2} label={t('branch.yellow')} value={data.branchHealth.yellow} valueClassName="text-amber-600" />

@@ -15,23 +15,24 @@ export function pctText(value: number): string {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-export function GrowthChip({ value }: { value: number | null }) {
-  if (value === null) return <span className="text-xs text-muted-foreground">ไม่มีข้อมูล</span>;
+export function GrowthChip({ value, size = 'sm' }: { value: number | null; size?: 'sm' | 'md' }) {
+  const cls = size === 'md' ? 'text-sm font-semibold' : 'text-xs font-medium';
+  if (value === null) return <span className={`${cls} text-muted-foreground`}>ไม่มีข้อมูล</span>;
   if (value > 0)
     return (
-      <span className="inline-flex items-center gap-0.5 text-xs font-medium text-emerald-600">
-        <TrendingUp className="h-3 w-3" />
+      <span className={`inline-flex items-center gap-0.5 ${cls} text-emerald-600`}>
+        <TrendingUp className={size === 'md' ? 'h-3.5 w-3.5' : 'h-3 w-3'} />
         {pctText(value)}
       </span>
     );
   if (value < 0)
     return (
-      <span className="inline-flex items-center gap-0.5 text-xs font-medium text-red-600">
-        <TrendingDown className="h-3 w-3" />
+      <span className={`inline-flex items-center gap-0.5 ${cls} text-red-600`}>
+        <TrendingDown className={size === 'md' ? 'h-3.5 w-3.5' : 'h-3 w-3'} />
         {pctText(value)}
       </span>
     );
-  return <span className="text-xs text-muted-foreground">—</span>;
+  return <span className={`${cls} text-muted-foreground`}>—</span>;
 }
 
 export function CompareRow({
@@ -124,8 +125,8 @@ export function KpiCard({
       <CardContent className="pt-5 pb-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className={cn('mt-1 text-xl font-bold leading-tight tabular-nums', s?.tileText)}>{value}</p>
+            <p className="text-sm font-medium text-muted-foreground">{label}</p>
+            <p className={cn('mt-1 text-2xl font-bold leading-tight tabular-nums sm:text-3xl', s?.tileText)}>{value}</p>
             {sub && <div className="mt-0.5">{sub}</div>}
           </div>
           <span className={cn(
