@@ -447,6 +447,30 @@
       "growth": "Growth",
       "status": "Status"
     },
+    "branchCards": {
+      "title": "All branches",
+      "subtitle": "MTD sales, status, and AI fix analysis from 3-month data",
+      "analyze": "AI analyze fixes",
+      "decliningHint": "Declining — review and take action"
+    },
+    "branchAi": {
+      "title": "Branch AI analysis",
+      "loading": "Analyzing 3-month data…",
+      "failed": "Analysis failed",
+      "close": "Close",
+      "refresh": "Re-analyze",
+      "heuristic": "Rule-based summary",
+      "threeMonth": "3-month revenue",
+      "monthlyTrend": "Monthly trend",
+      "summary": "Summary",
+      "rootCauses": "Possible root causes",
+      "actions": "Recommended actions",
+      "promotions": "Promotion ideas",
+      "clearance": "Clearance / front-store",
+      "risks": "Risks",
+      "checklist": "7-day checklist",
+      "topProducts": "Top products (3 months)"
+    },
     "diagnosis": {
       "title": "Sales diagnosis",
       "conversion": "Conversion rate"

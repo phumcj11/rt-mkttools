@@ -25,6 +25,7 @@ import type { CommandCenterData } from '@/lib/revenue-api';
 import { baht, CompareRow, DiagnosisIcon, KpiCard, severityClass } from '../revenue-shared';
 import type { CompareMode } from '../revenue-constants';
 import { IconBox, SectionCard, TabHero } from '../revenue-ui';
+import { BranchHealthCardGrid } from '../branch-health-card-grid';
 
 interface OverviewTabProps {
   data: CommandCenterData;
@@ -228,6 +229,8 @@ export function OverviewTab({
           icon={ShoppingCart}
         />
       </div>
+
+      <BranchHealthCardGrid branches={data.branchHealth.branches} compareMode={compareMode} />
 
       {data.kpi.avgBillUpliftNeeded !== null && data.kpi.avgBillUpliftNeeded > 0 && (
         <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 px-4 py-3 shadow-sm">

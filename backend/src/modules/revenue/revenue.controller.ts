@@ -141,6 +141,19 @@ export class RevenueController {
     return this.revenue.setActiveBranchCodes(dto.codes);
   }
 
+  @Get('branch-ai-analysis')
+  branchAiAnalysis(
+    @CurrentUser() user: AuthUser,
+    @Query('branchId') branchId: string,
+    @Query('force') force?: string,
+  ) {
+    return this.revenue.branchAiAnalysis(
+      user.tenantId,
+      parseInt(branchId, 10),
+      isForce(force),
+    );
+  }
+
   @Get('storefront-activities')
   listStorefrontActivities(
     @CurrentUser() user: AuthUser,

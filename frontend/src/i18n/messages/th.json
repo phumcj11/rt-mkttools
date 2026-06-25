@@ -447,6 +447,30 @@
       "growth": "เติบโต",
       "status": "สถานะ"
     },
+    "branchCards": {
+      "title": "สาขาทั้งหมด",
+      "subtitle": "ยอด MTD สถานะ และปุ่ม AI วิเคราะห์ทางแก้จากข้อมูล 3 เดือน",
+      "analyze": "AI วิเคราะห์ทางแก้",
+      "decliningHint": "ยอดตก — ควรวิเคราะห์และลงมือแก้"
+    },
+    "branchAi": {
+      "title": "AI วิเคราะห์สาขา",
+      "loading": "กำลังวิเคราะห์ข้อมูล 3 เดือน…",
+      "failed": "วิเคราะห์ไม่สำเร็จ",
+      "close": "ปิด",
+      "refresh": "วิเคราะห์ใหม่",
+      "heuristic": "สรุปจากกฎ",
+      "threeMonth": "ยอด 3 เดือน",
+      "monthlyTrend": "แนวโน้มรายเดือน",
+      "summary": "สรุป",
+      "rootCauses": "สาเหตุที่เป็นไปได้",
+      "actions": "แนวทางแก้ไข",
+      "promotions": "ไอเดียโปรโมชัน",
+      "clearance": "ระบายสินค้า / จัดหน้าร้าน",
+      "risks": "ความเสี่ยง",
+      "checklist": "Checklist 7 วัน",
+      "topProducts": "สินค้าขายดี 3 เดือน"
+    },
     "diagnosis": {
       "title": "วินิจฉัยยอดขาย",
       "conversion": "Conversion rate"

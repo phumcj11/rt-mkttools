@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -163,6 +163,32 @@ export interface BranchCountryProductsResponse {
   }>;
 }
 
+export interface BranchAiAnalysisResponse {
+  generatedAt: string;
+  branch: { id: number; code: string; shortcode: string; name: string };
+  period: { from: string; to: string };
+  metrics: {
+    mtd: { revenue: number; orders: number; avgTicket: number };
+    threeMonth: { revenue: number; orders: number; avgTicket: number };
+    momRevenueGrowthPct: number;
+    status: BranchHealthStatus;
+    concernScore: number;
+  };
+  monthlyTrend: Array<{ month: string; revenue: number; orders: number }>;
+  topProducts: Array<{ sku: string; name: string; category: string; revenue: number; qtySold: number }>;
+  ai: {
+    available: boolean;
+    source: 'openai' | 'heuristic' | 'none';
+    summary: string;
+    rootCauses: string[];
+    recommendedActions: string[];
+    promotionIdeas: string[];
+    stockClearIdeas: string[];
+    risks: string[];
+    next7DayChecklist: string[];
+  };
+}
+
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? 0));
   return Number.isFinite(n) ? n : 0;
@@ -229,6 +255,11 @@ const branchStatus = (growthPct: number): BranchHealthStatus => {
 @Injectable()
 export class RevenueService {
   private readonly logger = new Logger(RevenueService.name);
+  private readonly branchAiCache = new Map<
+    string,
+    { result: BranchAiAnalysisResponse; expiry: number }
+  >();
+  private readonly BRANCH_AI_TTL_MS = 20 * 60 * 1000;
 
   constructor(
     private readonly erp: ErpService,
@@ -1671,5 +1702,291 @@ export class RevenueService {
       createdBy: userId ?? null,
     });
     return this.activityRepo.save(row);
+  }
+
+  async branchAiAnalysis(
+    tenantId: number,
+    branchId: number,
+    force = false,
+  ): Promise<BranchAiAnalysisResponse> {
+    const cacheKey = `${tenantId}:${branchId}`;
+    if (!force) {
+      const cached = this.branchAiCache.get(cacheKey);
+      if (cached && Date.now() <= cached.expiry) return cached.result;
+    }
+
+    const erpBranches = await this.erp.branches(force);
+    const branch = erpBranches.find((b) => b.id === branchId);
+    if (!branch) throw new NotFoundException(`Branch ${branchId} not found`);
+
+    const today = new Date();
+    const toStr = fmt(today);
+    const rangeStart = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+    const fromStr = fmt(rangeStart);
+
+    const mtd = this.mtdRange();
+    const prev = this.prevMonthSamePeriod();
+
+    const [
+      monthlyTrend,
+      threeMonthSummary,
+      topProducts,
+      mtdBranchList,
+      prevBranchList,
+    ] = await Promise.all([
+      this.erp.timeseries(fromStr, toStr, 'month', branchId, force),
+      this.erp.salesSummary(fromStr, toStr, branchId, force),
+      this.erp.topProducts(fromStr, toStr, 8, branchId, force),
+      this.erp.salesByBranch(mtd.from, mtd.to, force),
+      this.erp.salesByBranch(prev.from, prev.to, force),
+    ]);
+
+    const mtdBranch = mtdBranchList.find((b) => b.id === branchId);
+    const prevBranch = prevBranchList.find((b) => b.id === branchId);
+    const mtdRevenue = mtdBranch?.revenue ?? 0;
+    const mtdOrders = mtdBranch?.orders ?? 0;
+    const mtdAvg = mtdBranch?.avgTicket ?? (mtdOrders > 0 ? mtdRevenue / mtdOrders : 0);
+    const prevRevenue = prevBranch?.revenue ?? 0;
+    const prevOrders = prevBranch?.orders ?? 0;
+    const momGrowth = pctChange(mtdRevenue, prevRevenue);
+    const ordGrowth = pctChange(mtdOrders, prevOrders);
+    const status = branchStatus(momGrowth);
+    const concernScore =
+      Math.max(0, -(momGrowth ?? 0)) * 2 + Math.max(0, -(ordGrowth ?? 0));
+
+    const facts = {
+      branch: {
+        id: branch.id,
+        code: branch.code,
+        shortcode: branch.shortcode || branch.code,
+        name: branch.name,
+      },
+      period: { from: fromStr, to: toStr },
+      mtd: {
+        revenue: Math.round(mtdRevenue),
+        orders: mtdOrders,
+        avgTicket: Math.round(mtdAvg),
+        momRevenueGrowthPct: momGrowth,
+        momOrdersGrowthPct: ordGrowth,
+        status,
+        concernScore,
+      },
+      threeMonth: {
+        revenue: Math.round(threeMonthSummary.revenue),
+        orders: threeMonthSummary.orders,
+        avgTicket: Math.round(threeMonthSummary.avgTicket),
+      },
+      monthlyTrend: monthlyTrend.map((p) => ({
+        month: p.date,
+        revenue: Math.round(p.revenue),
+        orders: p.orders,
+      })),
+      topProducts: topProducts.slice(0, 6).map((p) => ({
+        sku: p.sku,
+        name: p.name,
+        category: p.category,
+        revenue: Math.round(p.revenue),
+        qtySold: p.qtySold,
+      })),
+    };
+
+    const ai = await this.buildBranchAiAnalysis(facts);
+
+    const result: BranchAiAnalysisResponse = {
+      generatedAt: new Date().toISOString(),
+      branch: {
+        id: branch.id,
+        code: branch.code,
+        shortcode: branch.shortcode || branch.code,
+        name: branch.name,
+      },
+      period: { from: fromStr, to: toStr },
+      metrics: {
+        mtd: {
+          revenue: Math.round(mtdRevenue),
+          orders: mtdOrders,
+          avgTicket: Math.round(mtdAvg),
+        },
+        threeMonth: {
+          revenue: Math.round(threeMonthSummary.revenue),
+          orders: threeMonthSummary.orders,
+          avgTicket: Math.round(threeMonthSummary.avgTicket),
+        },
+        momRevenueGrowthPct: momGrowth,
+        status,
+        concernScore,
+      },
+      monthlyTrend: facts.monthlyTrend,
+      topProducts: facts.topProducts,
+      ai,
+    };
+
+    this.branchAiCache.set(cacheKey, {
+      result,
+      expiry: Date.now() + this.BRANCH_AI_TTL_MS,
+    });
+    return result;
+  }
+
+  private async buildBranchAiAnalysis(facts: {
+    branch: { shortcode: string; name: string };
+    mtd: {
+      revenue: number;
+      orders: number;
+      avgTicket: number;
+      momRevenueGrowthPct: number;
+      momOrdersGrowthPct: number;
+      status: BranchHealthStatus;
+    };
+    threeMonth: { revenue: number; orders: number; avgTicket: number };
+    monthlyTrend: Array<{ month: string; revenue: number; orders: number }>;
+    topProducts: Array<{ name: string; sku: string; category: string; revenue: number; qtySold: number }>;
+  }): Promise<BranchAiAnalysisResponse['ai']> {
+    const emptyAi = (): BranchAiAnalysisResponse['ai'] => ({
+      available: false,
+      source: 'none',
+      summary: 'ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์',
+      rootCauses: [],
+      recommendedActions: [],
+      promotionIdeas: [],
+      stockClearIdeas: [],
+      risks: [],
+      next7DayChecklist: [],
+    });
+
+    if (facts.mtd.revenue <= 0 && facts.threeMonth.revenue <= 0) {
+      return emptyAi();
+    }
+
+    const systemPrompt =
+      'You are a retail revenue analyst for 100 Baht Shop branches in Thailand. ' +
+      'Analyze ONLY the provided facts (3-month branch sales). Reply in Thai with valid JSON only, no markdown. ' +
+      'Schema: {"summary":"string","rootCauses":["string"],"recommendedActions":["string"],' +
+      '"promotionIdeas":["string"],"stockClearIdeas":["string"],"risks":["string"],"next7DayChecklist":["string"]}. ' +
+      'Focus on practical fixes: promotions, clearance/stock rotation, front-store display, traffic conversion, avg bill uplift. ' +
+      'Each array should have 2-4 concise actionable items.';
+
+    if (this.openai.isConfigured()) {
+      try {
+        const result = await this.openai.complete(systemPrompt, JSON.stringify(facts));
+        const parsed = this.parseBranchAiJson(result.content);
+        if (parsed) {
+          return { available: true, source: 'openai', ...parsed };
+        }
+      } catch (err) {
+        this.logger.warn(`Branch AI analysis failed: ${(err as Error).message}`);
+      }
+    }
+
+    return this.heuristicBranchAi(facts);
+  }
+
+  private parseBranchAiJson(content: string): Omit<BranchAiAnalysisResponse['ai'], 'available' | 'source'> | null {
+    if (!content?.trim()) return null;
+    try {
+      const cleaned = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      const obj = JSON.parse(cleaned) as Record<string, unknown>;
+      const asStrings = (v: unknown): string[] =>
+        Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : [];
+      return {
+        summary: String(obj.summary ?? '').trim() || 'สรุปจากข้อมูลยอดขาย 3 เดือน',
+        rootCauses: asStrings(obj.rootCauses),
+        recommendedActions: asStrings(obj.recommendedActions),
+        promotionIdeas: asStrings(obj.promotionIdeas),
+        stockClearIdeas: asStrings(obj.stockClearIdeas),
+        risks: asStrings(obj.risks),
+        next7DayChecklist: asStrings(obj.next7DayChecklist),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private heuristicBranchAi(facts: {
+    branch: { shortcode: string; name: string };
+    mtd: {
+      revenue: number;
+      orders: number;
+      avgTicket: number;
+      momRevenueGrowthPct: number;
+      momOrdersGrowthPct: number;
+      status: BranchHealthStatus;
+    };
+    threeMonth: { revenue: number; avgTicket: number };
+    monthlyTrend: Array<{ month: string; revenue: number }>;
+    topProducts: Array<{ name: string; category: string; revenue: number }>;
+  }): BranchAiAnalysisResponse['ai'] {
+    const { mtd, branch, topProducts } = facts;
+    const rootCauses: string[] = [];
+    const recommendedActions: string[] = [];
+    const promotionIdeas: string[] = [];
+    const stockClearIdeas: string[] = [];
+    const risks: string[] = [];
+    const next7DayChecklist: string[] = [];
+
+    if (mtd.momRevenueGrowthPct < -5) {
+      rootCauses.push(`ยอด MTD ลด ${Math.abs(mtd.momRevenueGrowthPct).toFixed(1)}% เทียบเดือนก่อน`);
+      recommendedActions.push('จัดโปรโมชันหน้าร้าน 3-7 วันเพื่อดึง traffic และบิล');
+      promotionIdeas.push('Bundle 2 ชิ้น ราคาพิเศษใกล้ avg bill ปัจจุบัน');
+      risks.push('ยอดตกต่อเนื่องถ้าไม่มี action ภายใน 7 วัน');
+    } else if (mtd.status === 'yellow') {
+      rootCauses.push('ยอดทรงตัว ไม่โตตามเป้า');
+      recommendedActions.push('ทดลอง cross-sell สินค้าขายดีคู่กับสินค้า margin สูง');
+    } else {
+      rootCauses.push('ยอดยังอยู่ในเกณฑ์ดี — โฟกัสรักษา momentum');
+      recommendedActions.push('ขยาย front-store ด้วยสินค้าขายดี 3 อันดับแรก');
+    }
+
+    if (mtd.momOrdersGrowthPct < mtd.momRevenueGrowthPct - 3) {
+      rootCauses.push('จำนวนบิลลดมากกว่ายอดขาย — อาจมีปัญหา traffic/conversion');
+      recommendedActions.push('เพิ่มป้ายโปรหน้าร้านและตรวจ conversion รายวัน');
+      next7DayChecklist.push('บันทึก foot traffic และบิลรายวัน 7 วัน');
+    }
+
+    if (mtd.avgTicket < facts.threeMonth.avgTicket * 0.95) {
+      rootCauses.push('ค่าเฉลี่ย/บิลต่ำกว่าค่าเฉลี่ย 3 เดือน');
+      promotionIdeas.push('โปร "ซื้อเพิ่ม X บาท ลด Y%" เพื่อดัน avg bill');
+    }
+
+    const top = topProducts[0];
+    if (top) {
+      recommendedActions.push(`จัดหน้าร้านเน้น ${top.name} (${top.category})`);
+      stockClearIdeas.push(`ระบายสินค้าหมวดอื่นที่ขายช้า โดย bundle กับ ${top.name}`);
+    } else {
+      stockClearIdeas.push('ตรวจ slow-moving SKU และจัดโปร clearance สัปดาห์นี้');
+    }
+
+    if (facts.monthlyTrend.length >= 2) {
+      const last = facts.monthlyTrend[facts.monthlyTrend.length - 1]?.revenue ?? 0;
+      const prev = facts.monthlyTrend[facts.monthlyTrend.length - 2]?.revenue ?? 0;
+      if (prev > 0 && last < prev * 0.9) {
+        risks.push('แนวโน้มรายเดือนลดลง — ต้องเร่ง action ทันที');
+      }
+    }
+
+    next7DayChecklist.push(
+      `สรุปยอด ${branch.shortcode} ทุกเช้าและเทียบ MoM`,
+      'ถ่ายรูปหน้าร้านหลังจัดโปร/สินค้า',
+      'รายงานผลโปรที่รันกลับทีมการตลาด',
+    );
+
+    const summary =
+      mtd.status === 'red'
+        ? `สาขา ${branch.shortcode} ยอดตก MoM ${mtd.momRevenueGrowthPct.toFixed(1)}% — ควรเร่งโปรและระบายสินค้าภายใน 7 วัน`
+        : mtd.status === 'yellow'
+          ? `สาขา ${branch.shortcode} ยอดทรงตัว — โอกาสดันด้วยโปรและ avg bill`
+          : `สาขา ${branch.shortcode} ยังแข็งแรง — รักษา momentum และขยายสินค้าขายดี`;
+
+    return {
+      available: true,
+      source: 'heuristic',
+      summary,
+      rootCauses: rootCauses.slice(0, 4),
+      recommendedActions: recommendedActions.slice(0, 4),
+      promotionIdeas: promotionIdeas.slice(0, 4),
+      stockClearIdeas: stockClearIdeas.slice(0, 4),
+      risks: risks.slice(0, 3),
+      next7DayChecklist: next7DayChecklist.slice(0, 5),
+    };
   }
 }

@@ -420,3 +420,35 @@ export function createStorefrontActivity(body: {
     body,
   });
 }
+
+export interface BranchAiAnalysisData {
+  generatedAt: string;
+  branch: { id: number; code: string; shortcode: string; name: string };
+  period: { from: string; to: string };
+  metrics: {
+    mtd: { revenue: number; orders: number; avgTicket: number };
+    threeMonth: { revenue: number; orders: number; avgTicket: number };
+    momRevenueGrowthPct: number;
+    status: BranchHealthStatus;
+    concernScore: number;
+  };
+  monthlyTrend: Array<{ month: string; revenue: number; orders: number }>;
+  topProducts: Array<{ sku: string; name: string; category: string; revenue: number; qtySold: number }>;
+  ai: {
+    available: boolean;
+    source: 'openai' | 'heuristic' | 'none';
+    summary: string;
+    rootCauses: string[];
+    recommendedActions: string[];
+    promotionIdeas: string[];
+    stockClearIdeas: string[];
+    risks: string[];
+    next7DayChecklist: string[];
+  };
+}
+
+export function getBranchAiAnalysis(branchId: number, opts?: { force?: boolean }) {
+  const params = new URLSearchParams({ branchId: String(branchId) });
+  if (opts?.force) params.set('force', 'true');
+  return apiRequest<BranchAiAnalysisData>(`/revenue/branch-ai-analysis?${params.toString()}`);
+}
