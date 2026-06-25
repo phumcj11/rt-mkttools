@@ -1748,11 +1748,25 @@ export class RevenueService {
     const mtdAvg = mtdBranch?.avgTicket ?? (mtdOrders > 0 ? mtdRevenue / mtdOrders : 0);
     const prevRevenue = prevBranch?.revenue ?? 0;
     const prevOrders = prevBranch?.orders ?? 0;
+    const prevAvg = prevBranch?.avgTicket ?? 0;
     const momGrowth = pctChange(mtdRevenue, prevRevenue);
     const ordGrowth = pctChange(mtdOrders, prevOrders);
+    const momAvgGrowth = pctChange(mtdAvg, prevAvg);
+    const avgVsThreeMonth = pctChange(mtdAvg, threeMonthSummary.avgTicket);
     const status = branchStatus(momGrowth);
     const concernScore =
       Math.max(0, -(momGrowth ?? 0)) * 2 + Math.max(0, -(ordGrowth ?? 0));
+
+    const monthlyPoints = monthlyTrend.map((p) => ({
+      month: p.date,
+      revenue: Math.round(p.revenue),
+      orders: p.orders,
+    }));
+    const monthOverMonthChanges = monthlyPoints.map((p, i) => {
+      if (i === 0) return null;
+      const prevRev = monthlyPoints[i - 1]!.revenue;
+      return prevRev > 0 ? pctChangeOrNull(p.revenue, prevRev) : null;
+    });
 
     const facts = {
       branch: {
@@ -1768,19 +1782,23 @@ export class RevenueService {
         avgTicket: Math.round(mtdAvg),
         momRevenueGrowthPct: momGrowth,
         momOrdersGrowthPct: ordGrowth,
+        momAvgTicketGrowthPct: momAvgGrowth,
+        avgTicketVsThreeMonthPct: avgVsThreeMonth,
         status,
         concernScore,
+      },
+      prevPeriod: {
+        revenue: Math.round(prevRevenue),
+        orders: prevOrders,
+        avgTicket: Math.round(prevAvg),
       },
       threeMonth: {
         revenue: Math.round(threeMonthSummary.revenue),
         orders: threeMonthSummary.orders,
         avgTicket: Math.round(threeMonthSummary.avgTicket),
       },
-      monthlyTrend: monthlyTrend.map((p) => ({
-        month: p.date,
-        revenue: Math.round(p.revenue),
-        orders: p.orders,
-      })),
+      monthlyTrend: monthlyPoints,
+      monthOverMonthChanges,
       topProducts: topProducts.slice(0, 6).map((p) => ({
         sku: p.sku,
         name: p.name,
@@ -1836,10 +1854,14 @@ export class RevenueService {
       avgTicket: number;
       momRevenueGrowthPct: number;
       momOrdersGrowthPct: number;
+      momAvgTicketGrowthPct: number;
+      avgTicketVsThreeMonthPct: number;
       status: BranchHealthStatus;
     };
+    prevPeriod: { revenue: number; orders: number; avgTicket: number };
     threeMonth: { revenue: number; orders: number; avgTicket: number };
     monthlyTrend: Array<{ month: string; revenue: number; orders: number }>;
+    monthOverMonthChanges: Array<number | null>;
     topProducts: Array<{ name: string; sku: string; category: string; revenue: number; qtySold: number }>;
   }): Promise<BranchAiAnalysisResponse['ai']> {
     const emptyAi = (): BranchAiAnalysisResponse['ai'] => ({
@@ -1863,8 +1885,10 @@ export class RevenueService {
       'Analyze ONLY the provided facts (3-month branch sales). Reply in Thai with valid JSON only, no markdown. ' +
       'Schema: {"summary":"string","rootCauses":["string"],"recommendedActions":["string"],' +
       '"promotionIdeas":["string"],"stockClearIdeas":["string"],"risks":["string"],"next7DayChecklist":["string"]}. ' +
+      'Use monthOverMonthChanges and momAvgTicketGrowthPct to explain whether the drop is traffic (orders) or basket size (avg ticket). ' +
+      'Reference topProducts by name when suggesting promos or clearance. ' +
       'Focus on practical fixes: promotions, clearance/stock rotation, front-store display, traffic conversion, avg bill uplift. ' +
-      'Each array should have 2-4 concise actionable items.';
+      'Each array should have 3-5 concise actionable items in Thai.';
 
     if (this.openai.isConfigured()) {
       try {
@@ -1910,10 +1934,13 @@ export class RevenueService {
       avgTicket: number;
       momRevenueGrowthPct: number;
       momOrdersGrowthPct: number;
+      momAvgTicketGrowthPct: number;
+      avgTicketVsThreeMonthPct: number;
       status: BranchHealthStatus;
     };
     threeMonth: { revenue: number; avgTicket: number };
     monthlyTrend: Array<{ month: string; revenue: number }>;
+    monthOverMonthChanges: Array<number | null>;
     topProducts: Array<{ name: string; category: string; revenue: number }>;
   }): BranchAiAnalysisResponse['ai'] {
     const { mtd, branch, topProducts } = facts;
@@ -1943,7 +1970,18 @@ export class RevenueService {
       next7DayChecklist.push('บันทึก foot traffic และบิลรายวัน 7 วัน');
     }
 
-    if (mtd.avgTicket < facts.threeMonth.avgTicket * 0.95) {
+    if (mtd.momAvgTicketGrowthPct < -3) {
+      rootCauses.push(`ค่าเฉลี่ย/บิลลด ${Math.abs(mtd.momAvgTicketGrowthPct).toFixed(1)}% — ลูกค้าซื้อน้อยลงต่อบิล`);
+      promotionIdeas.push('โปร "ซื้อเพิ่ม X บาท ลด Y%" หรือ bundle 2 ชิ้น');
+    }
+
+    const lastMonthChange = facts.monthOverMonthChanges[facts.monthOverMonthChanges.length - 1];
+    if (lastMonthChange !== null && lastMonthChange < -10) {
+      rootCauses.push(`เดือนล่าสุดลด ${Math.abs(lastMonthChange).toFixed(1)}% จากเดือนก่อน`);
+      risks.push('แนวโน้มรายเดือนยังลง — ต้อง action ภายใน 7 วัน');
+    }
+
+    if (mtd.avgTicketVsThreeMonthPct < -5) {
       rootCauses.push('ค่าเฉลี่ย/บิลต่ำกว่าค่าเฉลี่ย 3 เดือน');
       promotionIdeas.push('โปร "ซื้อเพิ่ม X บาท ลด Y%" เพื่อดัน avg bill');
     }

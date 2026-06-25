@@ -460,6 +460,7 @@
       "close": "Close",
       "refresh": "Re-analyze",
       "heuristic": "Rule-based summary",
+      "periodRange": "Analysis period",
       "threeMonth": "3-month revenue",
       "monthlyTrend": "Monthly trend",
       "summary": "Summary",

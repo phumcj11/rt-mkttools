@@ -460,6 +460,7 @@
       "close": "ปิด",
       "refresh": "วิเคราะห์ใหม่",
       "heuristic": "สรุปจากกฎ",
+      "periodRange": "ช่วงวิเคราะห์",
       "threeMonth": "ยอด 3 เดือน",
       "monthlyTrend": "แนวโน้มรายเดือน",
       "summary": "สรุป",
