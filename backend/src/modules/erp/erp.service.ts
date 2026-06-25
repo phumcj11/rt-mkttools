@@ -42,6 +42,29 @@ export interface ErpReceiptLineRow {
   revenue: number;
 }
 
+export interface ErpBranchCountryRow {
+  branchId: number;
+  branchCode: string;
+  shortcode: string;
+  branchName: string;
+  country: string;
+  orders: number;
+  revenue: number;
+  avgTicket: number;
+}
+
+export interface ErpCountryCategoryRow {
+  country: string;
+  branchId: number;
+  branchCode: string;
+  sku: string;
+  productName: string;
+  category: string;
+  qty: number;
+  revenue: number;
+  orders: number;
+}
+
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? 0));
   return Number.isFinite(n) ? n : 0;
@@ -202,12 +225,248 @@ export class ErpService {
     }));
   }
 
+  private normalizeCountryRow(r: Record<string, unknown>): ErpCountrySalesRow | null {
+    const country = str(
+      r.country,
+      r.country_name,
+      r.customer_country,
+      r.client_country,
+      r.nationality,
+      r.nationality_name,
+      r.nation,
+    );
+    if (!country) return null;
+    const orders = num(r.orders ?? r.bill_count ?? r.receipts ?? r.transactions ?? r.bills);
+    const revenue = num(r.revenue ?? r.amount ?? r.total_amount ?? r.net_sales ?? r.sales);
+    if (revenue <= 0 && orders <= 0) return null;
+    return {
+      country,
+      orders,
+      revenue,
+      avgTicket: num(r.avg_ticket ?? (orders > 0 ? revenue / orders : 0)),
+      customers: num(r.customers ?? r.customer_count),
+    };
+  }
+
+  private flattenErpRows(raw: unknown): Record<string, unknown>[] {
+    if (Array.isArray(raw)) return raw as Record<string, unknown>[];
+    if (raw && typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      for (const key of ['countries', 'rows', 'items', 'data', 'by_country', 'summary']) {
+        if (Array.isArray(obj[key])) return obj[key] as Record<string, unknown>[];
+      }
+      return [obj];
+    }
+    return [];
+  }
+
+  async touristByCountry(
+    from: string,
+    to: string,
+    limit = 30,
+    force = false,
+  ): Promise<ErpProbeResult<ErpCountrySalesRow>> {
+    const candidates = [
+      { resource: 'tourist', action: 'by_country', params: { from, to, limit } as Query },
+      { resource: 'tourist', action: 'summary', params: { from, to, limit } as Query },
+    ];
+
+    for (const { resource, action, params } of candidates) {
+      try {
+        const raw = await this.call<unknown>(resource, action, params, force, TTL_SALES);
+        const rows = this.flattenErpRows(raw)
+          .map((r) => this.normalizeCountryRow(r))
+          .filter((r): r is ErpCountrySalesRow => r !== null)
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, limit);
+
+        return {
+          supported: true,
+          source: `${resource}/${action}`,
+          data: rows,
+          missingFields: rows.length ? [] : ['country', 'revenue'],
+          message: rows.length ? null : 'ERP tourist endpoint exists but returned no country rows',
+        };
+      } catch {
+        // try next
+      }
+    }
+
+    return {
+      supported: false,
+      source: null,
+      data: [],
+      missingFields: ['tourist_by_country'],
+      message: 'ERP tourist/by_country not available',
+    };
+  }
+
+  async touristByBranchCountry(
+    from: string,
+    to: string,
+    branchId?: number,
+    force = false,
+  ): Promise<ErpProbeResult<ErpBranchCountryRow>> {
+    const q: Query = { from, to, limit: 500 };
+    if (branchId) q.branch_id = branchId;
+
+    const candidates = branchId
+      ? [
+          { resource: 'tourist', action: 'summary', params: { ...q } },
+          { resource: 'tourist', action: 'by_country', params: { ...q } },
+        ]
+      : [
+          { resource: 'tourist', action: 'by_branch_country', params: { ...q } },
+          { resource: 'tourist', action: 'summary', params: { ...q } },
+        ];
+
+    for (const { resource, action, params } of candidates) {
+      try {
+        const raw = await this.call<unknown>(resource, action, params, force, TTL_SALES);
+        const rows = this.flattenErpRows(raw)
+          .map((r) => {
+            const country = str(
+              r.country,
+              r.country_name,
+              r.customer_country,
+              r.client_country,
+              r.nationality,
+              r.nationality_name,
+            );
+            const bid = num(r.branch_id ?? r.branchId);
+            const bcode = str(r.branch_code, r.branch_shortcode, r.shortcode, r.branch);
+            const orders = num(r.orders ?? r.bill_count ?? r.receipts ?? r.transactions);
+            const revenue = num(r.revenue ?? r.amount ?? r.total_amount ?? r.net_sales);
+            if (!country || (revenue <= 0 && orders <= 0)) return null;
+            if (branchId && bid > 0 && bid !== branchId) return null;
+            return {
+              branchId: bid,
+              branchCode: bcode,
+              shortcode: bcode,
+              branchName: str(r.branch_name, r.name),
+              country,
+              orders,
+              revenue,
+              avgTicket: num(r.avg_ticket ?? (orders > 0 ? revenue / orders : 0)),
+            } satisfies ErpBranchCountryRow;
+          })
+          .filter((r): r is ErpBranchCountryRow => r !== null);
+
+        if (rows.length === 0) {
+          return {
+            supported: true,
+            source: `${resource}/${action}`,
+            data: [],
+            missingFields: ['branch_id', 'country', 'revenue'],
+            message: 'ERP tourist endpoint exists but returned no branch-country rows',
+          };
+        }
+
+        return {
+          supported: true,
+          source: `${resource}/${action}`,
+          data: rows,
+          missingFields: [],
+          message: null,
+        };
+      } catch {
+        // try next
+      }
+    }
+
+    return {
+      supported: false,
+      source: null,
+      data: [],
+      missingFields: ['tourist_by_branch_country'],
+      message: 'ERP tourist/by_branch_country not available',
+    };
+  }
+
+  async touristByCountryCategory(
+    from: string,
+    to: string,
+    country: string,
+    branchId?: number,
+    force = false,
+  ): Promise<ErpProbeResult<ErpCountryCategoryRow>> {
+    const q: Query = { from, to, country, limit: 100 };
+    if (branchId) q.branch_id = branchId;
+
+    const candidates = [
+      { resource: 'tourist', action: 'by_country_category', params: q },
+      { resource: 'tourist', action: 'summary', params: { ...q, group: 'category' } },
+    ];
+
+    for (const { resource, action, params } of candidates) {
+      try {
+        const raw = await this.call<unknown>(resource, action, params, force, TTL_SALES);
+        const requestedCountry = country.trim().toLowerCase();
+        const rows = this.flattenErpRows(raw)
+          .map((r) => {
+            const rowCountry = str(
+              r.country,
+              r.country_name,
+              r.customer_country,
+              r.client_country,
+              r.nationality,
+            );
+            const bid = num(r.branch_id ?? r.branchId);
+            const sku = str(r.sku, r.product_sku, r.product_code, r.item_code, r.category);
+            const productName = str(r.product_name, r.name, r.item_name, r.category_name, sku);
+            const qty = num(r.qty ?? r.quantity ?? r.qty_sold);
+            const revenue = num(r.revenue ?? r.amount ?? r.total_amount ?? r.net_sales);
+            const orders = num(r.orders ?? r.bill_count ?? r.receipts);
+            if (revenue <= 0 && qty <= 0) return null;
+            if (requestedCountry && rowCountry && rowCountry.toLowerCase() !== requestedCountry) {
+              if (!rowCountry.toLowerCase().includes(requestedCountry)) return null;
+            }
+            if (branchId && bid > 0 && bid !== branchId) return null;
+            return {
+              country: rowCountry || country,
+              branchId: bid,
+              branchCode: str(r.branch_code, r.branch_shortcode, r.shortcode),
+              sku,
+              productName,
+              category: str(r.category, r.category_name),
+              qty,
+              revenue,
+              orders,
+            } satisfies ErpCountryCategoryRow;
+          })
+          .filter((r): r is ErpCountryCategoryRow => r !== null)
+          .sort((a, b) => b.revenue - a.revenue);
+
+        return {
+          supported: true,
+          source: `${resource}/${action}`,
+          data: rows,
+          missingFields: rows.length ? [] : ['sku', 'revenue'],
+          message: rows.length ? null : 'ERP tourist by_country_category returned no product rows',
+        };
+      } catch {
+        // try next
+      }
+    }
+
+    return {
+      supported: false,
+      source: null,
+      data: [],
+      missingFields: ['tourist_by_country_category'],
+      message: 'ERP tourist/by_country_category not available',
+    };
+  }
+
   async customerCountrySales(
     from: string,
     to: string,
     limit = 30,
     force = false,
   ): Promise<ErpProbeResult<ErpCountrySalesRow>> {
+    const tourist = await this.touristByCountry(from, to, limit, force);
+    if (tourist.supported && tourist.data.length > 0) return tourist;
+
     const candidates = [
       ['customers', 'by_country'],
       ['customers', 'country_summary'],
@@ -221,26 +480,8 @@ export class ErpService {
       try {
         const raw = await this.call<any[]>(resource, action, { from, to, limit }, force, TTL_SALES);
         const rows = (raw ?? [])
-          .map((r) => {
-            const country = str(
-              r.country,
-              r.country_name,
-              r.customer_country,
-              r.nationality,
-              r.nationality_name,
-              r.nation,
-            );
-            const orders = num(r.orders ?? r.bill_count ?? r.receipts ?? r.transactions);
-            const revenue = num(r.revenue ?? r.amount ?? r.total_amount ?? r.net_sales);
-            return {
-              country,
-              orders,
-              revenue,
-              avgTicket: num(r.avg_ticket ?? (orders > 0 ? revenue / orders : 0)),
-              customers: num(r.customers ?? r.customer_count),
-            };
-          })
-          .filter((r) => r.country && (r.revenue > 0 || r.orders > 0))
+          .map((r) => this.normalizeCountryRow(r))
+          .filter((r): r is ErpCountrySalesRow => r !== null)
           .sort((a, b) => b.revenue - a.revenue)
           .slice(0, limit);
 
@@ -256,6 +497,8 @@ export class ErpService {
       }
     }
 
+    if (tourist.supported) return tourist;
+
     return {
       supported: false,
       source: null,
@@ -268,12 +511,13 @@ export class ErpService {
   async receiptLines(
     from: string,
     to: string,
-    params: { country?: string; limit?: number } = {},
+    params: { country?: string; branchId?: number; limit?: number } = {},
     force = false,
   ): Promise<ErpProbeResult<ErpReceiptLineRow>> {
     const limit = params.limit ?? 5000;
     const q: Query = { from, to, limit };
     if (params.country) q.country = params.country;
+    if (params.branchId) q.branch_id = params.branchId;
 
     const candidates = [
       ['sales', 'receipt_lines'],
@@ -304,7 +548,12 @@ export class ErpService {
           .filter((r) => r.receiptNo && r.sku)
           .filter((r) => {
             if (!requestedCountry) return true;
-            return r.customerCountry.trim().toLowerCase() === requestedCountry;
+            const c = r.customerCountry.trim().toLowerCase();
+            return c === requestedCountry || c.includes(requestedCountry);
+          })
+          .filter((r) => {
+            if (!params.branchId) return true;
+            return r.branchId === params.branchId;
           })
           .slice(0, limit);
 

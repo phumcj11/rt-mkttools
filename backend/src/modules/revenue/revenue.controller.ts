@@ -53,6 +53,34 @@ export class RevenueController {
     return this.revenue.countryAnalytics(user.tenantId, from, to, country ?? 'Thailand', isForce(force));
   }
 
+  @Get('branch-country-analytics')
+  branchCountryAnalytics(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('branchId') branchId?: string,
+    @Query('force') force?: string,
+  ) {
+    const bid = branchId ? parseInt(branchId, 10) : undefined;
+    return this.revenue.branchCountryAnalytics(from, to, bid, isForce(force));
+  }
+
+  @Get('branch-country-products')
+  branchCountryProducts(
+    @Query('branchId') branchId: string,
+    @Query('country') country: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('force') force?: string,
+  ) {
+    return this.revenue.branchCountryProducts(
+      parseInt(branchId, 10),
+      country,
+      from,
+      to,
+      isForce(force),
+    );
+  }
+
   @Get('targets')
   listTargets(
     @CurrentUser() user: AuthUser,

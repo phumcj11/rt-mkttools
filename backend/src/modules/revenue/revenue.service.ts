@@ -115,6 +115,51 @@ export interface CountryAnalyticsResponse {
   };
 }
 
+export interface BranchCountryAnalyticsResponse {
+  generatedAt: string;
+  period: { from: string; to: string };
+  dataQuality: {
+    reliable: boolean;
+    source: string | null;
+    warnings: string[];
+  };
+  branches: Array<{
+    id: number;
+    code: string;
+    shortcode: string;
+    name: string;
+    totalRevenue: number;
+    topCountries: Array<{
+      rank: number;
+      country: string;
+      revenue: number;
+      orders: number;
+      revenueSharePct: number;
+    }>;
+  }>;
+}
+
+export interface BranchCountryProductsResponse {
+  generatedAt: string;
+  period: { from: string; to: string };
+  branchId: number;
+  branchCode: string;
+  country: string;
+  dataQuality: {
+    reliable: boolean;
+    source: string | null;
+    warnings: string[];
+  };
+  products: Array<{
+    sku: string;
+    name: string;
+    category: string;
+    qty: number;
+    revenue: number;
+    orders: number;
+  }>;
+}
+
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? 0));
   return Number.isFinite(n) ? n : 0;
@@ -843,20 +888,23 @@ export class RevenueService {
     const range = { from: from || mtd.from, to: to || mtd.to };
     const selectedCountry = country?.trim() || 'Thailand';
 
-    const [countryProbe, receiptProbe] = await Promise.all([
+    const [countryProbe, receiptAllProbe, receiptCountryProbe] = await Promise.all([
       this.erp.customerCountrySales(range.from, range.to, 30, force),
+      this.erp.receiptLines(range.from, range.to, { limit: 5000 }, force),
       this.erp.receiptLines(range.from, range.to, { country: selectedCountry, limit: 5000 }, force),
     ]);
 
     const warnings: string[] = [];
     const missingFields = new Set<string>([
       ...countryProbe.missingFields,
-      ...receiptProbe.missingFields,
+      ...receiptAllProbe.missingFields,
+      ...receiptCountryProbe.missingFields,
     ]);
     if (countryProbe.message) warnings.push(countryProbe.message);
-    if (receiptProbe.message) warnings.push(receiptProbe.message);
+    if (receiptAllProbe.message && !receiptCountryProbe.supported) warnings.push(receiptAllProbe.message);
+    if (receiptCountryProbe.message) warnings.push(receiptCountryProbe.message);
 
-    const lineCountries = this.countrySummaryFromReceiptLines(receiptProbe.data);
+    const lineCountries = this.countrySummaryFromReceiptLines(receiptAllProbe.data);
     const rawCountries = countryProbe.data.length > 0 ? countryProbe.data : lineCountries;
     const totalRevenue = rawCountries.reduce((s, r) => s + r.revenue, 0);
     const countries = rawCountries
@@ -872,7 +920,7 @@ export class RevenueService {
       countries.find((r) => r.country.toLowerCase().includes(selectedCountryLower)) ??
       null;
 
-    const lines = receiptProbe.data;
+    const lines = receiptCountryProbe.data;
     const topProducts = this.topProductsFromReceiptLines(lines);
     const basketPairs = this.basketPairsFromReceiptLines(lines);
     const receiptCount = new Set(lines.map((l) => l.receiptNo)).size;
@@ -887,15 +935,20 @@ export class RevenueService {
       receiptCount,
     };
 
-    const reliable = countryProbe.supported || receiptProbe.supported;
-    if (!countryProbe.supported && !receiptProbe.supported) {
+    const reliable =
+      countryProbe.supported ||
+      receiptCountryProbe.supported ||
+      (receiptAllProbe.supported && lineCountries.length > 0);
+    if (!countryProbe.supported && !receiptCountryProbe.supported && !receiptAllProbe.supported) {
       warnings.push(
         'ต้องมี ERP endpoint สำหรับประเทศลูกค้าและรายการสินค้าในบิลเดียวกันก่อน จึงจะวิเคราะห์ได้แม่นยำ',
       );
-    } else if (!receiptProbe.supported) {
+    } else if (!receiptCountryProbe.supported) {
       warnings.push('ยังวิเคราะห์สินค้าซื้อคู่กันไม่ได้ เพราะ ERP ไม่คืนรายการสินค้าในบิลเดียวกัน');
-    } else if (!countryProbe.supported) {
+    } else if (!countryProbe.supported && lineCountries.length > 0) {
       warnings.push('Country leaderboard คำนวณจาก receipt lines เท่านั้น เพราะ ERP ไม่มี endpoint สรุปประเทศโดยตรง');
+    } else if (!countryProbe.supported) {
+      warnings.push('Country leaderboard อาจไม่ครบ — ลองใช้ tourist API หรือ sync receipt lines');
     }
 
     const aiSummary = await this.buildCountryAiSummary({
@@ -914,7 +967,7 @@ export class RevenueService {
       dataQuality: {
         reliable,
         countrySource: countryProbe.source,
-        receiptLineSource: receiptProbe.source,
+        receiptLineSource: receiptCountryProbe.source ?? receiptAllProbe.source,
         missingFields: [...missingFields],
         warnings: [...new Set(warnings)],
       },
@@ -924,6 +977,247 @@ export class RevenueService {
       basketPairs,
       aiSummary,
     };
+  }
+
+  async branchCountryAnalytics(
+    from?: string,
+    to?: string,
+    branchId?: number,
+    force = false,
+  ): Promise<BranchCountryAnalyticsResponse> {
+    const mtd = this.mtdRange();
+    const range = { from: from || mtd.from, to: to || mtd.to };
+    const activeCodes = await this.getActiveBranchCodes();
+    const activeSet = new Set(activeCodes);
+    const erpBranches = await this.erp.branches(force);
+    let activeBranches = erpBranches
+      .filter((b) => branchMatchesActive(b, activeSet))
+      .sort((a, b) => (a.shortcode || a.code).localeCompare(b.shortcode || b.code, 'th'));
+
+    if (branchId) {
+      activeBranches = activeBranches.filter((b) => b.id === branchId);
+    }
+
+    const warnings: string[] = [];
+    let source: string | null = null;
+    let reliable = false;
+
+    const branchCountryMap = new Map<
+      number,
+      Map<string, { country: string; revenue: number; orders: number }>
+    >();
+
+    const mergeRow = (
+      bid: number,
+      bcode: string,
+      countryName: string,
+      revenue: number,
+      orders: number,
+    ) => {
+      let resolvedId = bid;
+      if (resolvedId <= 0 && bcode) {
+        const upper = bcode.trim().toUpperCase();
+        const match = erpBranches.find(
+          (b) => b.shortcode.toUpperCase() === upper || b.code.toUpperCase() === upper,
+        );
+        if (match) resolvedId = match.id;
+      }
+      if (resolvedId <= 0) return;
+      this.mergeBranchCountryRow(branchCountryMap, resolvedId, countryName, revenue, orders);
+    };
+
+    const bulkProbe = await this.erp.touristByBranchCountry(range.from, range.to, undefined, force);
+    if (bulkProbe.supported && bulkProbe.data.length > 0) {
+      source = bulkProbe.source;
+      reliable = true;
+      for (const row of bulkProbe.data) {
+        mergeRow(row.branchId, row.branchCode, row.country, row.revenue, row.orders);
+      }
+    } else if (bulkProbe.message) {
+      warnings.push(bulkProbe.message);
+    }
+
+    if (branchCountryMap.size === 0) {
+      const perBranch = await Promise.all(
+        activeBranches.map(async (b) => {
+          const probe = await this.erp.touristByBranchCountry(range.from, range.to, b.id, force);
+          return { branch: b, probe };
+        }),
+      );
+      const withData = perBranch.filter((r) => r.probe.supported && r.probe.data.length > 0);
+      if (withData.length > 0) {
+        source = withData[0].probe.source;
+        reliable = true;
+        for (const { branch, probe } of withData) {
+          for (const row of probe.data) {
+            mergeRow(branch.id, branch.shortcode || branch.code, row.country, row.revenue, row.orders);
+          }
+        }
+      } else {
+        warnings.push('ERP tourist API ไม่คืนข้อมูลรายสาขา — ลอง aggregate จาก receipt lines');
+      }
+    }
+
+    if (branchCountryMap.size === 0) {
+      const receiptProbe = await this.erp.receiptLines(range.from, range.to, { limit: 5000 }, force);
+      if (receiptProbe.supported && receiptProbe.data.length > 0) {
+        source = receiptProbe.source;
+        reliable = true;
+        warnings.push('ใช้ receipt lines เป็น fallback — อาจไม่ครบทุกบิล (limit 5,000)');
+        for (const line of receiptProbe.data) {
+          const countryName = line.customerCountry || 'ไม่ระบุประเทศ';
+          mergeRow(line.branchId, line.branchCode, countryName, line.revenue, 0);
+        }
+      } else if (receiptProbe.message) {
+        warnings.push(receiptProbe.message);
+      }
+    }
+
+    const branches = activeBranches.map((b) => {
+      const countryMap = branchCountryMap.get(b.id);
+      const countries = countryMap
+        ? [...countryMap.values()].sort((a, c) => c.revenue - a.revenue).slice(0, 3)
+        : [];
+
+      const totalRevenue = countryMap
+        ? [...countryMap.values()].reduce((s, r) => s + r.revenue, 0)
+        : 0;
+
+      return {
+        id: b.id,
+        code: b.code,
+        shortcode: b.shortcode || b.code,
+        name: b.name,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        topCountries: countries.map((c, i) => ({
+          rank: i + 1,
+          country: c.country,
+          revenue: Math.round(c.revenue * 100) / 100,
+          orders: c.orders,
+          revenueSharePct:
+            totalRevenue > 0 ? Math.round((c.revenue / totalRevenue) * 1000) / 10 : 0,
+        })),
+      };
+    });
+
+    if (!reliable) {
+      warnings.push('ยังไม่มีข้อมูลประเทศลูกค้ารายสาขาจาก ERP — ตรวจว่า tourist API เปิดใช้งานแล้ว');
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      period: range,
+      dataQuality: {
+        reliable,
+        source,
+        warnings: [...new Set(warnings)],
+      },
+      branches,
+    };
+  }
+
+  async branchCountryProducts(
+    branchId: number,
+    country: string,
+    from?: string,
+    to?: string,
+    force = false,
+  ): Promise<BranchCountryProductsResponse> {
+    const mtd = this.mtdRange();
+    const range = { from: from || mtd.from, to: to || mtd.to };
+    const selectedCountry = country?.trim() || 'Thailand';
+    const warnings: string[] = [];
+
+    const erpBranches = await this.erp.branches(force);
+    const branch = erpBranches.find((b) => b.id === branchId);
+    const branchCode = branch?.shortcode || branch?.code || '';
+
+    const categoryProbe = await this.erp.touristByCountryCategory(
+      range.from,
+      range.to,
+      selectedCountry,
+      branchId,
+      force,
+    );
+
+    let products: BranchCountryProductsResponse['products'] = [];
+    let source: string | null = null;
+    let reliable = false;
+
+    if (categoryProbe.supported && categoryProbe.data.length > 0) {
+      source = categoryProbe.source;
+      reliable = true;
+      products = categoryProbe.data
+        .map((r) => ({
+          sku: r.sku,
+          name: r.productName || r.sku,
+          category: r.category,
+          qty: Math.round(r.qty * 100) / 100,
+          revenue: Math.round(r.revenue * 100) / 100,
+          orders: r.orders,
+        }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 15);
+    } else if (categoryProbe.message) {
+      warnings.push(categoryProbe.message);
+    }
+
+    if (products.length === 0) {
+      const receiptProbe = await this.erp.receiptLines(range.from, range.to, {
+        country: selectedCountry,
+        branchId,
+        limit: 5000,
+      }, force);
+
+      if (receiptProbe.supported && receiptProbe.data.length > 0) {
+        source = receiptProbe.source;
+        reliable = true;
+        warnings.push('ใช้ receipt lines เป็น fallback สำหรับสินค้ารายประเทศ/สาขา');
+        products = this.topProductsFromReceiptLines(receiptProbe.data).map((p) => ({
+          sku: p.sku,
+          name: p.name,
+          category: p.category,
+          qty: p.qty,
+          revenue: p.revenue,
+          orders: p.receiptCount,
+        }));
+      } else if (receiptProbe.message) {
+        warnings.push(receiptProbe.message);
+      }
+    }
+
+    if (!reliable) {
+      warnings.push(`ไม่พบสินค้าขายดีของ ${selectedCountry} ที่สาขา ${branchCode || branchId}`);
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      period: range,
+      branchId,
+      branchCode,
+      country: selectedCountry,
+      dataQuality: {
+        reliable,
+        source,
+        warnings: [...new Set(warnings)],
+      },
+      products,
+    };
+  }
+
+  private mergeBranchCountryRow(
+    map: Map<number, Map<string, { country: string; revenue: number; orders: number }>>,
+    branchId: number,
+    country: string,
+    revenue: number,
+    orders: number,
+  ) {
+    const countryMap = map.get(branchId) ?? new Map();
+    const existing = countryMap.get(country) ?? { country, revenue: 0, orders: 0 };
+    existing.revenue += revenue;
+    existing.orders += orders;
+    countryMap.set(country, existing);
+    map.set(branchId, countryMap);
   }
 
   private countrySummaryFromReceiptLines(lines: Array<{

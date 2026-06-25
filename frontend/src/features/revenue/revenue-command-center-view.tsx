@@ -61,6 +61,7 @@ import {
   type CountryAnalyticsData,
 } from '@/lib/revenue-api';
 import { BranchDailySalesChart } from './branch-daily-sales-chart';
+import { BranchCountryAnalyticsSection } from './branch-country-analytics';
 import { showError, showSuccess } from '@/lib/sweetalert';
 
 function baht(value: number): string {
@@ -887,6 +888,22 @@ export function RevenueCommandCenterView() {
             <p className="mb-3 text-sm text-destructive">{branchChartError}</p>
           )}
           <BranchDailySalesChart data={branchChartData} loading={branchChartLoading} />
+        </CardContent>
+      </Card>
+
+      {/* ── Branch Country Analytics ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Globe2 className="h-4 w-4 text-muted-foreground" />
+            {t('branchCountry.title')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <BranchCountryAnalyticsSection
+            subtitle={t('branchCountry.subtitle')}
+            failedMessage={t('branchCountry.failed')}
+          />
         </CardContent>
       </Card>
 

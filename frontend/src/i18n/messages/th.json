@@ -459,6 +459,11 @@
       "subtitle": "กราฟรายวันแต่ละสาขา — hover เพื่อดูยอด (ข้อมูลจาก ERP timeseries)",
       "failed": "โหลดกราฟสาขาไม่สำเร็จ"
     },
+    "branchCountry": {
+      "title": "ประเทศลูกค้ารายสาขา",
+      "subtitle": "Top 3 ประเทศต่อสาขา — คลิกประเทศเพื่อดูสินค้าขายดี (ข้อมูลจาก ERP tourist API)",
+      "failed": "โหลดข้อมูลประเทศรายสาขาไม่สำเร็จ"
+    },
     "products": {
       "top": "Top Products",
       "slow": "Slow Moving / Clearance",

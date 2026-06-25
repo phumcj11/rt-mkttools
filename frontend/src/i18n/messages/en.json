@@ -459,6 +459,11 @@
       "subtitle": "Daily revenue per branch — hover for values (ERP timeseries)",
       "failed": "Failed to load branch chart"
     },
+    "branchCountry": {
+      "title": "Customer country by branch",
+      "subtitle": "Top 3 countries per branch — click a country for top products (ERP tourist API)",
+      "failed": "Failed to load branch country analytics"
+    },
     "products": {
       "top": "Top products",
       "slow": "Slow moving / clearance",

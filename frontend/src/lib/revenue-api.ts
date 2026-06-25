@@ -263,6 +263,82 @@ export function getCountryAnalytics(opts?: {
   return apiRequest<CountryAnalyticsData>(`/revenue/country-analytics${q ? `?${q}` : ''}`);
 }
 
+export interface BranchCountryAnalyticsData {
+  generatedAt: string;
+  period: { from: string; to: string };
+  dataQuality: {
+    reliable: boolean;
+    source: string | null;
+    warnings: string[];
+  };
+  branches: Array<{
+    id: number;
+    code: string;
+    shortcode: string;
+    name: string;
+    totalRevenue: number;
+    topCountries: Array<{
+      rank: number;
+      country: string;
+      revenue: number;
+      orders: number;
+      revenueSharePct: number;
+    }>;
+  }>;
+}
+
+export interface BranchCountryProductsData {
+  generatedAt: string;
+  period: { from: string; to: string };
+  branchId: number;
+  branchCode: string;
+  country: string;
+  dataQuality: {
+    reliable: boolean;
+    source: string | null;
+    warnings: string[];
+  };
+  products: Array<{
+    sku: string;
+    name: string;
+    category: string;
+    qty: number;
+    revenue: number;
+    orders: number;
+  }>;
+}
+
+export function getBranchCountryAnalytics(opts?: {
+  from?: string;
+  to?: string;
+  branchId?: number;
+  force?: boolean;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.from) params.set('from', opts.from);
+  if (opts?.to) params.set('to', opts.to);
+  if (opts?.branchId) params.set('branchId', String(opts.branchId));
+  if (opts?.force) params.set('force', 'true');
+  const q = params.toString();
+  return apiRequest<BranchCountryAnalyticsData>(`/revenue/branch-country-analytics${q ? `?${q}` : ''}`);
+}
+
+export function getBranchCountryProducts(opts: {
+  branchId: number;
+  country: string;
+  from?: string;
+  to?: string;
+  force?: boolean;
+}) {
+  const params = new URLSearchParams();
+  params.set('branchId', String(opts.branchId));
+  params.set('country', opts.country);
+  if (opts.from) params.set('from', opts.from);
+  if (opts.to) params.set('to', opts.to);
+  if (opts.force) params.set('force', 'true');
+  return apiRequest<BranchCountryProductsData>(`/revenue/branch-country-products?${params.toString()}`);
+}
+
 export function getSalesTargets(yearMonth?: string) {
   const q = yearMonth ? `?yearMonth=${encodeURIComponent(yearMonth)}` : '';
   return apiRequest<SalesTargetRow[]>(`/revenue/targets${q}`);
