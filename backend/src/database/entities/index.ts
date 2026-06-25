@@ -43,3 +43,4 @@ export * from './sign-template.entity';
 export * from './sales-target.entity';
 export * from './branch-traffic-daily.entity';
 export * from './branch-customer-mix-daily.entity';
+export * from './branch-storefront-activity.entity';

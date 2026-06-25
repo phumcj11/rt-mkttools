@@ -20,6 +20,24 @@ export interface ReviewStats {
   unreplied: number;
 }
 
+export interface ReviewStatsByBranchData {
+  period: { from: string | null; to: string | null };
+  totals: {
+    total: number;
+    avgRating: number;
+    negative: number;
+    unreplied: number;
+    unassignedCount: number;
+  };
+  branches: Array<{
+    branchId: number | null;
+    total: number;
+    avgRating: number;
+    negative: number;
+    unreplied: number;
+  }>;
+}
+
 export interface GoogleConnectionStatus {
   credentialsConfigured: boolean;
   connected: boolean;
@@ -41,6 +59,14 @@ export function listReviews(branchId?: number) {
 
 export function getReviewStats() {
   return apiRequest<ReviewStats>('/reviews/stats');
+}
+
+export function getReviewStatsByBranch(opts?: { from?: string; to?: string }) {
+  const params = new URLSearchParams();
+  if (opts?.from) params.set('from', opts.from);
+  if (opts?.to) params.set('to', opts.to);
+  const q = params.toString();
+  return apiRequest<ReviewStatsByBranchData>(`/reviews/stats-by-branch${q ? `?${q}` : ''}`);
 }
 
 export function createReview(dto: Partial<GoogleReview> & { rating: number }) {

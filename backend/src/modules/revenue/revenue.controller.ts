@@ -13,6 +13,7 @@ import {
   BulkUpsertCustomerMixDto,
   BulkUpsertTargetsDto,
   BulkUpsertTrafficDto,
+  CreateStorefrontActivityDto,
   UpdateActiveBranchesDto,
 } from './dto/revenue.dto';
 import { RevenueService } from './revenue.service';
@@ -138,5 +139,34 @@ export class RevenueController {
   @Roles('super_admin', 'admin', 'marketing_manager')
   updateActiveBranches(@Body() dto: UpdateActiveBranchesDto) {
     return this.revenue.setActiveBranchCodes(dto.codes);
+  }
+
+  @Get('storefront-activities')
+  listStorefrontActivities(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    const bid = branchId ? parseInt(branchId, 10) : undefined;
+    return this.revenue.listStorefrontActivities(user.tenantId, from, to, bid);
+  }
+
+  @Get('storefront-activities/summary')
+  storefrontActivitySummary(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.revenue.storefrontActivitySummary(user.tenantId, from, to);
+  }
+
+  @Post('storefront-activities')
+  @Roles('super_admin', 'admin', 'marketing_manager', 'marketing_staff', 'branch_manager')
+  createStorefrontActivity(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateStorefrontActivityDto,
+  ) {
+    return this.revenue.createStorefrontActivity(user.tenantId, user.id, dto);
   }
 }

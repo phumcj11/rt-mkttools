@@ -118,8 +118,18 @@ export interface CommandCenterData {
   };
   billNearPromo: {
     available: boolean;
-    message: string;
-    buckets: Array<{ label: string; count: number }>;
+    message: string | null;
+    source: string | null;
+    totalBills: number;
+    buckets: Array<{ id: string; label: string; count: number }>;
+    branches: Array<{
+      id: number;
+      code: string;
+      shortcode: string;
+      name: string;
+      total: number;
+      buckets: Array<{ id: string; label: string; count: number }>;
+    }>;
   };
   activeBranchCodes: string[];
   activeBranches: Array<{
@@ -367,4 +377,46 @@ export function upsertTraffic(entries: TrafficEntryInput[]) {
 
 export function upsertCustomerMix(entries: CustomerMixEntryInput[]) {
   return apiRequest<unknown>('/revenue/customer-mix', { method: 'POST', body: { entries } });
+}
+
+export interface StorefrontActivityRow {
+  id: number;
+  tenantId: number;
+  branchId: number;
+  branchCode: string | null;
+  activityDate: string;
+  title: string;
+  description: string | null;
+  photoUrls: string[] | null;
+  createdBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function listStorefrontActivities(opts?: {
+  from?: string;
+  to?: string;
+  branchId?: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.from) params.set('from', opts.from);
+  if (opts?.to) params.set('to', opts.to);
+  if (opts?.branchId) params.set('branchId', String(opts.branchId));
+  const q = params.toString();
+  return apiRequest<StorefrontActivityRow[]>(`/revenue/storefront-activities${q ? `?${q}` : ''}`);
+}
+
+export function createStorefrontActivity(body: {
+  branchId: number;
+  branchCode?: string | null;
+  activityDate: string;
+  title: string;
+  description?: string | null;
+  photoUrls?: string[];
+  photoDataUrls?: string[];
+}) {
+  return apiRequest<StorefrontActivityRow>('/revenue/storefront-activities', {
+    method: 'POST',
+    body,
+  });
 }

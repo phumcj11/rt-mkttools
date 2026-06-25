@@ -32,6 +32,15 @@ export class ReviewsController {
     return this.reviewsService.getStats(user.tenantId);
   }
 
+  @Get('stats-by-branch')
+  getStatsByBranch(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.reviewsService.getStatsByBranch(user.tenantId, from, to);
+  }
+
   @Get()
   findAll(@CurrentUser() user: AuthUser, @Query('branchId') branchId?: string) {
     return this.reviewsService.findAll(user.tenantId, branchId ? Number(branchId) : undefined);

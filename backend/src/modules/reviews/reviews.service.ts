@@ -106,6 +106,65 @@ export class ReviewsService {
     return { total, avgRating: Math.round(avg * 10) / 10, negative, unreplied };
   }
 
+  async getStatsByBranch(tenantId: number, from?: string, to?: string) {
+    const qb = this.repo
+      .createQueryBuilder('r')
+      .select('r.branch_id', 'branchId')
+      .addSelect('COUNT(*)', 'total')
+      .addSelect('AVG(r.rating)', 'avgRating')
+      .addSelect(
+        "SUM(CASE WHEN r.sentiment = 'negative' THEN 1 ELSE 0 END)",
+        'negative',
+      )
+      .addSelect(
+        "SUM(CASE WHEN r.replied_at IS NULL AND (r.sentiment IS NULL OR r.sentiment != 'positive') THEN 1 ELSE 0 END)",
+        'unreplied',
+      )
+      .where('r.tenant_id = :tenantId', { tenantId })
+      .groupBy('r.branch_id');
+
+    if (from) qb.andWhere('r.review_date >= :from', { from });
+    if (to) qb.andWhere('r.review_date <= :to', { to });
+
+    const rows = await qb.getRawMany<{
+      branchId: string | null;
+      total: string;
+      avgRating: string;
+      negative: string;
+      unreplied: string;
+    }>();
+
+    const branches = rows.map((r) => ({
+      branchId: r.branchId ? Number(r.branchId) : null,
+      total: Number(r.total),
+      avgRating: Math.round(Number(r.avgRating) * 10) / 10,
+      negative: Number(r.negative),
+      unreplied: Number(r.unreplied),
+    }));
+
+    const unassigned = branches.find((b) => b.branchId === null);
+    const assigned = branches
+      .filter((b) => b.branchId !== null)
+      .sort((a, b) => b.total - a.total);
+
+    const totals = {
+      total: branches.reduce((s, b) => s + b.total, 0),
+      avgRating:
+        branches.length > 0
+          ? Math.round(
+              (branches.reduce((s, b) => s + b.avgRating * b.total, 0) /
+                Math.max(1, branches.reduce((s, b) => s + b.total, 0))) *
+                10,
+            ) / 10
+          : 0,
+      negative: branches.reduce((s, b) => s + b.negative, 0),
+      unreplied: branches.reduce((s, b) => s + b.unreplied, 0),
+      unassignedCount: unassigned?.total ?? 0,
+    };
+
+    return { period: { from: from ?? null, to: to ?? null }, totals, branches: assigned };
+  }
+
   // ─── Google Business Profile OAuth ────────────────────────────────────────
 
   /** คืนสถานะการเชื่อมต่อ GBP ปัจจุบัน */

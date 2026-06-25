@@ -65,6 +65,13 @@ export interface ErpCountryCategoryRow {
   orders: number;
 }
 
+export interface ErpBillTransactionRow {
+  branchId: number;
+  branchCode: string;
+  amount: number;
+  receiptNo: string;
+}
+
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? 0));
   return Number.isFinite(n) ? n : 0;
@@ -1150,6 +1157,91 @@ export class ErpService {
         : null,
       promotions,
     };
+  }
+
+  /** Promo-threshold bill buckets (near 899 / 999 / 3999 campaigns) */
+  static readonly PROMO_BILL_BUCKETS = [
+    { id: 'near899', label: '฿800–898', min: 800, max: 898 },
+    { id: 'near999', label: '฿900–998', min: 900, max: 998 },
+    { id: 'near3999', label: '฿3,500–3,998', min: 3500, max: 3998 },
+  ] as const;
+
+  static classifyPromoBillBucket(amount: number): string | null {
+    for (const b of ErpService.PROMO_BILL_BUCKETS) {
+      if (amount >= b.min && amount <= b.max) return b.id;
+    }
+    return null;
+  }
+
+  /** Probe ERP for per-receipt / per-bill amounts to classify promo buckets */
+  async salesTransactions(
+    from: string,
+    to: string,
+    branchId?: number,
+    force = false,
+  ): Promise<ErpProbeResult<ErpBillTransactionRow>> {
+    const q: Query = { from, to, limit: 50_000 };
+    if (branchId) q.branch_id = branchId;
+
+    const candidates = [
+      { resource: 'sales', action: 'transactions', params: { ...q } },
+      { resource: 'sales', action: 'high_value_bills', params: { ...q } },
+      { resource: 'sales', action: 'receipts', params: { ...q } },
+    ];
+
+    for (const { resource, action, params } of candidates) {
+      try {
+        const raw = await this.call<unknown>(resource, action, params, force, TTL_SALES);
+        const rows = this.flattenErpRows(raw)
+          .map((r) => this.normalizeBillTransactionRow(r))
+          .filter((r): r is ErpBillTransactionRow => r !== null);
+
+        return {
+          supported: true,
+          source: `${resource}/${action}`,
+          data: rows,
+          missingFields: rows.length ? [] : ['branch_id', 'amount'],
+          message: rows.length
+            ? null
+            : `ERP ${resource}/${action} exists but returned no bill rows`,
+        };
+      } catch {
+        // try next candidate
+      }
+    }
+
+    return {
+      supported: false,
+      source: null,
+      data: [],
+      missingFields: ['sales_transactions'],
+      message: 'ERP sales/transactions not available — sync bill-level data in ERP first',
+    };
+  }
+
+  private normalizeBillTransactionRow(r: Record<string, unknown>): ErpBillTransactionRow | null {
+    const amount = num(
+      r.amount ??
+        r.total_amount ??
+        r.net_amount ??
+        r.grand_total ??
+        r.bill_amount ??
+        r.revenue ??
+        r.total,
+    );
+    const branchId = num(r.branch_id ?? r.branchId);
+    const branchCode = str(r.branch_code, r.branch_shortcode, r.shortcode, r.branch);
+    const receiptNo = str(
+      r.receipt_no,
+      r.receipt,
+      r.invoice_no,
+      r.bill_no,
+      r.order_no,
+      r.doc_no,
+      r.transaction_no,
+    );
+    if (amount <= 0) return null;
+    return { branchId, branchCode, amount, receiptNo };
   }
 
   /** Aggregates category-level performance from topProducts */

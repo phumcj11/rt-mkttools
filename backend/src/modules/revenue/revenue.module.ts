@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   BranchCustomerMixDaily,
+  BranchStorefrontActivity,
   BranchTrafficDaily,
   ErpProductCache,
   ErpSalesSummary,
@@ -22,6 +23,7 @@ import { RevenueService } from './revenue.service';
       SalesTarget,
       BranchTrafficDaily,
       BranchCustomerMixDaily,
+      BranchStorefrontActivity,
       ErpProductCache,
       ErpSalesSummary,
     ]),

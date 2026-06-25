@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   BranchCustomerMixDaily,
+  BranchStorefrontActivity,
   BranchTrafficDaily,
   ErpProductCache,
   ErpSalesSummary,
@@ -242,7 +245,11 @@ export class RevenueService {
     private readonly productCacheRepo: Repository<ErpProductCache>,
     @InjectRepository(ErpSalesSummary)
     private readonly salesCacheRepo: Repository<ErpSalesSummary>,
+    @InjectRepository(BranchStorefrontActivity)
+    private readonly activityRepo: Repository<BranchStorefrontActivity>,
   ) {}
+
+  private readonly activityUploadDir = path.join(process.cwd(), 'uploads', 'revenue', 'activities');
 
   private mtdRange(): { from: string; to: string } {
     const to = new Date();
@@ -498,6 +505,7 @@ export class RevenueService {
 
     const trafficSummary = this.summarizeTraffic(trafficRows, mtd.from, mtd.to);
     const customerMixSummary = this.summarizeCustomerMix(mixRows, mtd.from, mtd.to);
+    const billNearPromo = await this.buildBillNearPromo(mtd.from, mtd.to, branches, force);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -579,12 +587,7 @@ export class RevenueService {
       timeseries,
       traffic: trafficSummary,
       customerMix: customerMixSummary,
-      billNearPromo: {
-        available: false,
-        message:
-          'ต้องมีข้อมูลรายบิลจาก ERP (bucket เช่น 800-898, 900-998) — ยังไม่เชื่อม endpoint',
-        buckets: [] as Array<{ label: string; count: number }>,
-      },
+      billNearPromo,
       activeBranchCodes: activeCodes,
       activeBranches,
     };
@@ -1501,5 +1504,172 @@ export class RevenueService {
       saved.push(await this.mixRepo.save(row));
     }
     return saved;
+  }
+
+  private async buildBillNearPromo(
+    from: string,
+    to: string,
+    branches: BranchHealthRow[],
+    force: boolean,
+  ) {
+    const probe = await this.erp.salesTransactions(from, to, undefined, force);
+    const bucketDefs = ErpService.PROMO_BILL_BUCKETS;
+
+    if (!probe.supported) {
+      return {
+        available: false,
+        source: probe.source,
+        message: probe.message ?? 'ต้องมีข้อมูลรายบิลจาก ERP — ยังไม่เชื่อม endpoint',
+        buckets: bucketDefs.map((b) => ({ id: b.id, label: b.label, count: 0 })),
+        branches: branches.map((b) => ({
+          id: b.id,
+          code: b.code,
+          shortcode: b.shortcode,
+          name: b.name,
+          buckets: bucketDefs.map((bd) => ({ id: bd.id, label: bd.label, count: 0 })),
+          total: 0,
+        })),
+        totalBills: 0,
+      };
+    }
+
+    const bucketTotals = new Map<string, number>();
+    const branchBucketMap = new Map<number, Map<string, number>>();
+
+    for (const row of probe.data) {
+      const bucketId = ErpService.classifyPromoBillBucket(row.amount);
+      if (!bucketId) continue;
+      bucketTotals.set(bucketId, (bucketTotals.get(bucketId) ?? 0) + 1);
+      const bid = row.branchId;
+      const bmap = branchBucketMap.get(bid) ?? new Map<string, number>();
+      bmap.set(bucketId, (bmap.get(bucketId) ?? 0) + 1);
+      branchBucketMap.set(bid, bmap);
+    }
+
+    const totalBills = [...bucketTotals.values()].reduce((s, n) => s + n, 0);
+    const buckets = bucketDefs.map((b) => ({
+      id: b.id,
+      label: b.label,
+      count: bucketTotals.get(b.id) ?? 0,
+    }));
+
+    const branchRows = branches.map((b) => {
+      const bmap = branchBucketMap.get(b.id);
+      const rowBuckets = bucketDefs.map((bd) => ({
+        id: bd.id,
+        label: bd.label,
+        count: bmap?.get(bd.id) ?? 0,
+      }));
+      return {
+        id: b.id,
+        code: b.code,
+        shortcode: b.shortcode,
+        name: b.name,
+        buckets: rowBuckets,
+        total: rowBuckets.reduce((s, x) => s + x.count, 0),
+      };
+    });
+
+    return {
+      available: totalBills > 0,
+      source: probe.source,
+      message:
+        totalBills > 0
+          ? null
+          : probe.message ??
+            'ERP คืนข้อมูลบิลแล้ว แต่ไม่พบบิลในช่วง bucket 800–898 / 900–998 / 3,500–3,998',
+      buckets,
+      branches: branchRows,
+      totalBills,
+    };
+  }
+
+  async listStorefrontActivities(
+    tenantId: number,
+    from?: string,
+    to?: string,
+    branchId?: number,
+  ) {
+    const qb = this.activityRepo
+      .createQueryBuilder('a')
+      .where('a.tenant_id = :tenantId', { tenantId })
+      .orderBy('a.activity_date', 'DESC')
+      .addOrderBy('a.id', 'DESC');
+    if (from) qb.andWhere('a.activity_date >= :from', { from });
+    if (to) qb.andWhere('a.activity_date <= :to', { to });
+    if (branchId) qb.andWhere('a.branch_id = :branchId', { branchId });
+    return qb.take(200).getMany();
+  }
+
+  async storefrontActivitySummary(tenantId: number, from?: string, to?: string) {
+    const qb = this.activityRepo
+      .createQueryBuilder('a')
+      .select('a.branch_id', 'branchId')
+      .addSelect('a.branch_code', 'branchCode')
+      .addSelect('COUNT(*)', 'activityCount')
+      .addSelect('MAX(a.activity_date)', 'lastActivityDate')
+      .where('a.tenant_id = :tenantId', { tenantId })
+      .groupBy('a.branch_id')
+      .addGroupBy('a.branch_code');
+    if (from) qb.andWhere('a.activity_date >= :from', { from });
+    if (to) qb.andWhere('a.activity_date <= :to', { to });
+    const rows = await qb.getRawMany<{
+      branchId: string;
+      branchCode: string | null;
+      activityCount: string;
+      lastActivityDate: string;
+    }>();
+    return rows.map((r) => ({
+      branchId: Number(r.branchId),
+      branchCode: r.branchCode,
+      activityCount: Number(r.activityCount),
+      lastActivityDate: r.lastActivityDate,
+    }));
+  }
+
+  private saveActivityPhotos(photoDataUrls: string[]): string[] {
+    if (!photoDataUrls.length) return [];
+    fs.mkdirSync(this.activityUploadDir, { recursive: true });
+    const urls: string[] = [];
+    for (const dataUrl of photoDataUrls) {
+      const match = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+      if (!match) continue;
+      const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+      const filename = `activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const full = path.join(this.activityUploadDir, filename);
+      fs.writeFileSync(full, Buffer.from(match[2], 'base64'));
+      urls.push(`/uploads/revenue/activities/${filename}`);
+    }
+    return urls;
+  }
+
+  async createStorefrontActivity(
+    tenantId: number,
+    userId: number | undefined,
+    dto: {
+      branchId: number;
+      branchCode?: string | null;
+      activityDate: string;
+      title: string;
+      description?: string | null;
+      photoUrls?: string[] | null;
+      photoDataUrls?: string[] | null;
+    },
+  ) {
+    const uploaded = dto.photoDataUrls?.length
+      ? this.saveActivityPhotos(dto.photoDataUrls)
+      : [];
+    const photoUrls = [...(dto.photoUrls ?? []), ...uploaded];
+    const row = this.activityRepo.create({
+      tenantId,
+      branchId: dto.branchId,
+      branchCode: dto.branchCode ?? null,
+      activityDate: dto.activityDate,
+      title: dto.title,
+      description: dto.description ?? null,
+      photoUrls: photoUrls.length ? photoUrls : null,
+      createdBy: userId ?? null,
+    });
+    return this.activityRepo.save(row);
   }
 }

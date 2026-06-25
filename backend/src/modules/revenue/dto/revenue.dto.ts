@@ -134,3 +134,34 @@ export class UpdateActiveBranchesDto {
   @IsString({ each: true })
   codes: string[];
 }
+
+export class CreateStorefrontActivityDto {
+  @IsInt()
+  branchId: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  branchCode?: string | null;
+
+  @IsDateString()
+  activityDate: string;
+
+  @IsString()
+  @MaxLength(255)
+  title: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  photoUrls?: string[] | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  photoDataUrls?: string[] | null;
+}
