@@ -143,22 +143,34 @@ export class SystemSettingsController {
   @Get('drive')
   async getDriveSettings() {
     const folderId = (await this.svc.get('google_drive_folder_id')) ?? '';
+    const posFolderId = (await this.svc.get('google_pos_sales_folder_id')) ?? '';
     const saJson   = (await this.svc.get('google_service_account_json')) ?? '';
-    const configured = folderId.length > 0 && saJson.length > 20;
+    const saReady = saJson.length > 20;
+    const configured = folderId.length > 0 && saReady;
     return {
       drive_configured: configured,
       drive_folder_id_preview: folderId ? `...${folderId.slice(-8)}` : null,
-      drive_service_account_set: saJson.length > 20,
+      drive_service_account_set: saReady,
+      pos_drive_configured: posFolderId.length > 0 && saReady,
+      pos_drive_folder_id: posFolderId || null,
+      pos_drive_folder_id_preview: posFolderId ? `...${posFolderId.slice(-8)}` : null,
     };
   }
 
   @Patch('drive')
   @HttpCode(HttpStatus.OK)
   async updateDriveSettings(
-    @Body() body: { google_drive_folder_id?: string; google_service_account_json?: string },
+    @Body() body: {
+      google_drive_folder_id?: string;
+      google_pos_sales_folder_id?: string;
+      google_service_account_json?: string;
+    },
   ) {
     if (body.google_drive_folder_id !== undefined) {
       await this.svc.set('google_drive_folder_id', body.google_drive_folder_id);
+    }
+    if (body.google_pos_sales_folder_id !== undefined) {
+      await this.svc.set('google_pos_sales_folder_id', body.google_pos_sales_folder_id);
     }
     if (body.google_service_account_json !== undefined) {
       await this.svc.set('google_service_account_json', body.google_service_account_json);

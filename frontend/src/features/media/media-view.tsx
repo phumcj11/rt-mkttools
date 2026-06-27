@@ -136,6 +136,7 @@ export function MediaView() {
   const [videoSettings, setVideoSettings] = useState<VideoSettings | null>(null);
   const [n8nSettings, setN8nSettings] = useState<N8nSettings | null>(null);
   const [driveFolderId, setDriveFolderId] = useState('');
+  const [posDriveFolderId, setPosDriveFolderId] = useState('');
   const [driveServiceAccount, setDriveServiceAccount] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [klingKey, setKlingKey] = useState('');
@@ -250,7 +251,10 @@ export function MediaView() {
         .finally(() => setFilesLoading(false));
     }
     if (tab === 'settings') {
-      getDriveSettings().then(setDriveSettings).catch(() => undefined);
+      getDriveSettings().then((ds) => {
+        setDriveSettings(ds);
+        if (ds.pos_drive_folder_id) setPosDriveFolderId(ds.pos_drive_folder_id);
+      }).catch(() => undefined);
       getVideoSettings().then(setVideoSettings).catch(() => undefined);
       getN8nSettings().then(setN8nSettings).catch(() => undefined);
     }
@@ -576,9 +580,10 @@ export function MediaView() {
     setSettingsSaving(true);
     setSettingsMsg(null);
     try {
-      if (driveFolderId.trim() || driveServiceAccount.trim()) {
+      if (driveFolderId.trim() || driveServiceAccount.trim() || posDriveFolderId.trim()) {
         await saveDriveSettings({
           google_drive_folder_id: driveFolderId.trim() || undefined,
+          google_pos_sales_folder_id: posDriveFolderId.trim() || undefined,
           google_service_account_json: driveServiceAccount.trim() || undefined,
         });
       }
@@ -1512,8 +1517,22 @@ export function MediaView() {
                   </ol>
                 )}
                 <div className="space-y-1.5">
-                  <Label>Folder ID</Label>
+                  <Label>Folder ID — Media uploads</Label>
                   <Input placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" value={driveFolderId} onChange={(e) => setDriveFolderId(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Folder ID — POS sales Excel (Revenue)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    โฟลเดอร์สำหรับไฟล์ขายหน้าร้านรายเดือน เช่น 01-2026.xlsx — ใช้ Service Account ตัวเดียวกับด้านบน
+                  </p>
+                  <Input
+                    placeholder="1abc...xyz"
+                    value={posDriveFolderId}
+                    onChange={(e) => setPosDriveFolderId(e.target.value)}
+                  />
+                  {driveSettings?.pos_drive_configured && (
+                    <p className="text-xs text-green-700">POS folder พร้อมใช้งาน ({driveSettings.pos_drive_folder_id_preview})</p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Service Account JSON</Label>

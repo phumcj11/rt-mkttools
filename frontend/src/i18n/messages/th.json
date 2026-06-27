@@ -599,7 +599,7 @@
       "invalid": "กรุณากรอกเป้ายอดขายที่ถูกต้อง"
     },
     "setup": {
-      "title": "ตั้งค่าเป้า / Traffic / Customer Mix",
+      "title": "ตั้งค่าเป้า / Traffic / POS Import",
       "traffic": "Foot Traffic (manual)",
       "customerMix": "Customer Mix (manual)",
       "branchId": "Branch ID (ERP)",
@@ -614,6 +614,31 @@
       "mixSaved": "บันทึก customer mix เรียบร้อย",
       "invalid": "กรุณากรอกข้อมูลให้ครบ",
       "failed": "บันทึกไม่สำเร็จ"
+    },
+    "posImport": {
+      "title": "Import POS Excel จาก Google Drive",
+      "subtitle": "ดึงไฟล์ขายหน้าร้านรายเดือนมาใช้วิเคราะห์ campaign / เชื้อชาติ / bill tier",
+      "openSettings": "ตั้งค่า Drive folder",
+      "notConfigured": "ยังไม่ได้ตั้ง POS Drive folder — ไปที่ Media → Settings → Google Drive แล้วใส่ Folder ID — POS sales Excel",
+      "folderReady": "POS folder",
+      "yearMonth": "เดือนที่ import",
+      "forceReimport": "Import ใหม่ (ลบข้อมูลเดิมของเดือนนี้)",
+      "refreshStatus": "รีเฟรชสถานะ",
+      "syncNow": "Sync จาก Drive",
+      "fileHint": "ชื่อไฟล์ใน Drive ควรเป็น MM-YYYY.xlsx เช่น 01-2026.xlsx",
+      "invalidMonth": "รูปแบบเดือนไม่ถูกต้อง (YYYY-MM)",
+      "syncFailed": "Sync ไม่สำเร็จ",
+      "syncSuccess": "Import สำเร็จ {imported} แถว · {receipts} ใบเสร็จ",
+      "colFile": "ไฟล์",
+      "colStatus": "สถานะ",
+      "colRows": "แถว",
+      "colReceipts": "บิล",
+      "colWhen": "เมื่อ",
+      "status": {
+        "running": "กำลังทำ",
+        "completed": "สำเร็จ",
+        "failed": "ล้มเหลว"
+      }
     }
   }
 }

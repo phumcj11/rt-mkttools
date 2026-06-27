@@ -325,6 +325,7 @@ export function RevenueCommandCenterView() {
           onMixCount={setMixCount}
           onSaveTraffic={() => void handleSaveTraffic()}
           onSaveMix={() => void handleSaveMix()}
+          onPosSynced={() => void load(true)}
         />
       )}
 

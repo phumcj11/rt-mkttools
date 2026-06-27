@@ -26,6 +26,7 @@ import { baht, CompareRow, DiagnosisIcon, KpiCard, severityClass } from '../reve
 import type { CompareMode } from '../revenue-constants';
 import { IconBox, SectionCard, TabHero } from '../revenue-ui';
 import { BranchHealthCardGrid } from '../branch-health-card-grid';
+import { PosImportPanel } from '../pos-import-panel';
 
 interface OverviewTabProps {
   data: CommandCenterData;
@@ -54,6 +55,7 @@ interface OverviewTabProps {
   onMixCount: (v: string) => void;
   onSaveTraffic: () => void;
   onSaveMix: () => void;
+  onPosSynced?: () => void;
 }
 
 export function OverviewTab({
@@ -83,6 +85,7 @@ export function OverviewTab({
   onMixCount,
   onSaveTraffic,
   onSaveMix,
+  onPosSynced,
 }: OverviewTabProps) {
   const t = useTranslations('revenue');
   const maxTrend = Math.max(1, ...data.timeseries.map((p) => p.revenue));
@@ -123,7 +126,7 @@ export function OverviewTab({
               {t('setup.title')}
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-6 pt-4 md:grid-cols-3">
+          <CardContent className="grid gap-6 pt-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
               <div className="flex items-center gap-2">
                 <Target className="h-4 w-4 text-violet-600" />
@@ -174,6 +177,7 @@ export function OverviewTab({
                 <Users className="mr-1.5 h-4 w-4" />{t('setup.saveMix')}
               </Button>
             </div>
+            <PosImportPanel active={showSetup} onSynced={onPosSynced} />
           </CardContent>
         </Card>
       )}

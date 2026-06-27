@@ -599,7 +599,7 @@
       "invalid": "Enter a valid revenue target"
     },
     "setup": {
-      "title": "Targets / traffic / customer mix",
+      "title": "Setup: Target / Traffic / POS Import",
       "traffic": "Foot traffic (manual)",
       "customerMix": "Customer mix (manual)",
       "branchId": "Branch ID (ERP)",
@@ -614,6 +614,31 @@
       "mixSaved": "Customer mix saved",
       "invalid": "Fill in all required fields",
       "failed": "Save failed"
+    },
+    "posImport": {
+      "title": "Import POS Excel from Google Drive",
+      "subtitle": "Pull monthly storefront sales files for campaign / nationality / bill tier analysis",
+      "openSettings": "Configure Drive folder",
+      "notConfigured": "POS Drive folder not set — go to Media → Settings → Google Drive and add Folder ID — POS sales Excel",
+      "folderReady": "POS folder",
+      "yearMonth": "Import month",
+      "forceReimport": "Re-import (replace this month's data)",
+      "refreshStatus": "Refresh status",
+      "syncNow": "Sync from Drive",
+      "fileHint": "Drive file name should be MM-YYYY.xlsx e.g. 01-2026.xlsx",
+      "invalidMonth": "Invalid month format (YYYY-MM)",
+      "syncFailed": "Sync failed",
+      "syncSuccess": "Imported {imported} rows · {receipts} receipts",
+      "colFile": "File",
+      "colStatus": "Status",
+      "colRows": "Rows",
+      "colReceipts": "Bills",
+      "colWhen": "When",
+      "status": {
+        "running": "Running",
+        "completed": "Done",
+        "failed": "Failed"
+      }
     }
   }
 }
