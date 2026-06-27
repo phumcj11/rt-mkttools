@@ -5,18 +5,25 @@ import {
   AlertCircle,
   CheckCircle2,
   CloudDownload,
-  ExternalLink,
   FileSpreadsheet,
+  FolderOpen,
   Loader2,
   RefreshCw,
+  Save,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { getDriveSettings, type DriveSettings } from '@/lib/media-api';
 import { ApiError } from '@/lib/api';
-import { listPosImportRuns, syncPosImport, type PosImportRunRow } from '@/lib/revenue-api';
+import {
+  getPosImportSettings,
+  listPosImportRuns,
+  savePosImportSettings,
+  syncPosImport,
+  type PosImportDriveSettings,
+  type PosImportRunRow,
+} from '@/lib/revenue-api';
 import { cn } from '@/lib/utils';
 
 function currentYearMonth(): string {
@@ -41,8 +48,10 @@ export function PosImportPanel({ active, onSynced }: PosImportPanelProps) {
   const [yearMonth, setYearMonth] = useState(currentYearMonth);
   const [force, setForce] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [savingFolder, setSavingFolder] = useState(false);
   const [loadingRuns, setLoadingRuns] = useState(false);
-  const [driveSettings, setDriveSettings] = useState<DriveSettings | null>(null);
+  const [driveSettings, setDriveSettings] = useState<PosImportDriveSettings | null>(null);
+  const [folderInput, setFolderInput] = useState('');
   const [runs, setRuns] = useState<PosImportRunRow[]>([]);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
@@ -50,10 +59,11 @@ export function PosImportPanel({ active, onSynced }: PosImportPanelProps) {
     setLoadingRuns(true);
     try {
       const [ds, rs] = await Promise.all([
-        getDriveSettings().catch(() => null),
+        getPosImportSettings().catch(() => null),
         listPosImportRuns({ yearMonth }).catch(() => []),
       ]);
       setDriveSettings(ds);
+      if (ds?.folderId) setFolderInput(ds.folderId);
       setRuns(rs);
     } finally {
       setLoadingRuns(false);
@@ -64,6 +74,24 @@ export function PosImportPanel({ active, onSynced }: PosImportPanelProps) {
     if (!active) return;
     void loadMeta();
   }, [active, loadMeta]);
+
+  const handleSaveFolder = async () => {
+    if (!folderInput.trim()) {
+      setMessage({ type: 'err', text: t('folderRequired') });
+      return;
+    }
+    setSavingFolder(true);
+    setMessage(null);
+    try {
+      const ds = await savePosImportSettings(folderInput.trim());
+      setDriveSettings(ds);
+      setMessage({ type: 'ok', text: t('folderSaved') });
+    } catch (err) {
+      setMessage({ type: 'err', text: err instanceof ApiError ? err.message : t('folderSaveFailed') });
+    } finally {
+      setSavingFolder(false);
+    }
+  };
 
   const handleSync = async () => {
     if (!yearMonth.match(/^\d{4}-\d{2}$/)) {
@@ -93,25 +121,50 @@ export function PosImportPanel({ active, onSynced }: PosImportPanelProps) {
     }
   };
 
-  const configured = !!driveSettings?.pos_drive_configured;
+  const configured = !!driveSettings?.configured;
+  const needsServiceAccount = driveSettings && !driveSettings.serviceAccountSet;
 
   return (
     <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 md:col-span-2 xl:col-span-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
-          <div>
-            <p className="text-sm font-semibold text-emerald-950">{t('title')}</p>
-            <p className="text-xs text-muted-foreground">{t('subtitle')}</p>
-          </div>
+      <div className="flex items-center gap-2">
+        <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
+        <div>
+          <p className="text-sm font-semibold text-emerald-950">{t('title')}</p>
+          <p className="text-xs text-muted-foreground">{t('subtitle')}</p>
         </div>
-        <Link
-          href={`/${locale}/media`}
-          className="inline-flex items-center gap-1 text-xs font-medium text-emerald-800 hover:underline"
-        >
-          {t('openSettings')}
-          <ExternalLink className="h-3 w-3" />
-        </Link>
+      </div>
+
+      <div className="rounded-lg border border-emerald-300/60 bg-white/80 p-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <FolderOpen className="h-4 w-4 text-emerald-700" />
+          <p className="text-xs font-semibold text-emerald-950">{t('folderSection')}</p>
+        </div>
+        <p className="text-[11px] text-muted-foreground">{t('folderSeparateHint')}</p>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            className="min-w-[220px] flex-1 font-mono text-xs"
+            placeholder="1abc...xyz"
+            value={folderInput}
+            onChange={(e) => setFolderInput(e.target.value)}
+          />
+          <Button size="sm" variant="secondary" onClick={() => void handleSaveFolder()} disabled={savingFolder}>
+            {savingFolder ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <span className="ml-1.5">{t('saveFolder')}</span>
+          </Button>
+        </div>
+        {configured && driveSettings?.folderIdPreview && (
+          <p className="text-xs text-emerald-700">
+            {t('folderReady')}: <span className="font-mono">{driveSettings.folderIdPreview}</span>
+          </p>
+        )}
+        {needsServiceAccount && (
+          <p className="text-xs text-amber-800">
+            {t('needServiceAccount')}{' '}
+            <Link href={`/${locale}/media`} className="font-medium underline">
+              Media → Settings → Google Drive
+            </Link>
+          </p>
+        )}
       </div>
 
       {!configured && (
@@ -119,12 +172,6 @@ export function PosImportPanel({ active, onSynced }: PosImportPanelProps) {
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{t('notConfigured')}</span>
         </div>
-      )}
-
-      {configured && driveSettings?.pos_drive_folder_id_preview && (
-        <p className="text-xs text-emerald-800">
-          {t('folderReady')}: <span className="font-mono">{driveSettings.pos_drive_folder_id_preview}</span>
-        </p>
       )}
 
       <div className="grid gap-3 sm:grid-cols-[minmax(0,160px)_auto_1fr] sm:items-end">

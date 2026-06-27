@@ -75,9 +75,6 @@ export interface DriveSettings {
   drive_configured: boolean;
   drive_folder_id_preview: string | null;
   drive_service_account_set: boolean;
-  pos_drive_configured: boolean;
-  pos_drive_folder_id: string | null;
-  pos_drive_folder_id_preview: string | null;
 }
 
 export interface VideoSettings {
@@ -422,7 +419,6 @@ export function getDriveSettings() {
 
 export function saveDriveSettings(body: {
   google_drive_folder_id?: string;
-  google_pos_sales_folder_id?: string;
   google_service_account_json?: string;
 }) {
   return apiRequest<{ ok: boolean }>('/settings/system/drive', { method: 'PATCH', body });

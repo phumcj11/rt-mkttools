@@ -100,6 +100,18 @@ export class RevenueController {
     return this.revenue.upsertTargets(user.tenantId, dto);
   }
 
+  @Get('pos-import/settings')
+  @Roles('super_admin', 'admin', 'marketing_manager')
+  posImportDriveSettings() {
+    return this.posImport.driveSettings();
+  }
+
+  @Patch('pos-import/settings')
+  @Roles('super_admin', 'admin', 'marketing_manager')
+  savePosImportDriveSettings(@Body() body: { folderId: string }) {
+    return this.posImport.saveDriveFolder(body.folderId ?? '');
+  }
+
   @Get('pos-import/status')
   @Roles('super_admin', 'admin', 'marketing_manager')
   posImportStatus(

@@ -5,6 +5,7 @@ import { IsNull, Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
 import { PosImportRun, PosSalesLine } from '../../database/entities';
 import { DriveService } from '../media/drive.service';
+import { SystemSettingsService } from '../system-settings/system-settings.service';
 
 const POS_FOLDER_KEY = 'google_pos_sales_folder_id';
 const XLSX_MIMES = [
@@ -75,7 +76,25 @@ export class PosSalesImportService {
     @InjectRepository(PosSalesLine)
     private readonly lineRepo: Repository<PosSalesLine>,
     private readonly drive: DriveService,
+    private readonly settings: SystemSettingsService,
   ) {}
+
+  async driveSettings() {
+    const folderId = (await this.settings.get(POS_FOLDER_KEY)) ?? '';
+    const saJson = (await this.settings.get('google_service_account_json')) ?? '';
+    const saReady = saJson.length > 20;
+    return {
+      configured: folderId.length > 0 && saReady,
+      folderId: folderId || null,
+      folderIdPreview: folderId ? `...${folderId.slice(-8)}` : null,
+      serviceAccountSet: saReady,
+    };
+  }
+
+  async saveDriveFolder(folderId: string) {
+    await this.settings.set(POS_FOLDER_KEY, folderId.trim());
+    return this.driveSettings();
+  }
 
   listRuns(tenantId: number, yearMonth?: string) {
     return this.runRepo.find({

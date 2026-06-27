@@ -516,6 +516,24 @@ export interface PosImportRunRow {
   updatedAt: string;
 }
 
+export interface PosImportDriveSettings {
+  configured: boolean;
+  folderId: string | null;
+  folderIdPreview: string | null;
+  serviceAccountSet: boolean;
+}
+
+export function getPosImportSettings() {
+  return apiRequest<PosImportDriveSettings>('/revenue/pos-import/settings');
+}
+
+export function savePosImportSettings(folderId: string) {
+  return apiRequest<PosImportDriveSettings>('/revenue/pos-import/settings', {
+    method: 'PATCH',
+    body: { folderId },
+  });
+}
+
 export function listPosImportRuns(opts?: { yearMonth?: string }) {
   const params = new URLSearchParams();
   if (opts?.yearMonth) params.set('yearMonth', opts.yearMonth);
