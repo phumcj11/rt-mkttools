@@ -451,7 +451,11 @@
       "title": "สาขาทั้งหมด",
       "subtitle": "ยอด MTD สถานะ และปุ่ม AI วิเคราะห์ทางแก้จากข้อมูล 3 เดือน",
       "analyze": "AI วิเคราะห์ทางแก้",
-      "decliningHint": "ยอดตก — ควรวิเคราะห์และลงมือแก้"
+      "decliningHint": "ยอดตก — ควรวิเคราะห์และลงมือแก้",
+      "target": "Target",
+      "forecast": "Forecast",
+      "day": "วัน",
+      "campaignBills": "บิลเข้าแคมเปญ"
     },
     "branchAi": {
       "title": "AI วิเคราะห์สาขา",

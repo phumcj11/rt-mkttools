@@ -1,6 +1,21 @@
 import { apiRequest } from './api';
 
 export type BranchHealthStatus = 'green' | 'yellow' | 'red';
+export type BranchMarketingStatus =
+  | 'critical'
+  | 'watch'
+  | 'recovering'
+  | 'aboveTarget'
+  | 'billDrop'
+  | 'avgDrop'
+  | 'healthy';
+export type BranchRootCause =
+  | 'traffic'
+  | 'upsell'
+  | 'trafficAndUpsell'
+  | 'smallBasket'
+  | 'targetRisk'
+  | 'healthy';
 
 export interface BranchHealthRow {
   id: number;
@@ -25,6 +40,22 @@ export interface BranchHealthRow {
   yoyReliable: boolean;
   status: BranchHealthStatus;
   concernScore: number;
+  targetRevenue?: number | null;
+  targetSource?: 'branch' | 'allocated' | 'none';
+  targetAchievementPct?: number | null;
+  forecastRevenue?: number;
+  forecastGap?: number | null;
+  dailyGapToTarget?: number | null;
+  footTraffic?: number | null;
+  conversionPct?: number | null;
+  campaignBills?: number;
+  campaignConversionPct?: number | null;
+  billTierCounts?: Record<string, number>;
+  topNationalities?: Array<{ nationality: string; receipts: number; revenue: number }>;
+  topProducts?: Array<{ sku: string; name: string; qty: number; revenue: number }>;
+  topPromotions?: Array<{ promotionName: string; receipts: number; revenue: number }>;
+  marketingStatus?: BranchMarketingStatus;
+  rootCause?: BranchRootCause;
 }
 
 export interface ProductActionRow {
@@ -432,6 +463,20 @@ export interface BranchAiAnalysisData {
     status: BranchHealthStatus;
     concernScore: number;
   };
+  marketing: {
+    targetRevenue: number | null;
+    targetAchievementPct: number | null;
+    forecastRevenue: number;
+    forecastGap: number | null;
+    dailyGapToTarget: number | null;
+    marketingStatus: BranchMarketingStatus;
+    rootCause: BranchRootCause;
+    campaignBills: number;
+    campaignConversionPct: number | null;
+    billTierCounts: Record<string, number>;
+    topNationalities: Array<{ nationality: string; receipts: number; revenue: number }>;
+    topPromotions: Array<{ promotionName: string; receipts: number; revenue: number }>;
+  };
   monthlyTrend: Array<{ month: string; revenue: number; orders: number }>;
   topProducts: Array<{ sku: string; name: string; category: string; revenue: number; qtySold: number }>;
   ai: {
@@ -451,4 +496,37 @@ export function getBranchAiAnalysis(branchId: number, opts?: { force?: boolean }
   const params = new URLSearchParams({ branchId: String(branchId) });
   if (opts?.force) params.set('force', 'true');
   return apiRequest<BranchAiAnalysisData>(`/revenue/branch-ai-analysis?${params.toString()}`);
+}
+
+export interface PosImportRunRow {
+  id: number;
+  tenantId: number;
+  yearMonth: string;
+  driveFileId: string | null;
+  filename: string;
+  status: 'running' | 'completed' | 'failed';
+  totalRows: number;
+  importedRows: number;
+  skippedRows: number;
+  receiptCount: number;
+  branchCount: number;
+  errorMessage: string | null;
+  importedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function listPosImportRuns(opts?: { yearMonth?: string }) {
+  const params = new URLSearchParams();
+  if (opts?.yearMonth) params.set('yearMonth', opts.yearMonth);
+  const q = params.toString();
+  return apiRequest<PosImportRunRow[]>(`/revenue/pos-import/status${q ? `?${q}` : ''}`);
+}
+
+export function syncPosImport(yearMonth: string, opts?: { force?: boolean }) {
+  const params = new URLSearchParams({ yearMonth });
+  if (opts?.force) params.set('force', 'true');
+  return apiRequest<PosImportRunRow>(`/revenue/pos-import/sync?${params.toString()}`, {
+    method: 'POST',
+  });
 }

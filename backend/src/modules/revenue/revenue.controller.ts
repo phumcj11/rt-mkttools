@@ -16,13 +16,17 @@ import {
   CreateStorefrontActivityDto,
   UpdateActiveBranchesDto,
 } from './dto/revenue.dto';
+import { PosSalesImportService } from './pos-sales-import.service';
 import { RevenueService } from './revenue.service';
 
 const isForce = (v?: string) => v === 'true' || v === '1';
 
 @Controller('revenue')
 export class RevenueController {
-  constructor(private readonly revenue: RevenueService) {}
+  constructor(
+    private readonly revenue: RevenueService,
+    private readonly posImport: PosSalesImportService,
+  ) {}
 
   @Get('command-center')
   commandCenter(
@@ -94,6 +98,25 @@ export class RevenueController {
   @Roles('super_admin', 'admin', 'marketing_manager')
   upsertTargets(@CurrentUser() user: AuthUser, @Body() dto: BulkUpsertTargetsDto) {
     return this.revenue.upsertTargets(user.tenantId, dto);
+  }
+
+  @Get('pos-import/status')
+  @Roles('super_admin', 'admin', 'marketing_manager')
+  posImportStatus(
+    @CurrentUser() user: AuthUser,
+    @Query('yearMonth') yearMonth?: string,
+  ) {
+    return this.posImport.listRuns(user.tenantId, yearMonth);
+  }
+
+  @Post('pos-import/sync')
+  @Roles('super_admin', 'admin', 'marketing_manager')
+  posImportSync(
+    @CurrentUser() user: AuthUser,
+    @Query('yearMonth') yearMonth: string,
+    @Query('force') force?: string,
+  ) {
+    return this.posImport.syncFromDrive(user.tenantId, yearMonth, isForce(force));
   }
 
   @Get('traffic')

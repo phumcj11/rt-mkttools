@@ -9,27 +9,23 @@ export interface DriveUploadResult {
   webViewLink: string;
 }
 
+export interface DriveFileInfo {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime?: string | null;
+  webViewLink?: string | null;
+}
+
 @Injectable()
 export class DriveService {
   private readonly logger = new Logger(DriveService.name);
 
   constructor(private readonly settings: SystemSettingsService) {}
 
-  async isConfigured(): Promise<boolean> {
-    const [folderId, sa] = await Promise.all([
-      this.settings.get('google_drive_folder_id'),
-      this.settings.get('google_service_account_json'),
-    ]);
-    return !!(folderId && sa && sa.length > 20);
-  }
-
-  /**
-   * Upload a local file to the configured Google Drive folder.
-   * Requires `google_service_account_json` and `google_drive_folder_id` in system settings.
-   */
-  async uploadFile(localPath: string, mimeType = 'image/png'): Promise<DriveUploadResult> {
+  private async client(folderKey = 'google_drive_folder_id') {
     const [folderId, saJson] = await Promise.all([
-      this.settings.get('google_drive_folder_id'),
+      this.settings.get(folderKey),
       this.settings.get('google_service_account_json'),
     ]);
 
@@ -37,7 +33,6 @@ export class DriveService {
       throw new Error('DRIVE_NOT_CONFIGURED');
     }
 
-    // Lazy-load googleapis to avoid startup overhead
     const driveLib = await import('@googleapis/drive');
     const driveApi = driveLib.default ?? driveLib;
     const credentials = JSON.parse(saJson) as {
@@ -52,7 +47,26 @@ export class DriveService {
       scopes: ['https://www.googleapis.com/auth/drive'],
     });
 
-    const drive = driveApi.drive({ version: 'v3', auth });
+    return {
+      folderId,
+      drive: driveApi.drive({ version: 'v3', auth }),
+    };
+  }
+
+  async isConfigured(): Promise<boolean> {
+    const [folderId, sa] = await Promise.all([
+      this.settings.get('google_drive_folder_id'),
+      this.settings.get('google_service_account_json'),
+    ]);
+    return !!(folderId && sa && sa.length > 20);
+  }
+
+  /**
+   * Upload a local file to the configured Google Drive folder.
+   * Requires `google_service_account_json` and `google_drive_folder_id` in system settings.
+   */
+  async uploadFile(localPath: string, mimeType = 'image/png'): Promise<DriveUploadResult> {
+    const { drive, folderId } = await this.client();
     const filename = path.basename(localPath);
 
     const response = await drive.files.create({
@@ -76,6 +90,48 @@ export class DriveService {
       name: file.name ?? filename,
       webViewLink: file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`,
     };
+  }
+
+  async listFiles(opts?: {
+    folderKey?: string;
+    nameContains?: string;
+    mimeTypes?: string[];
+    pageSize?: number;
+  }): Promise<DriveFileInfo[]> {
+    const { drive, folderId } = await this.client(opts?.folderKey);
+    const clauses = [`'${folderId}' in parents`, 'trashed = false'];
+    if (opts?.nameContains) {
+      clauses.push(`name contains '${opts.nameContains.replace(/'/g, "\\'")}'`);
+    }
+    if (opts?.mimeTypes?.length) {
+      clauses.push(`(${opts.mimeTypes.map((m) => `mimeType = '${m}'`).join(' or ')})`);
+    }
+    const res = await drive.files.list({
+      q: clauses.join(' and '),
+      pageSize: opts?.pageSize ?? 50,
+      orderBy: 'modifiedTime desc',
+      fields: 'files(id,name,mimeType,modifiedTime,webViewLink)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    return (res.data.files ?? [])
+      .filter((f) => f.id && f.name)
+      .map((f) => ({
+        id: f.id!,
+        name: f.name!,
+        mimeType: f.mimeType ?? '',
+        modifiedTime: f.modifiedTime,
+        webViewLink: f.webViewLink,
+      }));
+  }
+
+  async downloadFile(fileId: string, folderKey?: string): Promise<Buffer> {
+    const { drive } = await this.client(folderKey);
+    const res = await drive.files.get(
+      { fileId, alt: 'media', supportsAllDrives: true },
+      { responseType: 'arraybuffer' },
+    );
+    return Buffer.from(res.data as ArrayBuffer);
   }
 
   /**

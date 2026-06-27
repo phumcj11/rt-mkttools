@@ -44,3 +44,5 @@ export * from './sales-target.entity';
 export * from './branch-traffic-daily.entity';
 export * from './branch-customer-mix-daily.entity';
 export * from './branch-storefront-activity.entity';
+export * from './pos-import-run.entity';
+export * from './pos-sales-line.entity';

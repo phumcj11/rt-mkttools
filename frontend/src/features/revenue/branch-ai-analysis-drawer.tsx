@@ -50,6 +50,25 @@ function pctBetween(current: number, previous: number): number | null {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+const rootCauseText: Record<BranchAiAnalysisData['marketing']['rootCause'], string> = {
+  traffic: 'บิลลด แต่ Avg ยังพอไหว: เน้นดึงคนเข้าและปิดการขาย',
+  upsell: 'บิลยังไม่ตกมาก แต่ Avg/Bill ลด: ต้องทำ Upsell / Bundle',
+  trafficAndUpsell: 'บิลลดและ Avg/Bill ลดพร้อมกัน: ต้องแก้ทั้ง Traffic + Promotion',
+  smallBasket: 'คนซื้อเยอะขึ้นแต่บิลเล็ก: ต้องดัน tier 999 / 1199 / 3999',
+  targetRisk: 'Run rate เสี่ยงไม่ถึงเป้าเดือนนี้',
+  healthy: 'ยังอยู่ในเกณฑ์ดี: รักษา momentum และขยายสินค้าขายดี',
+};
+
+const marketingStatusText: Record<BranchAiAnalysisData['marketing']['marketingStatus'], string> = {
+  critical: 'วิกฤต',
+  watch: 'เฝ้าระวัง',
+  recovering: 'ฟื้นตัว',
+  aboveTarget: 'ดีเกินเป้า',
+  billDrop: 'บิลตก',
+  avgDrop: 'Avg ตก',
+  healthy: 'ปกติ',
+};
+
 function BulletList({
   items,
   icon: Icon,
@@ -360,6 +379,73 @@ export function BranchAiAnalysisDrawer({ branch, open, onClose }: BranchAiAnalys
                   )}
                 </div>
               </div>
+
+              <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="bg-violet-100 text-violet-800">
+                    {marketingStatusText[data.marketing.marketingStatus]}
+                  </Badge>
+                  <span className="text-sm font-semibold text-violet-950">
+                    {rootCauseText[data.marketing.rootCause]}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+                  {data.marketing.targetAchievementPct !== null && (
+                    <div className="rounded-lg bg-white/70 p-2">
+                      <p className="text-[11px] text-muted-foreground">Target</p>
+                      <p className="font-bold tabular-nums text-violet-800">
+                        {data.marketing.targetAchievementPct.toFixed(1)}%
+                      </p>
+                    </div>
+                  )}
+                  <div className="rounded-lg bg-white/70 p-2">
+                    <p className="text-[11px] text-muted-foreground">Forecast</p>
+                    <p className="font-bold tabular-nums text-blue-800">
+                      {baht(data.marketing.forecastRevenue)}
+                    </p>
+                  </div>
+                  {data.marketing.dailyGapToTarget !== null && data.marketing.dailyGapToTarget > 0 && (
+                    <div className="rounded-lg bg-white/70 p-2">
+                      <p className="text-[11px] text-muted-foreground">Gap / day</p>
+                      <p className="font-bold tabular-nums text-red-700">
+                        {baht(data.marketing.dailyGapToTarget)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {(data.marketing.campaignBills > 0 || data.marketing.topNationalities.length > 0) && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                    <p className="text-sm font-semibold text-emerald-900">Campaign / Bill tiers</p>
+                    <p className="mt-1 text-sm text-emerald-950">
+                      บิลเข้าแคมเปญ <strong>{data.marketing.campaignBills.toLocaleString('th-TH')}</strong>
+                      {data.marketing.campaignConversionPct !== null ? ` (${data.marketing.campaignConversionPct.toFixed(1)}%)` : ''}
+                    </p>
+                    <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
+                      {Object.entries(data.marketing.billTierCounts).map(([tier, count]) => (
+                        <span key={tier} className="rounded bg-white/70 px-2 py-1 text-emerald-900">
+                          {tier.replace('gte', '≥')}: {count.toLocaleString('th-TH')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+                    <p className="text-sm font-semibold text-blue-900">กลุ่มลูกค้าหลัก</p>
+                    <div className="mt-2 space-y-1.5">
+                      {data.marketing.topNationalities.slice(0, 4).map((n) => (
+                        <div key={n.nationality} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="truncate">{n.nationality}</span>
+                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                            {n.receipts.toLocaleString('th-TH')} บิล
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {data.monthlyTrend.length > 0 && (
                 <MonthlyTrendChart trend={data.monthlyTrend} title={t('branchAi.monthlyTrend')} />

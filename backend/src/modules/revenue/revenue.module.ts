@@ -6,11 +6,15 @@ import {
   BranchTrafficDaily,
   ErpProductCache,
   ErpSalesSummary,
+  PosImportRun,
+  PosSalesLine,
   SalesTarget,
 } from '../../database/entities';
 import { AiModule } from '../ai/ai.module';
 import { ErpModule } from '../erp/erp.module';
+import { MediaModule } from '../media/media.module';
 import { SystemSettingsModule } from '../system-settings/system-settings.module';
+import { PosSalesImportService } from './pos-sales-import.service';
 import { RevenueController } from './revenue.controller';
 import { RevenueService } from './revenue.service';
 
@@ -18,6 +22,7 @@ import { RevenueService } from './revenue.service';
   imports: [
     AiModule,
     ErpModule,
+    MediaModule,
     SystemSettingsModule,
     TypeOrmModule.forFeature([
       SalesTarget,
@@ -26,10 +31,12 @@ import { RevenueService } from './revenue.service';
       BranchStorefrontActivity,
       ErpProductCache,
       ErpSalesSummary,
+      PosImportRun,
+      PosSalesLine,
     ]),
   ],
   controllers: [RevenueController],
-  providers: [RevenueService],
+  providers: [RevenueService, PosSalesImportService],
   exports: [RevenueService],
 })
 export class RevenueModule {}

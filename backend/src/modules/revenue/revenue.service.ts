@@ -26,8 +26,24 @@ import {
   BulkUpsertTargetsDto,
   BulkUpsertTrafficDto,
 } from './dto/revenue.dto';
+import { PosSalesImportService, type PosBranchInsight } from './pos-sales-import.service';
 
 export type BranchHealthStatus = 'green' | 'yellow' | 'red';
+export type BranchMarketingStatus =
+  | 'critical'
+  | 'watch'
+  | 'recovering'
+  | 'aboveTarget'
+  | 'billDrop'
+  | 'avgDrop'
+  | 'healthy';
+export type BranchRootCause =
+  | 'traffic'
+  | 'upsell'
+  | 'trafficAndUpsell'
+  | 'smallBasket'
+  | 'targetRisk'
+  | 'healthy';
 
 export interface BranchHealthRow {
   id: number;
@@ -53,6 +69,22 @@ export interface BranchHealthRow {
   yoyReliable: boolean;
   status: BranchHealthStatus;
   concernScore: number;
+  targetRevenue?: number | null;
+  targetSource?: 'branch' | 'allocated' | 'none';
+  targetAchievementPct?: number | null;
+  forecastRevenue?: number;
+  forecastGap?: number | null;
+  dailyGapToTarget?: number | null;
+  footTraffic?: number | null;
+  conversionPct?: number | null;
+  campaignBills?: number;
+  campaignConversionPct?: number | null;
+  billTierCounts?: Record<string, number>;
+  topNationalities?: Array<{ nationality: string; receipts: number; revenue: number }>;
+  topProducts?: Array<{ sku: string; name: string; qty: number; revenue: number }>;
+  topPromotions?: Array<{ promotionName: string; receipts: number; revenue: number }>;
+  marketingStatus?: BranchMarketingStatus;
+  rootCause?: BranchRootCause;
 }
 
 export interface ProductActionRow {
@@ -174,6 +206,20 @@ export interface BranchAiAnalysisResponse {
     status: BranchHealthStatus;
     concernScore: number;
   };
+  marketing: {
+    targetRevenue: number | null;
+    targetAchievementPct: number | null;
+    forecastRevenue: number;
+    forecastGap: number | null;
+    dailyGapToTarget: number | null;
+    marketingStatus: BranchMarketingStatus;
+    rootCause: BranchRootCause;
+    campaignBills: number;
+    campaignConversionPct: number | null;
+    billTierCounts: Record<string, number>;
+    topNationalities: Array<{ nationality: string; receipts: number; revenue: number }>;
+    topPromotions: Array<{ promotionName: string; receipts: number; revenue: number }>;
+  };
   monthlyTrend: Array<{ month: string; revenue: number; orders: number }>;
   topProducts: Array<{ sku: string; name: string; category: string; revenue: number; qtySold: number }>;
   ai: {
@@ -266,6 +312,7 @@ export class RevenueService {
     private readonly erpSync: ErpSyncService,
     private readonly openai: OpenAiService,
     private readonly settings: SystemSettingsService,
+    private readonly posImport: PosSalesImportService,
     @InjectRepository(SalesTarget)
     private readonly targetRepo: Repository<SalesTarget>,
     @InjectRepository(BranchTrafficDaily)
@@ -319,6 +366,51 @@ export class RevenueService {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
 
+  private branchRootCause(ordersGrowthPct: number, avgTicketGrowthPct: number): BranchRootCause {
+    const billDown = ordersGrowthPct < -5;
+    const avgDown = avgTicketGrowthPct < -5;
+    const billUp = ordersGrowthPct > 5;
+    if (billDown && avgDown) return 'trafficAndUpsell';
+    if (billDown && !avgDown) return 'traffic';
+    if (!billDown && avgDown) return billUp ? 'smallBasket' : 'upsell';
+    return 'healthy';
+  }
+
+  private branchMarketingStatus(ctx: {
+    revenueGrowthPct: number;
+    ordersGrowthPct: number;
+    avgTicketGrowthPct: number;
+    targetAchievementPct: number | null;
+    forecastGap: number | null;
+  }): BranchMarketingStatus {
+    if ((ctx.targetAchievementPct ?? 0) >= 100 || (ctx.forecastGap !== null && ctx.forecastGap <= 0)) {
+      return 'aboveTarget';
+    }
+    if (ctx.revenueGrowthPct < -30 && (ctx.forecastGap ?? 1) > 0) return 'critical';
+    if (ctx.revenueGrowthPct < -10) return 'watch';
+    if (ctx.ordersGrowthPct < -10 && ctx.avgTicketGrowthPct >= -5) return 'billDrop';
+    if (ctx.avgTicketGrowthPct < -10 && ctx.ordersGrowthPct >= -5) return 'avgDrop';
+    return 'healthy';
+  }
+
+  private summarizeTrafficByBranch(rows: BranchTrafficDaily[], from: string, to: string) {
+    const map = new Map<number, { footTraffic: number; transactions: number; conversionPct: number | null }>();
+    for (const r of rows) {
+      if (r.trafficDate < from || r.trafficDate > to) continue;
+      const current = map.get(r.branchId) ?? { footTraffic: 0, transactions: 0, conversionPct: null };
+      current.footTraffic += r.footTraffic;
+      current.transactions += r.transactions ?? 0;
+      map.set(r.branchId, current);
+    }
+    for (const row of map.values()) {
+      row.conversionPct =
+        row.footTraffic > 0 && row.transactions > 0
+          ? Math.round((row.transactions / row.footTraffic) * 10000) / 100
+          : null;
+    }
+    return map;
+  }
+
   async getActiveBranchCodes(): Promise<string[]> {
     const raw = await this.settings.get(REVENUE_ACTIVE_BRANCH_CODES_KEY);
     return parseBranchCodes(raw);
@@ -354,6 +446,7 @@ export class RevenueService {
       topProducts,
       categories,
       companyTarget,
+      monthlyTargets,
       trafficRows,
       mixRows,
     ] = await Promise.all([
@@ -372,6 +465,7 @@ export class RevenueService {
       this.targetRepo.findOne({
         where: { tenantId, yearMonth: this.currentYearMonth(), branchId: IsNull() },
       }),
+      this.targetRepo.find({ where: { tenantId, yearMonth: this.currentYearMonth() } }),
       this.trafficRepo.find({
         where: { tenantId },
         order: { trafficDate: 'DESC' },
@@ -409,6 +503,12 @@ export class RevenueService {
 
     const prevBranchMap = new Map(prevBranches.map((b) => [b.id, b]));
     const yoyBranchMap = new Map(yoyBranches.map((b) => [b.id, b]));
+    const branchTargetMap = new Map(
+      monthlyTargets
+        .filter((t) => t.branchId !== null)
+        .map((t) => [Number(t.branchId), num(t.targetRevenue)]),
+    );
+    const trafficByBranch = this.summarizeTrafficByBranch(trafficRows, mtd.from, mtd.to);
 
     // Resolve YoY company totals — ERP มักคืนยอดย้อนหลังไม่ครบ
     let yoyPeriodRevenue = yoySummary.revenue;
@@ -460,6 +560,10 @@ export class RevenueService {
       ? pctChangeOrNull(mtdSummary.avgTicket, yoyPeriodAvgTicket)
       : null;
 
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const dayOfMonth = new Date().getDate();
+    const remainingDays = Math.max(1, daysInMonth - dayOfMonth);
+
     const branches: BranchHealthRow[] = mtdBranches.map((b) => {
       const prevB = prevBranchMap.get(b.id);
       const prevRev = prevB?.revenue ?? 0;
@@ -477,6 +581,34 @@ export class RevenueService {
         Math.max(0, -(revGrowth ?? 0)) * 2 +
         Math.max(0, -(ordGrowth ?? 0)) +
         Math.max(0, -(avgGrowth ?? 0));
+      const branchTarget = branchTargetMap.get(b.id);
+      const allocatedTarget =
+        !branchTarget && targetRevenue && prevSummary.revenue > 0
+          ? Math.round(targetRevenue * (prevRev / prevSummary.revenue))
+          : null;
+      const resolvedTarget = branchTarget ?? allocatedTarget;
+      const targetAchievementPct =
+        resolvedTarget && resolvedTarget > 0
+          ? Math.round((b.revenue / resolvedTarget) * 1000) / 10
+          : null;
+      const forecastRevenue = Math.round((b.revenue / Math.max(1, dayOfMonth)) * daysInMonth);
+      const forecastGap =
+        resolvedTarget !== null && resolvedTarget !== undefined
+          ? Math.round((resolvedTarget - forecastRevenue) * 100) / 100
+          : null;
+      const dailyGapToTarget =
+        resolvedTarget !== null && resolvedTarget !== undefined
+          ? Math.max(0, Math.round(((resolvedTarget - b.revenue) / remainingDays) * 100) / 100)
+          : null;
+      const branchTraffic = trafficByBranch.get(b.id);
+      const rootCause = this.branchRootCause(ordGrowth, avgGrowth);
+      const marketingStatus = this.branchMarketingStatus({
+        revenueGrowthPct: revGrowth,
+        ordersGrowthPct: ordGrowth,
+        avgTicketGrowthPct: avgGrowth,
+        targetAchievementPct,
+        forecastGap,
+      });
       return {
         id: b.id,
         code: b.code,
@@ -500,6 +632,22 @@ export class RevenueService {
         yoyReliable: branchReliable,
         status: branchStatus(revGrowth),
         concernScore,
+        targetRevenue: resolvedTarget ?? null,
+        targetSource: branchTarget ? 'branch' : allocatedTarget ? 'allocated' : 'none',
+        targetAchievementPct,
+        forecastRevenue,
+        forecastGap,
+        dailyGapToTarget,
+        footTraffic: branchTraffic?.footTraffic ?? null,
+        conversionPct: branchTraffic?.conversionPct ?? null,
+        campaignBills: 0,
+        campaignConversionPct: null,
+        billTierCounts: undefined,
+        topNationalities: [],
+        topProducts: [],
+        topPromotions: [],
+        marketingStatus,
+        rootCause,
       };
     });
 
@@ -511,9 +659,6 @@ export class RevenueService {
     const yellowCount = branches.filter((b) => b.status === 'yellow').length;
     const redCount = branches.filter((b) => b.status === 'red').length;
 
-    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    const dayOfMonth = new Date().getDate();
-    const remainingDays = Math.max(1, daysInMonth - dayOfMonth);
     const avgDailyOrders = dayOfMonth > 0 ? mtdSummary.orders / dayOfMonth : mtdSummary.orders;
     const expectedRemainingBills = Math.round(avgDailyOrders * remainingDays);
     const avgBillUpliftNeeded =
@@ -537,6 +682,30 @@ export class RevenueService {
     const trafficSummary = this.summarizeTraffic(trafficRows, mtd.from, mtd.to);
     const customerMixSummary = this.summarizeCustomerMix(mixRows, mtd.from, mtd.to);
     const billNearPromo = await this.buildBillNearPromo(mtd.from, mtd.to, branches, force);
+    const promoBranchMap = new Map(billNearPromo.branches.map((b) => [b.id, b]));
+    let posInsightMap = new Map<string, PosBranchInsight>();
+    try {
+      posInsightMap = await this.posImport.branchInsights(tenantId, this.currentYearMonth());
+    } catch (err) {
+      this.logger.warn(`POS branch insight unavailable: ${(err as Error).message}`);
+    }
+    for (const branch of branches) {
+      const promo = promoBranchMap.get(branch.id);
+      if (promo) {
+        branch.campaignBills = promo.total;
+        branch.campaignConversionPct =
+          branch.orders > 0 ? Math.round((promo.total / branch.orders) * 1000) / 10 : null;
+      }
+      const pos = posInsightMap.get(branch.shortcode || branch.code) ?? posInsightMap.get(branch.code);
+      if (pos) {
+        branch.campaignBills = pos.campaignBills || branch.campaignBills || 0;
+        branch.campaignConversionPct = pos.campaignConversionPct ?? branch.campaignConversionPct ?? null;
+        branch.billTierCounts = pos.billTierCounts;
+        branch.topNationalities = pos.topNationalities.slice(0, 5);
+        branch.topProducts = pos.topProducts.slice(0, 5);
+        branch.topPromotions = pos.topPromotions.slice(0, 5);
+      }
+    }
 
     return {
       generatedAt: new Date().toISOString(),
@@ -1756,6 +1925,40 @@ export class RevenueService {
     const status = branchStatus(momGrowth);
     const concernScore =
       Math.max(0, -(momGrowth ?? 0)) * 2 + Math.max(0, -(ordGrowth ?? 0));
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const dayOfMonth = today.getDate();
+    const remainingDays = Math.max(1, daysInMonth - dayOfMonth);
+    const yearMonth = this.currentYearMonth();
+    const [branchTarget, companyTarget] = await Promise.all([
+      this.targetRepo.findOne({ where: { tenantId, yearMonth, branchId } }),
+      this.targetRepo.findOne({ where: { tenantId, yearMonth, branchId: IsNull() } }),
+    ]);
+    const targetRevenue = branchTarget
+      ? num(branchTarget.targetRevenue)
+      : companyTarget
+        ? null
+        : null;
+    const targetAchievementPct =
+      targetRevenue && targetRevenue > 0 ? Math.round((mtdRevenue / targetRevenue) * 1000) / 10 : null;
+    const forecastRevenue = Math.round((mtdRevenue / Math.max(1, dayOfMonth)) * daysInMonth);
+    const forecastGap = targetRevenue !== null ? Math.round((targetRevenue - forecastRevenue) * 100) / 100 : null;
+    const dailyGapToTarget =
+      targetRevenue !== null ? Math.max(0, Math.round(((targetRevenue - mtdRevenue) / remainingDays) * 100) / 100) : null;
+    const marketingStatus = this.branchMarketingStatus({
+      revenueGrowthPct: momGrowth,
+      ordersGrowthPct: ordGrowth,
+      avgTicketGrowthPct: momAvgGrowth,
+      targetAchievementPct,
+      forecastGap,
+    });
+    const rootCause = this.branchRootCause(ordGrowth, momAvgGrowth);
+    let posInsight: PosBranchInsight | undefined;
+    try {
+      const posMap = await this.posImport.branchInsights(tenantId, yearMonth);
+      posInsight = posMap.get(branch.shortcode || branch.code) ?? posMap.get(branch.code);
+    } catch (err) {
+      this.logger.warn(`POS branch AI context unavailable: ${(err as Error).message}`);
+    }
 
     const monthlyPoints = monthlyTrend.map((p) => ({
       month: p.date,
@@ -1799,6 +2002,20 @@ export class RevenueService {
       },
       monthlyTrend: monthlyPoints,
       monthOverMonthChanges,
+      marketing: {
+        targetRevenue,
+        targetAchievementPct,
+        forecastRevenue,
+        forecastGap,
+        dailyGapToTarget,
+        marketingStatus,
+        rootCause,
+        campaignBills: posInsight?.campaignBills ?? 0,
+        campaignConversionPct: posInsight?.campaignConversionPct ?? null,
+        billTierCounts: posInsight?.billTierCounts ?? { gte899: 0, gte999: 0, gte1199: 0, gte3999: 0 },
+        topNationalities: posInsight?.topNationalities.slice(0, 5) ?? [],
+        topPromotions: posInsight?.topPromotions.slice(0, 5) ?? [],
+      },
       topProducts: topProducts.slice(0, 6).map((p) => ({
         sku: p.sku,
         name: p.name,
@@ -1834,6 +2051,7 @@ export class RevenueService {
         status,
         concernScore,
       },
+      marketing: facts.marketing,
       monthlyTrend: facts.monthlyTrend,
       topProducts: facts.topProducts,
       ai,
@@ -1862,6 +2080,7 @@ export class RevenueService {
     threeMonth: { revenue: number; orders: number; avgTicket: number };
     monthlyTrend: Array<{ month: string; revenue: number; orders: number }>;
     monthOverMonthChanges: Array<number | null>;
+    marketing: BranchAiAnalysisResponse['marketing'];
     topProducts: Array<{ name: string; sku: string; category: string; revenue: number; qtySold: number }>;
   }): Promise<BranchAiAnalysisResponse['ai']> {
     const emptyAi = (): BranchAiAnalysisResponse['ai'] => ({
@@ -1886,6 +2105,7 @@ export class RevenueService {
       'Schema: {"summary":"string","rootCauses":["string"],"recommendedActions":["string"],' +
       '"promotionIdeas":["string"],"stockClearIdeas":["string"],"risks":["string"],"next7DayChecklist":["string"]}. ' +
       'Use monthOverMonthChanges and momAvgTicketGrowthPct to explain whether the drop is traffic (orders) or basket size (avg ticket). ' +
+      'Use marketing.targetRevenue, forecastRevenue, dailyGapToTarget, rootCause, billTierCounts, topNationalities, and topPromotions when present. ' +
       'Reference topProducts by name when suggesting promos or clearance. ' +
       'Focus on practical fixes: promotions, clearance/stock rotation, front-store display, traffic conversion, avg bill uplift. ' +
       'Each array should have 3-5 concise actionable items in Thai.';
@@ -1941,6 +2161,7 @@ export class RevenueService {
     threeMonth: { revenue: number; avgTicket: number };
     monthlyTrend: Array<{ month: string; revenue: number }>;
     monthOverMonthChanges: Array<number | null>;
+    marketing: BranchAiAnalysisResponse['marketing'];
     topProducts: Array<{ name: string; category: string; revenue: number }>;
   }): BranchAiAnalysisResponse['ai'] {
     const { mtd, branch, topProducts } = facts;
@@ -1962,6 +2183,20 @@ export class RevenueService {
     } else {
       rootCauses.push('ยอดยังอยู่ในเกณฑ์ดี — โฟกัสรักษา momentum');
       recommendedActions.push('ขยาย front-store ด้วยสินค้าขายดี 3 อันดับแรก');
+    }
+
+    if (facts.marketing.dailyGapToTarget && facts.marketing.dailyGapToTarget > 0) {
+      recommendedActions.push(`ตั้ง daily mission เพิ่มยอดอย่างน้อย ฿${Math.round(facts.marketing.dailyGapToTarget).toLocaleString('th-TH')}/วัน`);
+      risks.push('Forecast ยังไม่ถึงเป้าเดือนนี้ถ้า run rate ไม่ดีขึ้น');
+    }
+
+    if (facts.marketing.campaignBills > 0) {
+      promotionIdeas.push(`ต่อยอดแคมเปญที่มี traction แล้ว (${facts.marketing.campaignBills.toLocaleString('th-TH')} บิลเข้าแคมเปญ)`);
+    }
+
+    const topNat = facts.marketing.topNationalities[0];
+    if (topNat) {
+      recommendedActions.push(`ปรับป้าย/สคริปต์ให้ตรงกลุ่ม ${topNat.nationality} ซึ่งเป็นลูกค้าหลักของสาขา`);
     }
 
     if (mtd.momOrdersGrowthPct < mtd.momRevenueGrowthPct - 3) {

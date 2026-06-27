@@ -451,7 +451,11 @@
       "title": "All branches",
       "subtitle": "MTD sales, status, and AI fix analysis from 3-month data",
       "analyze": "AI analyze fixes",
-      "decliningHint": "Declining — review and take action"
+      "decliningHint": "Declining — review and take action",
+      "target": "Target",
+      "forecast": "Forecast",
+      "day": "day",
+      "campaignBills": "Campaign bills"
     },
     "branchAi": {
       "title": "Branch AI analysis",
